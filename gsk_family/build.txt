@@ -1,0 +1,45 @@
+# Build CEC/C++ tools and MATLAB MEX bridge
+
+# Prerequisites: PowerShell, CMake >= 3.20, MinGW-w64 g++ with C++20 support, MATLAB.
+# Run this file from: the gsk_family folder (this file's directory).
+# gsk_run/configs default to seed_policy 'reference' for published-table reproduction.
+# The requested default rand_generator is 'threefry'; reference mode overrides
+# the effective generator per optimizer, while unified mode falls back to
+# 'twister' if this MATLAB version does not support 'threefry'.
+# Root run_all_cec*.m and direct run_experiment defaults use seed_policy 'unified'.
+# Unified seed = mod(base_seed + 1000003*dim + 1000033*func + 1000037*run, 2147483646) + 1.
+# Default base_seed is centralized in src\runners\run_experiment.m as 20240620.
+# Rebuild C++ CLIs after C++/CMake/benchmark-port/test changes; this refreshes build\*.exe.
+# Rebuild the MEX bridge after CEC suite source or mex_bridge changes; MATLAB CEC runs use build\mex\gskcec_eval.<mexext>.
+# Rebuild documentation after Markdown, Doxygen, or docs-site changes; HTML is generated under docs\html.
+
+cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+
+# Quick incremental rebuild + targeted test + smoke run (after editing gsk_run/config/comparison C++ code):
+cmake --build build --target gsk_run gskcec_experiment_tests -j
+ctest --test-dir build -R gskcec_experiment_tests --output-on-failure
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run_all.ps1 -SkipBuild -SkipTests
+
+.\build\gsk_validate.exe --references .\benchmarks\cec_reference_results
+.\build\gsk_validate.exe --suite cec2017 --smoke
+.\build\gsk_validate.exe --suite cec2020 --smoke
+.\build\gsk_validate.exe --suite cec2013 --smoke
+.\build\gsk_validate.exe --suite cec2013 --against saved_vectors
+.\build\gsk_validate.exe --suite cec2013lsgo --smoke
+.\build\gsk_validate.exe --suite cec2011 --smoke
+
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_mex_bridge.ps1
+
+matlab -batch "cd('src/tests'); run_matlab_smoke_tests"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_docs.ps1 -Clean
+
+# Override gsk_run policy with --seed-policy {reference|native|unified|derived}
+# or with the config seed_policy: key.
+.\build\gsk_run.exe --config .\configs\smoke.yml --root .
+
+Set-Location -LiteralPath ".."
+
+matlab -batch "run_all_cec2017"

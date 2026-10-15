@@ -1,0 +1,100 @@
+# Continuous integration for the C++ side of gsk_variants.
+#
+# Builds and tests the standalone C++ benchmark library + CLIs on Linux and
+# Windows, with warnings-as-errors, sanitizers, and the no-Python /
+# folder-boundary contract checks. MATLAB is NOT run here (license); the
+# MATLAB optimizer smoke tests run locally - see README.md "MATLAB tests".
+#
+# Assumes this project (gsk_variants) is the repository root. If it lives in a
+# subdirectory, set `defaults.run.working-directory` and the checkout path
+# accordingly.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    name: build & test (${{ matrix.os }}, ${{ matrix.cxx }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # On Linux, select the compiler explicitly. On Windows, leave the
+          # compiler unset so CMake uses the default Visual Studio generator +
+          # MSVC toolset (passing -DCMAKE_CXX_COMPILER=cl is ignored or errors
+          # under the VS generator).
+          - os: ubuntu-latest
+            cxx: g++
+            cmake_compiler: "-DCMAKE_CXX_COMPILER=g++"
+          - os: ubuntu-latest
+            cxx: clang++
+            cmake_compiler: "-DCMAKE_CXX_COMPILER=clang++"
+          - os: windows-latest
+            cxx: MSVC
+            cmake_compiler: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (warnings as errors)
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DGSKCEC_WERROR=ON
+          ${{ matrix.cmake_compiler }}
+
+      - name: Build
+        run: cmake --build build --config Release -j
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+  sanitizers:
+    name: ASan + UBSan (ubuntu, clang)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure with sanitizers
+        run: >
+          cmake -S . -B build-san
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+      - name: Build
+        run: cmake --build build-san -j
+      - name: Test under sanitizers
+        run: ctest --test-dir build-san --output-on-failure
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          ASAN_OPTIONS: detect_leaks=1
+
+  contract-checks:
+    name: language & folder contract (no Python, no merged suites)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No Python / Cython / cec2013.cpp anywhere
+        run: |
+          set -e
+          if find . -path ./build -prune -o -type f \( -name '*.py' -o -name '*.pyx' -o -name 'cec2013.cpp' \) -print | grep .; then
+            echo "::error::forbidden file(s) found"; exit 1
+          fi
+          echo "ok: no python/cython/cec2013.cpp"
+      - name: No .m/.R/.c under cec_suite_cpp
+        run: |
+          set -e
+          if find benchmarks/cec_suite_cpp -type f \( -name '*.m' -o -name '*.R' -o -name '*.c' \) -print | grep .; then
+            echo "::error::non-C++ source under cec_suite_cpp"; exit 1
+          fi
+          echo "ok: cec_suite_cpp is C++ only"
+      - name: No forbidden top-level folders
+        run: |
+          set -e
+          for d in include tests matlab; do
+            if [ -d "$d" ]; then echo "::error::forbidden top-level folder: $d"; exit 1; fi
+          done
+          echo "ok: no top-level include/tests/matlab"

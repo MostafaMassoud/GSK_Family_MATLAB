@@ -1,0 +1,1793 @@
+function run_experiment(varargin)
+%RUN_EXPERIMENT MATLAB experiment driver (invoked by gsk_run or directly).
+%
+%   run_experiment('optimizer','gsk', 'suite','cec2017', ...
+%                  'functions',[1 3], 'dimensions',[10], 'runs',3, ...
+%                  'base_seed',20240620, 'max_nfes',0, ...
+%                  'project_root','D:/...', 'output_dir','D:/.../results/gsk/cec2017', ...
+%                  'overwrite',false, 'verbose',true, ...
+%                  'seed_policy','unified', 'rand_generator','threefry', ...
+%                  'use_parallel',false, 'write_graphs',false)
+%
+% Set 'verbose',false to suppress the per-run lines and print only one
+% summary row per (function, dimension) -- useful for long multi-run sweeps.
+% Existing output directories are resume/add targets by default: generated CSVs
+% are appended where possible, completed run ids are skipped, and fixed-name
+% artifacts are archived under _archive/<timestamp>/ before refresh. Set
+% 'overwrite',true to archive the existing output tree first and start a clean
+% replacement run without reusing old per-run rows.
+%
+% Writes the CEC-competition results layout (docs/reference/result_schema.md):
+%
+%   <output_dir>/summary/   <optimizer>_<suite>_D<dim>.csv  (Function,Best,Median,Mean,Worst,SD)
+%                           <optimizer>_<suite>.csv         (all functions; native-dim suites)
+%                           per_run.csv                     (full per-run schema, seeds incl.)
+%                           environment.json                (run environment + metadata)
+%   <output_dir>/curves/    Figure_F<f>_D<d>_Run#<r>.csv    (Eval,BestError,Log10Error; median run)
+%                           graphs/Figure_F<f>_D<d>.png     (optional, write_graphs=true)
+%   <output_dir>/gen_logs/  CheckpointErrors_<optimizer>_F<f>_D<d>.csv  (Run,Seed,E<nfes>...)
+%
+% Checkpoints follow the standard CEC fractional schedule
+% [0.01 0.02 0.03 0.05 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0] x max_nfes.
+% Suites with fixed per-function dimensions (cec2011, cec2013lsgo) take
+% dimensions = 0 (native) and also get a dimensionless rollup summary. A
+% (function, dimension) cell whose benchmark data is unavailable is an explicit
+% SKIP recorded in environment.json. Statistics are over errors when the suite
+% has known optima, otherwise over raw objectives (statistics_basis).
+%
+% Seed-policy summary:
+%   unified  -> default for direct MATLAB calls and run_all_cec*.m; calls
+%               get_cec_seed(base_seed,D,func,run), uses threefry when the
+%               installed MATLAB supports it (else twister), draws one X0 in
+%               the runner, and restores the post-X0 RNG state in every
+%               optimizer for strict fair cross-family comparisons.
+%   reference -> published-table reproduction rules; optimizers keep their
+%               historical seed/generator families.
+%   native/derived -> diagnostic hashed schedules that intentionally include
+%               optimizer/suite identity, so they are reproducible but not
+%               same-seed fairness protocols.
+
+% Central default for direct run_experiment and root run_all_cec*.m launchers.
+% The value is a date-like, stable project seed; changing it starts a new
+% reproducible campaign. gsk_run/config files can still pass an explicit seed.
+default_base_seed = 20240620;
+
+p = inputParser;
+p.addParameter('optimizer', '', @ischar);
+p.addParameter('suite', '', @ischar);
+p.addParameter('functions', [], @isnumeric);
+p.addParameter('dimensions', 0, @isnumeric);
+p.addParameter('runs', 1, @isnumeric);
+p.addParameter('base_seed', default_base_seed, @isnumeric);
+p.addParameter('max_nfes', 0, @isnumeric);
+p.addParameter('project_root', '', @ischar);
+p.addParameter('output_dir', '', @ischar);
+p.addParameter('overwrite', false, @(x) islogical(x) || isnumeric(x));
+p.addParameter('verbose', true, @(x) islogical(x) || isnumeric(x));
+p.addParameter('seed_policy', 'unified', @(x) ischar(x) || isstring(x));
+p.addParameter('rand_generator', 'threefry', @(x) any(strcmpi(char(x), {'threefry', 'twister', 'seed', 'state', 'auto', 'default'})));
+p.addParameter('use_parallel', false, @(x) islogical(x) || isnumeric(x));
+p.addParameter('write_graphs', false, @(x) islogical(x) || isnumeric(x));
+p.parse(varargin{:});
+a = p.Results;
+a.optimizer = canonical_optimizer_id(a.optimizer);
+
+assert(~isempty(a.optimizer), 'run_experiment:args', 'optimizer is required');
+assert(~isempty(a.suite), 'run_experiment:args', 'suite is required');
+assert(~isempty(a.functions), 'run_experiment:args', 'functions is required');
+assert(~isempty(a.project_root), 'run_experiment:args', 'project_root is required');
+assert(~isempty(a.output_dir), 'run_experiment:args', 'output_dir is required');
+
+setup_paths(a.project_root);
+if ~strcmpi(a.suite, 'sphere')
+    % CEC suites need the project-local C++ MEX bridge. Treat a missing bridge
+    % as a startup prerequisite failure, not as hundreds of skipped cells.
+    gskcec_require_mex(a.project_root, 'run_experiment');
+end
+if logical(a.use_parallel)
+    ensure_process_pool();   % process-based pool backing the parfor run loop (see run loop)
+end
+optimize = str2func([optimizer_function_stem(a.optimizer) '_optimize']);
+
+session_tag = datestr(now, 'yyyy-mm-dd_HH.MM.SS');
+a.overwrite_archived_to = '';
+if logical(a.overwrite)
+    archived_to = overwrite_output_tree(a.output_dir, a.project_root, session_tag);
+    if ~isempty(archived_to)
+        a.overwrite_archived_to = archived_to;
+        fprintf(['run_experiment: overwrite=true; archived previous output tree:\n' ...
+                 '                %s\n' ...
+                 '                -> %s\n'], a.output_dir, archived_to);
+    end
+end
+
+summary_dir = fullfile(a.output_dir, 'summary');
+curves_dir = fullfile(a.output_dir, 'curves');
+genlogs_dir = fullfile(a.output_dir, 'gen_logs');
+resume_existing = exist(a.output_dir, 'dir') ~= 0;
+for d = {summary_dir, curves_dir, genlogs_dir}
+    if ~exist(d{1}, 'dir'); mkdir(d{1}); end
+end
+if resume_existing
+    fprintf(['run_experiment: preserving existing output tree and resuming/appending: %s\n' ...
+             '                no generated files are deleted; fixed-name artifacts are archived before refresh.\n'], ...
+            a.output_dir);
+end
+
+% Optional convergence graph PNGs are written under curves/graphs. They are
+% display-only and can be slow (`exportgraphics`); numeric curves/*.csv files
+% are always written and are the authoritative data for later plotting.
+graphs_dir = fullfile(curves_dir, 'graphs');
+if logical(a.write_graphs) && ~exist(graphs_dir, 'dir'); mkdir(graphs_dir); end
+% Each dimension mirrors its console output to its own timestamped log
+% (summary/<opt>_D<dim>_log_<stamp>.txt, started inside the dimension loop);
+% this backstop guarantees logging is turned off when the function exits.
+diary_backstop = onCleanup(@() diary('off')); %#ok<NASGU>
+
+checkpoint_fracs = [0.01 0.02 0.03 0.05 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0];
+known_optimum = ~any(strcmp(a.suite, {'cec2011', 'cec2013lsgo'}));
+
+% Existing result records make reruns resumable: completed runs are skipped,
+% new cells are added, and summary tables are refreshed from old + new data.
+existing_records = load_existing_per_run_records(summary_dir, a.optimizer, a.suite);
+stats = load_existing_summary_stats(summary_dir, a.optimizer, a.suite);
+if ~isempty(stats)
+    fprintf('run_experiment: loaded %d existing summary row(s) for resume/add mode.\n', numel(stats));
+end
+
+% Full per-run schema is preserved under summary/per_run.csv (seeds, nfes,
+% termination, runtime) in addition to the CEC-style aggregates. Existing files
+% are appended, never truncated.
+fr = open_csv_for_append(fullfile(summary_dir, 'per_run.csv'), ...
+    'optimizer,suite,function,dimension,run,seed,best_fitness,error,nfes,termination,runtime_seconds');
+closer = onCleanup(@() fclose(fr));
+
+% seed_schedule.csv: the (Dim,Function,Run,Seed) actually used, written live.
+fs = open_csv_for_append(fullfile(summary_dir, 'seed_schedule.csv'), ...
+    'Dim,Function,Run,Seed');
+seed_closer = onCleanup(@() fclose(fs)); %#ok<NASGU>
+
+skipped = {};
+notes = {};
+total = tic;
+
+func_list = a.functions(:)';
+% CEC2017 excludes F2 (unstable; omitted from the reference tables). Drop it
+% so runs match the published comparison protocol for every optimizer.
+excluded_funcs = [];
+if strcmp(a.suite, 'cec2017')
+    excluded_funcs = func_list(func_list == 2);
+    func_list = func_list(func_list ~= 2);
+end
+nfuncs = numel(func_list);
+
+% Record the run configuration + protocol up front (reproducibility), next to
+% seed_schedule.csv / environment.json and the per-dimension summary CSVs.
+write_run_metadata(summary_dir, a, func_list, excluded_funcs, known_optimum, session_tag);
+
+% Group the sweep by dimension so each dimension prints its own banner and
+% results table (one row per function). Loop order does not change the result
+% files: write_summary_files filters by dimension and sorts by function.
+for dim = a.dimensions(:)'
+    % Mirror this dimension's console output to its own timestamped log:
+    % summary/<opt>_D<dim>_log_<yyyy-mm-dd_HH.MM.SS>.txt
+    if dim == 0; dtag = 'native'; else; dtag = sprintf('D%d', dim); end
+    stamp = datestr(now, 'yyyy-mm-dd_HH.MM.SS');
+    diary(fullfile(summary_dir, sprintf('%s_%s_log_%s.txt', a.optimizer, dtag, stamp)));
+    diary on;
+    % Detailed per-run log for this dimension (every function's individual runs):
+    % summary/<opt>_<dtag>_runs_log_<stamp>.txt
+    runs_log = open_runs_log(summary_dir, a, dtag, stamp, known_optimum, func_list);
+    print_detailed_config(a, known_optimum, func_list, excluded_funcs);
+
+    banner_printed = false;
+    dim_done = 0;
+    dim_runs_done = 0;
+    dim_func_ids = [];
+    dim_means = [];
+    curve_f = [];    % per-function median-run convergence, for the graphs
+    curve_d = [];
+    curve_x = {};
+    curve_y = {};
+    dim_resume_messages = {};
+    dim_skip_messages = {};
+    for fi = 1:nfuncs
+        func_id = func_list(fi);
+        try
+            problem = gskcec_make_problem(a.suite, func_id, dim, a.project_root, a.max_nfes);
+            problem_guard = onCleanup(@() free_problem(problem)); %#ok<NASGU>
+        catch err
+            fprintf('SKIP %s f%d D%d: %s\n', a.suite, func_id, dim, err.message);
+            skipped{end + 1} = sprintf('f%d D%d: %s', func_id, dim, err.message); %#ok<AGROW>
+            continue;
+        end
+        D = problem.dim;
+        existing_cell_records = records_for_cell(existing_records, D, func_id);
+        requested_runs = 1:a.runs;
+        [existing_cell_records, stale_runs] = keep_records_matching_current_seed( ...
+            existing_cell_records, a, D, func_id, requested_runs);
+        if ~isempty(stale_runs)
+            dim_resume_messages{end + 1} = sprintf( ... %#ok<AGROW>
+                'RESUME %s f%d D%d: ignoring stale-seed existing run(s): %s', ...
+                a.suite, func_id, D, run_list_text(stale_runs));
+        end
+        existing_runs = unique([existing_cell_records.run]);
+        runs_to_do = setdiff(requested_runs, existing_runs);
+        if isempty(runs_to_do)
+            dim_resume_messages{end + 1} = sprintf( ... %#ok<AGROW>
+                'RESUME %s f%d D%d: runs 1:%d already present; skipping cell', ...
+                a.suite, func_id, D, a.runs);
+            [~, combined_values] = combine_existing_and_new_values( ...
+                existing_cell_records, runs_to_do, [], known_optimum, a.runs);
+            if ~isempty(combined_values)
+                row = stat_row_from_values(func_id, D, combined_values, known_optimum, report_zero_tol(a));
+                stats = upsert_stat(stats, row);
+                if ~banner_printed
+                    print_run_banner(a, D, nfuncs, problem);
+                    print_table_header();
+                    banner_printed = true;
+                end
+                print_table_row(func_id, row.best, row.median, row.mean, row.worst, row.sd, 0);
+                dim_done = dim_done + 1;
+                dim_func_ids(end + 1) = func_id; %#ok<AGROW>
+                dim_means(end + 1) = row.mean;  %#ok<AGROW>
+            end
+            clear problem_guard
+            continue;
+        elseif numel(runs_to_do) < a.runs
+            dim_resume_messages{end + 1} = sprintf( ... %#ok<AGROW>
+                'RESUME %s f%d D%d: %d/%d run(s) present; running missing run(s): %s', ...
+                a.suite, func_id, D, numel(existing_runs), a.runs, run_list_text(runs_to_do));
+        end
+        if ~banner_printed
+            print_run_banner(a, D, nfuncs, problem);
+            print_table_header();
+            banner_printed = true;
+        end
+        cell_timer = tic;   % wall-clock time for this (function, dimension) row
+        % A failure in any run of this (function, dimension) cell is recorded
+        % as a SKIP and the sweep continues - one bad cell must not abort a
+        % long multi-optimizer run. The MEX handle is freed unconditionally
+        % afterwards.
+        try
+        checkpoints = unique(round(checkpoint_fracs * problem.max_nfes));
+        checkpoints = checkpoints(checkpoints >= 1);
+
+        nr_todo = numel(runs_to_do);
+        run_errors = zeros(nr_todo, 1);      % final error (or raw objective) per run
+        run_seeds = zeros(nr_todo, 1);
+        chk_errors = zeros(nr_todo, numel(checkpoints));
+        conv_nfes = cell(nr_todo, 1);
+        conv_err = cell(nr_todo, 1);
+        run_best = zeros(nr_todo, 1);   % full per-run detail for the runs log
+        run_errv = zeros(nr_todo, 1);
+        run_nfes = zeros(nr_todo, 1);
+        run_rt   = zeros(nr_todo, 1);
+        run_term = cell(nr_todo, 1);
+
+        % Runs are independent. Deterministic generators seed each optimizer
+        % call from the scheduled per-run seed. In unified mode that scheduled
+        % seed is get_cec_seed(base_seed,D,func,run) and is identical for every
+        % optimizer at the same cell. Wall-clock seeding is not accepted;
+        % historical clock-seeded references are represented by deterministic
+        % scheduled seeds.
+        % The default loop is serial for reproducibility and robust source-path
+        % handling; with use_parallel=true, parfor can be used after a local
+        % smoke test confirms workers can see the runner, helpers, optimizer
+        % folders, and MEX bridge. Deterministic modes are identical either way.
+        %
+        % Each worker builds its OWN problem: the gskcec_eval MEX handle is
+        % process-local and cannot be shared from the client, so it is created
+        % and freed inside the iteration. File and console output is collected
+        % per run and written in run order after the loop, so per_run.csv /
+        % seed_schedule.csv are byte-identical to the serial sweep.
+        for rr = 1:nr_todo
+            run_id = runs_to_do(rr);
+            run_seeds(rr) = pick_run_seed(a, D, func_id, run_id);
+        end
+        prun_rows = cell(nr_todo, 1);
+        verb_rows = cell(nr_todo, 1);
+        notes_c   = cell(nr_todo, 1);
+        % Broadcast only plain data to the workers (not the options struct or the
+        % client problem, whose MEX handle is invalid on a worker).
+        opt_name = a.optimizer; suite_name = a.suite; proot = a.project_root;
+        mnf = a.max_nfes; nruns = a.runs; verbose = logical(a.verbose);
+        optimum_local = problem.optimum;
+        rand_gen = effective_rand_generator(a);   % reference/unified may override options.rand_generator
+        % Unified fair-start mode is stronger than same numeric seed. The
+        % runner draws X0 once and captures the RNG state immediately after
+        % that draw. The optimizer receives both values, accepts X0 as its
+        % initial population, and restores the post-X0 state before later
+        % random choices. This prevents algorithm-local initialization code
+        % from consuming different amounts of randomness before the search.
+        use_unified_x0 = unified_initialization_enabled(a);
+        zero_tol_local = report_zero_tol(a);
+        if logical(a.use_parallel)
+            parfor rr = 1:nr_todo
+                setup_paths_once(proot);                              % ensure the worker path (once per worker)
+                wp = gskcec_make_problem(suite_name, func_id, dim, proot, mnf);
+                handle_guard = onCleanup(@() free_problem(wp)); %#ok<NASGU>  free on exit/error
+                run_id = runs_to_do(rr);
+                scheduled_seed = run_seeds(rr);
+                run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen);
+                if use_unified_x0
+                    [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen);
+                    run_opts.initial_population = x0;
+                    run_opts.rng_state_after_initialization = rng_after_x0;
+                end
+                result = optimize(wp, run_opts);
+                seed = result.seed;
+                run_seeds(rr) = seed;
+
+                gn = result.convergence.nfes(:);
+                gb = result.convergence.best_fitness(:);
+                ge = arrayfun(@(b) curve_value(b, optimum_local, opt_name, suite_name), gb);
+                conv_nfes{rr} = gn;
+                conv_err{rr} = ge;
+                chk_errors(rr, :) = checkpoint_errors(gn, ge, checkpoints);
+                if known_optimum
+                    run_errors(rr) = result.error;
+                else
+                    run_errors(rr) = result.best_fitness;   % statistics over raw objectives
+                end
+                run_best(rr) = result.best_fitness;   % full per-run detail for the runs log
+                % CEC zero-cutoff on the per-run error written to per_run.csv and the
+                % runs log. Known-optimum suites use the project-wide 1e-8
+                % reporting cutoff.
+                err_out = result.error;
+                if known_optimum && abs(err_out) < zero_tol_local; err_out = 0; end
+                run_errv(rr) = err_out;
+                run_nfes(rr) = result.nfes;
+                run_rt(rr)   = result.runtime_seconds;
+                run_term{rr} = result.termination;
+                notes_c{rr} = result.notes;
+                prun_rows{rr} = sprintf('%s,%s,%d,%d,%d,%s,%.10e,%.10e,%d,%s,%.6f\n', ...
+                        opt_name, suite_name, func_id, D, run_id, seed_to_text(seed), ...
+                        result.best_fitness, err_out, result.nfes, ...
+                        result.termination, result.runtime_seconds);
+                if verbose
+                    verb_rows{rr} = sprintf('%s %s f%d D%d run %d/%d: best=%.6e error=%.6e nfes=%d (%.1fs)\n', ...
+                            opt_name, suite_name, func_id, D, run_id, nruns, ...
+                            result.best_fitness, result.error, result.nfes, result.runtime_seconds);
+                end
+            end
+        else
+            for rr = 1:nr_todo
+                setup_paths_once(proot);
+                wp = problem;   % serial mode can reuse the cell-level MEX handle safely
+                run_id = runs_to_do(rr);
+                scheduled_seed = run_seeds(rr);
+                run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen);
+                if use_unified_x0
+                    [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen);
+                    run_opts.initial_population = x0;
+                    run_opts.rng_state_after_initialization = rng_after_x0;
+                end
+                result = optimize(wp, run_opts);
+                seed = result.seed;
+                run_seeds(rr) = seed;
+
+                gn = result.convergence.nfes(:);
+                gb = result.convergence.best_fitness(:);
+                ge = arrayfun(@(b) curve_value(b, optimum_local, opt_name, suite_name), gb);
+                conv_nfes{rr} = gn;
+                conv_err{rr} = ge;
+                chk_errors(rr, :) = checkpoint_errors(gn, ge, checkpoints);
+                if known_optimum
+                    run_errors(rr) = result.error;
+                else
+                    run_errors(rr) = result.best_fitness;
+                end
+                run_best(rr) = result.best_fitness;
+                err_out = result.error;
+                if known_optimum && abs(err_out) < zero_tol_local; err_out = 0; end
+                run_errv(rr) = err_out;
+                run_nfes(rr) = result.nfes;
+                run_rt(rr)   = result.runtime_seconds;
+                run_term{rr} = result.termination;
+                notes_c{rr} = result.notes;
+                prun_rows{rr} = sprintf('%s,%s,%d,%d,%d,%s,%.10e,%.10e,%d,%s,%.6f\n', ...
+                        opt_name, suite_name, func_id, D, run_id, seed_to_text(seed), ...
+                        result.best_fitness, err_out, result.nfes, ...
+                        result.termination, result.runtime_seconds);
+                if verbose
+                    verb_rows{rr} = sprintf('%s %s f%d D%d run %d/%d: best=%.6e error=%.6e nfes=%d (%.1fs)\n', ...
+                            opt_name, suite_name, func_id, D, run_id, nruns, ...
+                            result.best_fitness, result.error, result.nfes, result.runtime_seconds);
+                end
+            end
+        end
+        % Persist per-run records in run order (identical content to a serial run).
+        for rr = 1:nr_todo
+            run_id = runs_to_do(rr);
+            fprintf(fs, '%d,%d,%d,%s\n', D, func_id, run_id, seed_to_text(run_seeds(rr)));
+            fprintf(fr, '%s', prun_rows{rr});
+            if ~isempty(notes_c{rr}); notes{end + 1} = notes_c{rr}; end %#ok<AGROW>
+            if verbose && ~isempty(verb_rows{rr}); fprintf('%s', verb_rows{rr}); end
+        end
+
+        write_checkpoint_errors(genlogs_dir, a.optimizer, func_id, D, checkpoints, runs_to_do, run_seeds, chk_errors, session_tag);
+        append_function_runs(runs_log, func_id, D, known_optimum, runs_to_do, ...
+                             run_seeds, run_best, run_errv, run_nfes, run_term, run_rt, problem, report_zero_tol(a));
+        [combined_runs, combined_values] = combine_existing_and_new_values( ...
+            existing_cell_records, runs_to_do, run_errors, known_optimum, a.runs);
+        [med_run_id, med_new_idx] = median_run_id(combined_runs, combined_values, runs_to_do);
+        if med_new_idx > 0
+            write_curve(curves_dir, func_id, D, med_run_id, conv_nfes{med_new_idx}, conv_err{med_new_idx}, session_tag);
+            curve_f(end + 1) = func_id;                    %#ok<AGROW>
+            curve_d(end + 1) = D;                          %#ok<AGROW>
+            curve_x{end + 1} = conv_nfes{med_new_idx};      %#ok<AGROW>
+            curve_y{end + 1} = conv_err{med_new_idx};       %#ok<AGROW>
+        end
+
+        row = stat_row_from_values(func_id, D, combined_values, known_optimum, report_zero_tol(a));
+        cell_best = row.best; cell_median = row.median; cell_mean = row.mean;
+        cell_worst = row.worst; cell_sd = row.sd;
+        stats = upsert_stat(stats, row);
+        % One table row per (function, dimension) -- always printed, so a long
+        % sweep shows progress even with 'verbose',false.
+        print_table_row(func_id, cell_best, cell_median, cell_mean, cell_worst, cell_sd, toc(cell_timer));
+        dim_done = dim_done + 1;
+        dim_runs_done = dim_runs_done + nr_todo;
+        dim_func_ids(end + 1) = func_id; %#ok<AGROW>
+        dim_means(end + 1) = cell_mean;  %#ok<AGROW>
+        catch err
+            print_table_skip_row(func_id);
+            dim_skip_messages{end + 1} = sprintf('SKIP %s f%d D%d (run failed): %s', ...
+                a.suite, func_id, D, err.message); %#ok<AGROW>
+            skipped{end + 1} = sprintf('f%d D%d (run failed): %s', func_id, D, err.message); %#ok<AGROW>
+        end
+
+        clear problem_guard
+    end
+
+    if banner_printed
+        print_table_footer();
+        fprintf('\n[OK] Updated %d function(s); wrote %d new run(s)\n', ...
+                dim_done, dim_runs_done);
+        print_skip_messages(dim_skip_messages);
+        print_resume_messages(dim_resume_messages);
+        % The comparison table and graphs are display-only: a failure there
+        % (e.g. an unusual reference-table format) must never abort the sweep.
+        try
+            print_comparison_table(a, dim, dim_func_ids, dim_means);
+        catch cmp_err
+            fprintf('(comparison table skipped: %s)\n', cmp_err.message);
+        end
+        try
+            fprintf('\nPost-processing artifacts for %s %s D%d...\n', upper(a.optimizer), upper(a.suite), D);
+            if logical(a.write_graphs)
+                ng = make_convergence_graphs(graphs_dir, a, curve_f, curve_d, curve_x, curve_y, session_tag);
+                fprintf('Saved %d convergence graph(s) to %s\n', ng, graphs_dir);
+            else
+                fprintf('Graph PNG rendering skipped (write_graphs=false). Numeric curves/*.csv and gen_logs/*.csv were still written.\n');
+            end
+        catch gph_err
+            fprintf('(graphs skipped: %s)\n', gph_err.message);
+        end
+    elseif ~isempty(dim_resume_messages)
+        print_resume_messages(dim_resume_messages);
+    end
+    close_runs_log(runs_log);
+    diary off;   % close this dimension's log
+end
+
+fprintf('\nFinalizing result files...\n');
+fprintf('  [1/2] Writing summary CSV files...\n');
+write_summary_files(summary_dir, a.optimizer, a.suite, stats, known_optimum, session_tag);
+fprintf('  [2/2] Writing environment metadata...\n');
+write_environment(summary_dir, a, stats, skipped, notes, known_optimum, checkpoint_fracs, toc(total), session_tag);
+fprintf('Finalizing result files: done.\n');
+
+fprintf('run_experiment: wrote %s\n', a.output_dir);
+if ~isempty(skipped)
+    % Make a partial run unmistakable: a skipped cell (unavailable data or a
+    % failed run) is a missing row in the summary tables. Details are listed
+    % above and in environment.json (skipped_cells).
+    warning('run_experiment:skippedCells', ...
+            '%d (function,dimension) cell(s) were SKIPPED - results are PARTIAL. See environment.json.', ...
+            numel(skipped));
+end
+end
+
+% ---- resume / append helpers ------------------------------------------------
+
+function fid = open_csv_for_append(path, header)
+%OPEN_CSV_FOR_APPEND Append to an existing generated CSV without truncating it.
+write_header = true;
+if isfile(path)
+    info = dir(path);
+    write_header = isempty(info) || info.bytes == 0;
+end
+fid = fopen(path, 'a');
+assert(fid > 0, 'run_experiment:io', 'cannot open %s', path);
+if write_header
+    fprintf(fid, '%s\n', header);
+end
+end
+
+function archive_existing_file(path, session_tag)
+%ARCHIVE_EXISTING_FILE Copy a fixed-name artifact before refreshing it.
+% The previous file remains recoverable under <folder>/_archive/<session_tag>/.
+if ~isfile(path)
+    return;
+end
+[folder, name, ext] = fileparts(path);
+archive_dir = fullfile(folder, '_archive', session_tag);
+if ~exist(archive_dir, 'dir'); mkdir(archive_dir); end
+target = fullfile(archive_dir, [name ext]);
+n = 1;
+while isfile(target)
+    target = fullfile(archive_dir, sprintf('%s_%d%s', name, n, ext));
+    n = n + 1;
+end
+try
+    copyfile(path, target);
+catch err
+    warning('run_experiment:archive', ...
+            'Could not archive %s before refresh (%s). Existing file remains in place until write.', ...
+            path, err.message);
+end
+end
+
+function archived_to = overwrite_output_tree(output_dir, project_root, session_tag)
+%OVERWRITE_OUTPUT_TREE Move an existing run tree aside before a clean run.
+% This implements overwrite without deleting prior evidence: the active output
+% path starts fresh, while the previous tree remains recoverable under the
+% output parent's _overwrite_archive folder.
+archived_to = '';
+if ~exist(output_dir, 'dir')
+    return;
+end
+
+out_abs = canonical_path(output_dir);
+project_abs = canonical_path(project_root);
+reference_abs = canonical_path(fullfile(project_root, 'benchmarks', 'cec_reference_results'));
+
+assert(~same_path(out_abs, project_abs), ...
+       'run_experiment:overwriteUnsafe', ...
+       'Refusing to overwrite the project root: %s', out_abs);
+assert(~is_path_within_or_equal(out_abs, reference_abs), ...
+       'run_experiment:overwriteUnsafe', ...
+       'Refusing to overwrite imported reference results: %s', out_abs);
+
+[parent, leaf] = fileparts(out_abs);
+assert(~isempty(parent) && ~isempty(leaf), ...
+       'run_experiment:overwriteUnsafe', ...
+       'Refusing to overwrite unsafe output path: %s', out_abs);
+
+archive_root = fullfile(parent, '_overwrite_archive');
+if ~exist(archive_root, 'dir'); mkdir(archive_root); end
+archived_to = fullfile(archive_root, sprintf('%s_%s', leaf, session_tag));
+n = 1;
+while exist(archived_to, 'dir')
+    archived_to = fullfile(archive_root, sprintf('%s_%s_%d', leaf, session_tag, n));
+    n = n + 1;
+end
+
+[ok, msg] = movefile(out_abs, archived_to);
+assert(ok, 'run_experiment:overwriteArchive', ...
+       'Could not archive existing output tree %s -> %s (%s).', ...
+       out_abs, archived_to, msg);
+end
+
+function p = canonical_path(path)
+try
+    p = char(java.io.File(char(path)).getCanonicalPath());
+catch
+    p = char(string(path));
+end
+end
+
+function tf = same_path(a, b)
+if ispc
+    tf = strcmpi(a, b);
+else
+    tf = strcmp(a, b);
+end
+end
+
+function tf = is_path_within_or_equal(child, parent)
+if ispc
+    child = lower(child);
+    parent = lower(parent);
+end
+tf = strcmp(child, parent) || startsWith(child, [parent filesep]);
+end
+
+function records = empty_run_records()
+records = struct('dim', {}, 'func', {}, 'run', {}, 'seed', {}, 'best', {}, 'error', {});
+end
+
+function records = load_existing_per_run_records(summary_dir, optimizer, suite)
+%LOAD_EXISTING_PER_RUN_RECORDS Read existing per-run rows for resume checks.
+records = empty_run_records();
+path = fullfile(summary_dir, 'per_run.csv');
+if ~isfile(path); return; end
+fid = fopen(path, 'r');
+if fid < 0; return; end
+closer = onCleanup(@() fclose(fid)); %#ok<NASGU>
+header = fgetl(fid); %#ok<NASGU>
+while true
+    line = fgetl(fid);
+    if ~ischar(line); break; end
+    if isempty(strtrim(line)); continue; end
+    f = strsplit(line, ',');
+    if numel(f) < 8; continue; end
+    if ~strcmp(f{1}, optimizer) || ~strcmp(f{2}, suite); continue; end
+    rec = struct('dim', str2double(f{4}), ...
+                 'func', str2double(f{3}), ...
+                 'run', str2double(f{5}), ...
+                 'seed', str2double(f{6}), ...
+                 'best', str2double(f{7}), ...
+                 'error', str2double(f{8}));
+    if all(isfinite([rec.dim rec.func rec.run])) && (isfinite(rec.best) || isfinite(rec.error))
+        records(end + 1) = rec; %#ok<AGROW>
+    end
+end
+end
+
+function out = records_for_cell(records, D, func_id)
+if isempty(records)
+    out = empty_run_records();
+    return;
+end
+mask = [records.dim] == D & [records.func] == func_id;
+out = records(mask);
+end
+
+function [kept, stale_runs] = keep_records_matching_current_seed(records, a, D, func_id, requested_runs)
+%KEEP_RECORDS_MATCHING_CURRENT_SEED Reuse only rows matching today's schedule.
+%
+% Existing result directories are preserved, but stale rows from a previous
+% seed policy must not satisfy a resumed unified/reference run. They stay in
+% per_run.csv as history; the current run appends fresh rows for those run ids.
+%
+% This matters after changing seed policy or base_seed. Without this filter a
+% resumed run could skip run #k just because a row exists, even if that row was
+% generated with a different seed. The project contract is append-only results,
+% not blind trust in old rows; reuse is allowed only when the saved Seed column
+% agrees with pick_run_seed for the active configuration.
+kept = empty_run_records();
+stale_runs = [];
+if isempty(records)
+    return;
+end
+for i = 1:numel(records)
+    r = records(i).run;
+    if ~any(requested_runs == r)
+        continue;
+    end
+    expected_seed = pick_run_seed(a, D, func_id, r);
+    if seeds_equal(records(i).seed, expected_seed)
+        kept(end + 1) = records(i); %#ok<AGROW>
+    else
+        stale_runs(end + 1) = r; %#ok<AGROW>
+    end
+end
+stale_runs = unique(stale_runs);
+end
+
+function tf = seeds_equal(a, b)
+tf = isfinite(a) && isfinite(b) && abs(a - b) <= eps(max(1, abs(b))) * 8;
+end
+
+function [runs, values] = combine_existing_and_new_values(existing_records, runs_to_do, new_values, known_optimum, max_runs)
+%COMBINE_EXISTING_AND_NEW_VALUES Values used for summary stats after resume.
+runs = [];
+values = [];
+if ~isempty(existing_records)
+    existing_run_ids = [existing_records.run];
+    for r = 1:max_runs
+        if any(runs_to_do == r)
+            continue;
+        end
+        idx = find(existing_run_ids == r, 1, 'last');
+        if isempty(idx)
+            continue;
+        end
+        runs(end + 1, 1) = r; %#ok<AGROW>
+        if known_optimum
+            values(end + 1, 1) = existing_records(idx).error; %#ok<AGROW>
+        else
+            values(end + 1, 1) = existing_records(idx).best; %#ok<AGROW>
+        end
+    end
+end
+runs = [runs; runs_to_do(:)];
+values = [values; new_values(:)];
+[runs, order] = sort(runs);
+values = values(order);
+end
+
+function [run_id, new_idx] = median_run_id(runs, values, runs_to_do)
+%MEDIAN_RUN_ID Run nearest the combined median; new_idx is 0 if it is old.
+m = median(values);
+[~, idx] = min(abs(values - m));
+run_id = runs(idx);
+new_idx = find(runs_to_do == run_id, 1);
+if isempty(new_idx); new_idx = 0; end
+end
+
+function stats = load_existing_summary_stats(summary_dir, optimizer, suite)
+%LOAD_EXISTING_SUMMARY_STATS Existing per-dimension summaries for add mode.
+stats = struct('func', {}, 'dim', {}, 'best', {}, 'median', {}, 'mean', {}, 'worst', {}, 'sd', {});
+files = dir(fullfile(summary_dir, sprintf('%s_%s_D*.csv', optimizer, suite)));
+for k = 1:numel(files)
+    path = fullfile(files(k).folder, files(k).name);
+    tok = regexp(files(k).name, '_D(\d+)\.csv$', 'tokens', 'once');
+    if isempty(tok); continue; end
+    D = str2double(tok{1});
+    fid = fopen(path, 'r');
+    if fid < 0; continue; end
+    closer = onCleanup(@() fclose(fid)); %#ok<NASGU>
+    header = fgetl(fid); %#ok<NASGU>
+    while true
+        line = fgetl(fid);
+        if ~ischar(line); break; end
+        if isempty(strtrim(line)); continue; end
+        f = strsplit(line, ',');
+        if numel(f) < 6; continue; end
+        row = struct('func', str2double(f{1}), 'dim', D, ...
+                     'best', str2double(f{2}), 'median', str2double(f{3}), ...
+                     'mean', str2double(f{4}), 'worst', str2double(f{5}), ...
+                     'sd', str2double(f{6}));
+        if isfinite(row.func)
+            stats = upsert_stat(stats, row);
+        end
+    end
+end
+end
+
+function stats = upsert_stat(stats, row)
+if isempty(stats)
+    stats = row;
+    return;
+end
+mask = [stats.func] == row.func & [stats.dim] == row.dim;
+if any(mask)
+    stats(find(mask, 1, 'last')) = row;
+else
+    stats(end + 1) = row; %#ok<AGROW>
+end
+end
+
+function row = stat_row_from_values(func_id, D, values, known_optimum, zero_tol)
+cell_best = min(values); cell_median = median(values);
+cell_mean = mean(values); cell_worst = max(values); cell_sd = std(values);
+if known_optimum
+    % CEC zero-cutoff: a reported error with |x| < 1e-8 is written as 0.
+    % Per-run errors keep full precision in per_run.csv / the runs log;
+    % this only affects the summary stats.
+    zc = @(x) x * (abs(x) >= zero_tol);
+    cell_best = zc(cell_best); cell_median = zc(cell_median);
+    cell_mean = zc(cell_mean); cell_worst = zc(cell_worst); cell_sd = zc(cell_sd);
+end
+row = struct('func', func_id, 'dim', D, ...
+             'best', cell_best, 'median', cell_median, ...
+             'mean', cell_mean, 'worst', cell_worst, ...
+             'sd', cell_sd);
+end
+
+% ---- per-cell artifact writers ---------------------------------------------
+
+function write_checkpoint_errors(genlogs_dir, optimizer, func_id, D, checkpoints, run_ids, seeds, chk, session_tag)
+% CheckpointErrors_<optimizer>_F<f>_D<d>.csv : one row per run, columns
+% Run,Seed,E<checkpoint>... holding best-so-far error at each CEC checkpoint.
+path = fullfile(genlogs_dir, sprintf('CheckpointErrors_%s_F%d_D%d.csv', optimizer, func_id, D));
+expected_header = sprintf('Run,Seed%s', sprintf(',E%d', checkpoints));
+write_header = true;
+mode = 'w';
+if isfile(path)
+    fid0 = fopen(path, 'r');
+    first = '';
+    if fid0 > 0
+        first = strtrim(fgetl(fid0));
+        fclose(fid0);
+    end
+    if strcmp(first, expected_header)
+        write_header = false;
+        mode = 'a';
+    else
+        archive_existing_file(path, session_tag);
+    end
+end
+f = fopen(path, mode);
+assert(f > 0, 'run_experiment:io', 'cannot open %s', path);
+if write_header
+    fprintf(f, '%s\n', expected_header);
+end
+for r = 1:size(chk, 1)
+    fprintf(f, '%d,%s', run_ids(r), seed_to_text(seeds(r)));
+    fprintf(f, ',%.16g', chk(r, :));
+    fprintf(f, '\n');
+end
+fclose(f);
+end
+
+function fid = open_runs_log(summary_dir, a, dtag, stamp, known_optimum, func_list)
+%OPEN_RUNS_LOG Detailed per-dimension run log (every function's individual runs):
+% summary/<opt>_<dtag>_runs_log_<stamp>.txt . Returns -1 on failure (logging off).
+path = fullfile(summary_dir, sprintf('%s_%s_runs_log_%s.txt', a.optimizer, dtag, stamp));
+fid = fopen(path, 'w');
+if fid < 0; return; end
+bar = repmat('=', 1, 110);
+fprintf(fid, '%s\n', bar);
+fprintf(fid, 'DETAILED PER-RUN LOG   %s   %s   %s\n', upper(a.optimizer), upper(a.suite), dtag);
+fprintf(fid, 'runs per function : %d\n', a.runs);
+fprintf(fid, 'functions         : %s\n', mat2str(func_list(:)'));
+if known_optimum
+    fprintf(fid, 'statistics basis  : error vs known optimum\n');
+else
+    fprintf(fid, 'statistics basis  : raw objective (no known optimum)\n');
+end
+fprintf(fid, 'generated         : %s\n', stamp);
+fprintf(fid, '%s\n', bar);
+end
+
+function append_function_runs(fid, func_id, D, known_optimum, run_ids, seeds, best, errv, nfes, term, rt, problem, zero_tol)
+%APPEND_FUNCTION_RUNS Append one function's per-run block (all runs in detail)
+% to the open per-dimension runs log.
+if fid < 0; return; end
+nr = numel(seeds);
+fprintf(fid, '\n');
+if isnan(problem.optimum)
+    fprintf(fid, '----- F%d  %s  (%d runs)  [no known optimum] -----\n', func_id, dtag_for(D), nr);
+else
+    fprintf(fid, '----- F%d  %s  (%d runs)  optimum=%.10g  target_error=%g -----\n', ...
+            func_id, dtag_for(D), nr, problem.optimum, problem.target_error);
+end
+fprintf(fid, '%-5s  %-12s  %-23s  %-23s  %-12s  %-22s  %-11s\n', ...
+        'Run', 'Seed', 'Best_Fitness', 'Error', 'NFEs', 'Termination', 'Runtime_s');
+for r = 1:nr
+    fprintf(fid, '%-5d  %-12s  %-23.16e  %-23.16e  %-12d  %-22s  %-11.4f\n', ...
+            run_ids(r), seed_to_text(seeds(r)), best(r), errv(r), nfes(r), term{r}, rt(r));
+end
+if known_optimum; stat = errv; lbl = 'error'; else; stat = best; lbl = 'objective'; end
+sb = min(stat); sm = median(stat); su = mean(stat); sw = max(stat); ss = std(stat);
+if known_optimum
+    % CEC zero-cutoff (matches the summary table / reference protocol).
+    zc = @(x) x * (abs(x) >= zero_tol);
+    sb = zc(sb); sm = zc(sm); su = zc(su); sw = zc(sw); ss = zc(ss);
+end
+fprintf(fid, 'stats(%s): best=%.16e  median=%.16e  mean=%.16e  worst=%.16e  sd=%.16e\n', ...
+        lbl, sb, sm, su, sw, ss);
+end
+
+function s = dtag_for(D)
+%DTAG_FOR Dimension tag for labels: native-dim suites pass D as the actual dim.
+s = sprintf('D%d', D);
+end
+
+function close_runs_log(fid)
+%CLOSE_RUNS_LOG Close the per-dimension runs log (no-op if it never opened).
+if fid >= 0; fclose(fid); end
+end
+
+function write_curve(curves_dir, func_id, D, run, nfes, err, session_tag)
+% Figure_F<f>_D<d>_Run#<r>.csv : the chosen run's convergence trace.
+path = fullfile(curves_dir, sprintf('Figure_F%d_D%d_Run#%d.csv', func_id, D, run));
+archive_existing_file(path, session_tag);
+f = fopen(path, 'w');
+assert(f > 0, 'run_experiment:io', 'cannot open %s', path);
+fprintf(f, 'Eval,BestError,Log10Error\n');
+for i = 1:numel(nfes)
+    if err(i) > 0
+        fprintf(f, '%d,%.16e,%.16e\n', nfes(i), err(i), log10(err(i)));
+    else
+        fprintf(f, '%d,%.16e,\n', nfes(i), err(i));   % log10 undefined for <= 0
+    end
+end
+fclose(f);
+end
+
+function write_summary_files(summary_dir, optimizer, suite, stats, known_optimum, session_tag)
+% Per-dimension summary tables (Function,Best,Median,Mean,Worst,SD), and a
+% dimensionless rollup for native-dim suites (cec2011, cec2013lsgo).
+if isempty(stats); return; end
+dims = unique([stats.dim]);
+for d = dims
+    sel = stats([stats.dim] == d);
+    write_summary_table(fullfile(summary_dir, sprintf('%s_%s_D%d.csv', optimizer, suite, d)), sel, session_tag);
+end
+if ~known_optimum
+    write_summary_table(fullfile(summary_dir, sprintf('%s_%s.csv', optimizer, suite)), stats, session_tag);
+end
+end
+
+function write_summary_table(path, rows, session_tag)
+[~, order] = sort([rows.func]);
+rows = rows(order);
+archive_existing_file(path, session_tag);
+f = fopen(path, 'w');
+assert(f > 0, 'run_experiment:io', 'cannot open %s', path);
+fprintf(f, 'Function,Best,Median,Mean,Worst,SD\n');
+for i = 1:numel(rows)
+    fprintf(f, '%d,%.10E,%.10E,%.10E,%.10E,%.10E\n', rows(i).func, rows(i).best, ...
+            rows(i).median, rows(i).mean, rows(i).worst, rows(i).sd);
+end
+fclose(f);
+end
+
+function write_environment(summary_dir, a, stats, skipped, notes, known_optimum, fracs, runtime, session_tag)
+env = struct();
+env.optimizer = a.optimizer;
+env.suite = a.suite;
+env.functions = a.functions(:)';
+env.dimensions_requested = a.dimensions(:)';
+env.dimensions_run = unique([stats.dim]);
+env.runs = a.runs;
+env.base_seed = a.base_seed;
+env.overwrite = logical(a.overwrite);
+env.overwrite_archived_to = a.overwrite_archived_to;
+env.use_parallel = logical(a.use_parallel);
+env.write_graphs = logical(a.write_graphs);
+env.rand_generator = char(effective_rand_generator(a));
+% Report the actual scheme for whatever policy is in effect (reference /
+% unified / native / derived). seed_scheme_string is the single source of truth, so
+% environment.json stays consistent with run_config.json and the real seeds.
+env.seed_policy = [char(a.seed_policy) ': ' seed_scheme_string(a)];
+env.initial_population_policy = initial_population_policy_string(a);
+env.max_nfes_override = a.max_nfes;
+env.statistics_basis = ternary(known_optimum, 'error_vs_optimum', 'raw_objective');
+env.report_zero_tol = report_zero_tol(a);
+env.optimizer_options = optimizer_options_metadata(a.optimizer, a.suite);
+env.checkpoint_fractions = fracs;
+env.data_root = fullfile(a.project_root, 'benchmarks', 'cec_suite_cpp', a.suite, 'input_data');
+env.reference_root = fullfile(a.project_root, 'benchmarks', 'cec_reference_results');
+env.output_dir = a.output_dir;
+env.matlab_version = version;
+env.cpu_cores = feature('numcores');
+env.computer = computer;
+env.platform = char(java.lang.System.getProperty('os.name'));
+env.git_commit = git_commit_or_empty(a.project_root);
+env.timestamp = char(datetime('now', 'Format', 'yyyy-MM-dd''T''HH:mm:ss'));
+env.runtime_seconds_total = runtime;
+env.skipped_cells = skipped;
+env.optimizer_notes = unique(notes);
+env.command = build_command_string(a);
+path = fullfile(summary_dir, 'environment.json');
+archive_existing_file(path, session_tag);
+fid = fopen(path, 'w');
+assert(fid > 0, 'run_experiment:io', 'cannot open environment.json');
+fprintf(fid, '%s\n', jsonencode(env, 'PrettyPrint', true));
+fclose(fid);
+end
+
+% ---- helpers ----------------------------------------------------------------
+
+function v = curve_value(best_fitness, optimum, optimizer, suite)
+% The plotted/checkpointed quantity: error vs optimum when known, else the
+% raw objective.
+if isnan(optimum)
+    v = best_fitness;
+elseif uses_atmals_cec2017_reference_reporting(optimizer, suite)
+    v = abs(best_fitness - optimum);
+else
+    v = best_fitness - optimum;
+end
+end
+
+function opts = optimizer_run_options(optimizer, suite, seed, rand_gen)
+%OPTIMIZER_RUN_OPTIONS Build the per-run optimizer options without touching
+% the seed schedule. ATMALS-GSK has two historical drivers; auto-select the
+% matching protocol for the two suites it was published with.
+opts = struct('seed', seed, 'rand_generator', rand_gen);
+if strcmp(optimizer, 'atmals-gsk')
+    if strcmp(suite, 'cec2011')
+        opts.protocol = 'cec2011';
+    elseif strcmp(suite, 'cec2017')
+        opts.protocol = 'cec2017';
+    end
+elseif strcmp(optimizer, 'egsk')
+    opts.use_fmincon = true;
+end
+end
+
+function tf = unified_initialization_enabled(a)
+%UNIFIED_INITIALIZATION_ENABLED Strict fair-start mode for cross-family runs.
+% Only unified mode supplies runner-owned X0. Reference/native/derived modes
+% keep each optimizer's original initialization draw order so published-table
+% reproduction and diagnostic RNG investigations remain unchanged.
+tf = strcmpi(char(a.seed_policy), 'unified');
+end
+
+function [x0, rng_after_x0] = make_unified_initial_population(problem, seed, rng_generator)
+%MAKE_UNIFIED_INITIAL_POPULATION Draw the fair shared X0 for one CEC run.
+%
+% The seed is shared across optimizers for the same (D,function,run). X0 is
+% drawn outside the optimizer, then the post-X0 RNG state is restored inside
+% the optimizer so all later random draws start from the same point.
+%
+% Population size is 100 because every current GSK-family optimizer exposed by
+% run_experiment uses NP=100 as its runner/interface default. If a future
+% optimizer needs a different default, this helper must be extended with an
+% explicit runner-level population-size contract; the seed formula must still
+% remain independent of population size.
+np = 100;
+rng(seed, rng_generator);
+x0 = gsk_init_population(np, problem.lb, problem.ub);
+rng_after_x0 = rng;
+end
+
+function meta = optimizer_options_metadata(optimizer, suite)
+%OPTIMIZER_OPTIONS_METADATA Options the runner adds beyond seed/generator.
+meta = struct();
+if strcmp(optimizer, 'atmals-gsk')
+    if strcmp(suite, 'cec2011')
+        meta.protocol = 'cec2011';
+    elseif strcmp(suite, 'cec2017')
+        meta.protocol = 'cec2017';
+    end
+elseif strcmp(optimizer, 'egsk')
+    meta.use_fmincon = true;
+end
+end
+
+function tf = uses_atmals_cec2017_reference_reporting(optimizer, suite)
+%USES_ATMALS_CEC2017_REFERENCE_REPORTING The ATMALS-GSK CEC2017 driver reports
+% abs(best - optimum). The zero cutoff still follows the project-wide 1e-8
+% CEC target.
+tf = strcmp(optimizer, 'atmals-gsk') && strcmp(suite, 'cec2017');
+end
+
+function zt = report_zero_tol(a)
+%REPORT_ZERO_TOL Reporting-only zero cutoff; does not affect seeds or search.
+zt = 1e-8;
+end
+
+function e = checkpoint_errors(conv_nfes, conv_err, checkpoints)
+% Best-so-far value at each checkpoint = the recorded value at the largest
+% generation whose nfes <= checkpoint (the convergence trace is monotone in
+% best-so-far). Before the first record, fall back to the first value.
+e = zeros(1, numel(checkpoints));
+for c = 1:numel(checkpoints)
+    idx = find(conv_nfes <= checkpoints(c), 1, 'last');
+    if isempty(idx); idx = 1; end
+    e(c) = conv_err(idx);
+end
+end
+
+function idx = median_run_index(values)
+% Index of the run nearest the median final value (the representative curve).
+m = median(values);
+[~, idx] = min(abs(values - m));
+end
+
+function out = ternary(cond, a, b)
+if cond; out = a; else; out = b; end
+end
+
+function seed = pick_run_seed(a, D, func, run)
+%PICK_RUN_SEED Per-run seed for the selected policy (details: docs/reference/seed_policy.md).
+%   'reference' : per-optimizer reproduction, one case each --
+%                   gsk, egsk                         -> base_seed + 9973*func + (run-1)
+%                   atmals-gsk                        -> base_seed + 9973*func + (run-1)
+%                   agsk, apgsk, fdb-agsk             -> dim*func*run
+%                   other                             -> get_cec_seed(base_seed, dim, func, run)
+%   'unified'  : get_cec_seed(base_seed, dim, func, run), independent of optimizer.
+%   other      : derive_run_seed hash for native/derived diagnostics.
+%
+% Never add optimizer name, optimizer index, population size, maxFEs, suite
+% name, or alg_code to the unified branch. Those values belong only to
+% reference reproduction (where historical drivers differed) or to the explicit
+% diagnostic hashed policy in derive_run_seed.
+switch lower(char(a.seed_policy))
+    case 'reference'
+        switch a.optimizer
+            case {'gsk'}
+                seed = a.base_seed + 9973 * func + (run - 1);
+            case {'agsk', 'apgsk', 'fdb-agsk'}
+                seed = D * func * run;
+            case {'egsk'}
+                seed = a.base_seed + 9973 * func + (run - 1);
+            case {'atmals-gsk'}
+                seed = a.base_seed + 9973 * func + (run - 1);
+            otherwise
+                seed = get_cec_seed(a.base_seed, D, func, run);
+        end
+    case 'unified'
+        seed = get_cec_seed(a.base_seed, D, func, run);
+    otherwise
+        seed = derive_run_seed(a.base_seed, a.optimizer, a.suite, D, func, run);
+end
+end
+
+function g = effective_rand_generator(a)
+%EFFECTIVE_RAND_GENERATOR RNG family used by the optimizer. 'reference' selects
+% the documented reference-compatible family for each optimizer; 'unified' uses
+% the resolved CEC generator (threefry when available, otherwise twister) for
+% fair cross-family studies; native/derived honour options.rand_generator for
+% diagnostics.
+switch lower(char(a.seed_policy))
+    case 'reference'
+        opt = lower(char(a.optimizer));
+        if any(strcmp(opt, {'agsk', 'apgsk', 'fdb-agsk', 'egsk', 'atmals-gsk'}))
+            g = 'seed';
+        else
+            g = 'twister';
+        end
+    case 'unified'
+        g = resolve_unified_rng_generator(char(a.rand_generator));
+    otherwise
+        g = char(a.rand_generator);
+end
+end
+
+function g = resolve_unified_rng_generator(requested)
+%RESOLVE_UNIFIED_RNG_GENERATOR Actual generator for unified CEC mode.
+% The unified protocol allows only schedule-independent MATLAB generators.
+% A request for threefry/auto/default probes MATLAB support and falls back to
+% twister. Legacy seed/state requests are ignored in unified mode because they
+% are compatibility diagnostics, not fair CEC experiment generators.
+requested = lower(strtrim(requested));
+if isempty(requested) || any(strcmp(requested, {'auto', 'default', 'threefry'}))
+    g = choose_cec_rng_generator();
+elseif strcmp(requested, 'twister')
+    g = 'twister';
+else
+    g = choose_cec_rng_generator();
+end
+end
+
+function setup_paths(project_root)
+addpath(fullfile(project_root, 'src', 'common'));
+addpath(fullfile(project_root, 'src', 'runners'));
+addpath(fullfile(project_root, 'src', 'experiments'));
+opt_root = fullfile(project_root, 'src', 'optimizers');
+d = dir(opt_root);
+for k = 1:numel(d)
+    if d(k).isdir && d(k).name(1) ~= '.'
+        addpath(fullfile(opt_root, d(k).name));
+    end
+end
+mex_dir = fullfile(project_root, 'build', 'mex');
+if exist(mex_dir, 'dir'); addpath(mex_dir); end
+end
+
+function free_problem(p)
+%FREE_PROBLEM Release a worker-built problem's MEX handle (no-op for the
+% pure-MATLAB sphere test problem, which has no handle).
+if isfield(p, 'mex_handle'); gskcec_eval('free', p.mex_handle); end
+end
+
+function ensure_process_pool()
+%ENSURE_PROCESS_POOL Make sure a PROCESS-based parallel pool backs the parfor
+% run loop. The gskcec_eval MEX keeps a process-local, non-thread-safe handle
+% registry, so a thread-based pool would race on the shared registry (and
+% cannot addpath); a process pool gives each worker its own MEX instance. This
+% is a no-op (the parfor then runs serially) when the Parallel Computing
+% Toolbox is unavailable or pool creation fails.
+if ~license('test', 'Distrib_Computing_Toolbox'); return; end
+pool = gcp('nocreate');
+if ~isempty(pool) && ~isa(pool, 'parallel.ProcessPool')
+    delete(pool);            % replace a thread-based pool
+    pool = [];
+end
+if ~isempty(pool); return; end   % a usable process pool already exists
+% Size the pool to the physical core count. The default 'Processes' profile is
+% often capped below the core count (e.g. 6 on a 16-core host); raise NumWorkers
+% on the in-memory cluster object only (no saveProfile, so the saved profile is
+% untouched). Fall back to the profile default, then to a serial parfor.
+n = feature('numcores');
+try
+    c = parcluster('Processes');
+    if c.NumWorkers < n; c.NumWorkers = n; end
+    parpool(c, n);
+    return;
+catch
+end
+try
+    parpool('Processes');
+catch
+    % Pool unavailable -> the parfor degrades to a serial loop (still correct).
+end
+end
+
+function setup_paths_once(project_root)
+%SETUP_PATHS_ONCE setup_paths on a process worker, once per worker lifetime
+% (persistent guard avoids repeating the addpath work every parfor iteration).
+persistent configured
+if isempty(configured)
+    setup_paths(project_root);
+    configured = true;
+end
+end
+
+function cmd = build_command_string(a)
+cmd = sprintf(['run_experiment(''optimizer'',''%s'',''suite'',''%s'',''functions'',%s,' ...
+               '''dimensions'',%s,''runs'',%d,''base_seed'',%d,''max_nfes'',%d,' ...
+               '''project_root'',''%s'',''output_dir'',''%s'',''overwrite'',%s,' ...
+               '''verbose'',%s,''seed_policy'',''%s'',''rand_generator'',''%s'',' ...
+               '''use_parallel'',%s,''write_graphs'',%s)'], ...
+              a.optimizer, a.suite, mat2str(a.functions(:)'), mat2str(a.dimensions(:)'), ...
+              a.runs, a.base_seed, a.max_nfes, a.project_root, a.output_dir, ...
+              string(logical(a.overwrite)), string(logical(a.verbose)), char(a.seed_policy), ...
+              char(effective_rand_generator(a)), string(logical(a.use_parallel)), ...
+              string(logical(a.write_graphs)));
+end
+
+function commit = git_commit_or_empty(project_root)
+commit = '';
+try
+    [status, out] = system(sprintf('git -C "%s" rev-parse HEAD', project_root));
+    if status == 0; commit = strtrim(out); end
+catch
+end
+end
+
+% ---- console formatting (banner + per-dimension results table) -------------
+
+function print_detailed_config(a, known_optimum, func_list, excluded)
+bar = repmat('=', 1, 72);
+fprintf('\n%s\nDETAILED CONFIGURATION\n%s\n', bar, bar);
+fprintf('%-16s: %s\n', 'optimizer', a.optimizer);
+fprintf('%-16s: %s\n', 'suite', upper(a.suite));
+fprintf('%-16s: %s\n', 'funcs_to_run', mat2str(func_list));
+if ~isempty(excluded)
+    fprintf('%-16s: %s\n', 'excluded', mat2str(excluded));
+end
+fprintf('%-16s: %s\n', 'dimensions', mat2str(a.dimensions(:)'));
+fprintf('%-16s: %d\n', 'runs', a.runs);
+fprintf('%-16s: %d\n', 'base_seed', a.base_seed);
+fprintf('%-16s: %s\n', 'seed_policy', char(a.seed_policy));
+fprintf('%-16s: %s\n', 'rand_generator', char(effective_rand_generator(a)));
+fprintf('%-16s: %s\n', 'overwrite', char(string(logical(a.overwrite))));
+opt_meta = optimizer_options_metadata(a.optimizer, a.suite);
+if isfield(opt_meta, 'protocol')
+    fprintf('%-16s: %s\n', 'protocol', opt_meta.protocol);
+end
+fprintf('%-16s: %s\n', 'use_parallel', char(string(logical(a.use_parallel))));
+fprintf('%-16s: %s\n', 'write_graphs', char(string(logical(a.write_graphs))));
+if a.max_nfes > 0
+    fprintf('%-16s: %d (override)\n', 'max_nfes', a.max_nfes);
+else
+    fprintf('%-16s: %s\n', 'max_nfes', 'suite default (e.g. 10000*D for cec2017)');
+end
+fprintf('%-16s: %s\n', 'statistics', ternary(known_optimum, 'error vs known optimum', 'raw objective'));
+fprintf('%-16s: %s\n', 'project_root', a.project_root);
+fprintf('%-16s: %s\n', 'output_dir', a.output_dir);
+fprintf('%s\n', bar);
+end
+
+function print_run_banner(a, D, nfuncs, problem)
+% Fixed-width banner box summarising the run for this dimension.
+W = 56;
+rule = ['+' repmat('-', 1, W + 2) '+'];
+native = any(strcmp(a.suite, {'cec2011', 'cec2013lsgo'}));   % per-problem dims/bounds
+if isnan(problem.target_error)
+    terr = 'n/a';
+else
+    terr = sprintf('%.0e', problem.target_error);
+end
+if native; dlabel = 'native'; else; dlabel = sprintf('%d', D); end
+fprintf('\n%s\n', rule);
+fprintf('| %-*s |\n', W, sprintf('%s - %s - D=%s', a.optimizer, upper(a.suite), dlabel));
+fprintf('%s\n', rule);
+fprintf('| %-*s |\n', W, sprintf('%d functions x %d runs | Budget: %s NFEs', ...
+        nfuncs, a.runs, with_commas(problem.max_nfes)));
+params = optimizer_banner_params(a.optimizer);
+if ~isempty(params)
+    fprintf('| %-*s |\n', W, params);
+end
+if native
+    fprintf('| %-*s |\n', W, sprintf('Bounds: per-problem   Target: %s', terr));
+else
+    fprintf('| %-*s |\n', W, sprintf('Bounds: (%.1f, %.1f)   Target error: %s', ...
+            min(problem.lb), max(problem.ub), terr));
+end
+fprintf('%s\n', rule);
+end
+
+function print_table_header()
+[func_w, val_w, time_w] = results_table_widths();
+rule = results_table_rule();
+fprintf('\n%s\n', rule);
+fprintf('|%s|%s|%s|%s|%s|%s|%s|\n', ...
+    center('Func', func_w), center('Best', val_w), center('Median', val_w), ...
+    center('Mean', val_w), center('Worst', val_w), center('SD', val_w), ...
+    center('Time/s', time_w));
+fprintf('%s\n', rule);
+end
+
+function print_table_row(func_id, best, med, mn, wrst, sd, t)
+[func_w, ~, ~] = results_table_widths();
+fprintf('|%s|%s|%s|%s|%s|%s|%s|\n', ...
+        center(sprintf('F%02d', func_id), func_w), ...
+        results_value_cell(best), results_value_cell(med), ...
+        results_value_cell(mn), results_value_cell(wrst), ...
+        results_value_cell(sd), results_time_cell(t));
+end
+
+function print_table_skip_row(func_id)
+[func_w, val_w, time_w] = results_table_widths();
+fprintf('|%s|%s|%s|%s|%s|%s|%s|\n', center(sprintf('F%02d', func_id), func_w), ...
+        center('SKIPPED', val_w), center('--', val_w), center('--', val_w), ...
+        center('--', val_w), center('--', val_w), center('--', time_w));
+end
+
+function print_table_footer()
+fprintf('%s\n', results_table_rule());
+end
+
+function [func_w, val_w, time_w] = results_table_widths()
+% Console table cells must accommodate negative CEC2011 raw-objective values.
+func_w = 8;
+val_w = 14;   % two margins + a 10-character %.2E field
+time_w = 13;  % two margins + an 8-character %.1f field + "s"
+end
+
+function rule = results_table_rule()
+[func_w, val_w, time_w] = results_table_widths();
+rule = ['+' repmat('-', 1, func_w) '+'];
+for k = 1:5
+    rule = [rule repmat('-', 1, val_w) '+']; %#ok<AGROW>
+end
+rule = [rule repmat('-', 1, time_w) '+'];
+end
+
+function s = results_value_cell(x)
+s = sprintf('  %10.2E  ', x);
+end
+
+function s = results_time_cell(t)
+s = sprintf('  %8.1fs  ', t);
+end
+
+function print_resume_messages(messages)
+if isempty(messages); return; end
+fprintf('\nResume notes:\n');
+groups = struct('key', {}, 'suite', {}, 'dim', {}, 'runs', {}, 'funcs', {});
+other = {};
+for i = 1:numel(messages)
+    tok = regexp(messages{i}, '^RESUME (\S+) f(\d+) D(\d+): runs 1:(\d+) already present; skipping cell$', ...
+        'tokens', 'once');
+    if isempty(tok)
+        other{end + 1} = messages{i}; %#ok<AGROW>
+        continue;
+    end
+    key = sprintf('%s|%s|%s', tok{1}, tok{3}, tok{4});
+    idx = find(strcmp({groups.key}, key), 1);
+    if isempty(idx)
+        groups(end + 1) = struct('key', key, 'suite', tok{1}, ...
+            'dim', str2double(tok{3}), 'runs', str2double(tok{4}), ...
+            'funcs', str2double(tok{2})); %#ok<AGROW>
+    else
+        groups(idx).funcs(end + 1) = str2double(tok{2});
+    end
+end
+for i = 1:numel(groups)
+    funcs = sort(groups(i).funcs);
+    fprintf('  - RESUME %s D%d: %d function(s) already complete (runs 1:%d): %s\n', ...
+        groups(i).suite, groups(i).dim, numel(funcs), groups(i).runs, mat2str(funcs));
+end
+for i = 1:numel(other)
+    fprintf('  - %s\n', other{i});
+end
+end
+
+function print_skip_messages(messages)
+if isempty(messages); return; end
+fprintf('\nSkipped cells:\n');
+for i = 1:numel(messages)
+    fprintf('  - %s\n', messages{i});
+end
+end
+
+function s = run_list_text(runs)
+% Compact run vectors for readable console diagnostics: [1:3 7 10:12].
+runs = unique(runs(:)');
+if isempty(runs)
+    s = '[]';
+    return;
+end
+parts = {};
+start_run = runs(1);
+prev_run = runs(1);
+for i = 2:numel(runs)
+    if runs(i) == prev_run + 1
+        prev_run = runs(i);
+    else
+        parts{end + 1} = run_range_text(start_run, prev_run); %#ok<AGROW>
+        start_run = runs(i);
+        prev_run = runs(i);
+    end
+end
+parts{end + 1} = run_range_text(start_run, prev_run);
+s = ['[' strjoin(parts, ' ') ']'];
+if numel(runs) > 20
+    s = sprintf('%s (%d runs)', s, numel(runs));
+end
+end
+
+function s = run_range_text(a, b)
+if a == b
+    s = sprintf('%d', a);
+else
+    s = sprintf('%d:%d', a, b);
+end
+end
+
+function s = with_commas(n)
+% Group an integer with thousands separators: 1000000 -> '1,000,000'.
+s = sprintf('%d', round(n));
+s = regexprep(s, '\d(?=(\d{3})+$)', '$0,');
+end
+
+function s = seed_to_text(seed)
+% Preserve exact-looking integer seeds in CSV and JSON artifacts.
+if isfinite(seed) && abs(seed - round(seed)) <= eps(max(1, abs(seed))) * 8
+    s = sprintf('%.0f', seed);
+else
+    s = sprintf('%.15g', seed);
+end
+end
+
+function s = optimizer_banner_params(name)
+% Short hyperparameter line for the banner. Only values actually used by the
+% run (the optimizer's reference defaults) are shown.
+switch name
+    case 'gsk'
+        s = 'Pop=100  KF=0.5 KR=0.9 K=10 P=0.1';
+    otherwise
+        s = '';   % adaptive variants set parameters at run time; left blank
+end
+end
+
+function r = ref_name(optimizer)
+% Folder/file stem of the published reference tables (naming differs slightly
+% from the optimizer id used here).
+switch optimizer
+    case 'atmals-gsk'; r = 'atmals-gsk';
+    case 'fdb-agsk';   r = 'fdb-agsk';
+    otherwise;         r = optimizer;
+end
+end
+
+function m = load_reference_means(project_root, optimizer, suite, dim)
+% containers.Map of function id -> published reference Mean. Empty when the
+% reference table is absent. Native-dim suites (dim==0) use the dimensionless
+% <opt>_<suite>.csv name; the rest use <opt>_<suite>_D<dim>.csv.
+m = containers.Map('KeyType', 'double', 'ValueType', 'double');
+rn = ref_name(optimizer);
+base = fullfile(project_root, 'benchmarks', 'cec_reference_results', suite, rn);
+if dim == 0
+    path = fullfile(base, sprintf('%s_%s.csv', rn, suite));
+else
+    path = fullfile(base, sprintf('%s_%s_D%d.csv', rn, suite, dim));
+    if ~isfile(path)   % some suites zero-pad the dimension (e.g. CEC2020 D05)
+        path = fullfile(base, sprintf('%s_%s_D%02d.csv', rn, suite, dim));
+    end
+end
+if ~isfile(path); return; end
+try
+    T = readtable(path);
+catch
+    return;
+end
+for i = 1:height(T)
+    % Function ids may be written 1, F1 or f1; Mean may be blank or N/A.
+    fid = parse_ref_number(T.Function, i, true);
+    mv  = parse_ref_number(T.Mean, i, false);
+    if ~isnan(fid) && ~isnan(mv)
+        m(fid) = mv;
+    end
+end
+end
+
+function v = parse_ref_number(col, i, digits_only)
+%PARSE_REF_NUMBER One cell of a reference column as a double, tolerating
+% numeric values, 'F1'-style ids, and blank/N/A statistics.
+if isnumeric(col)
+    v = double(col(i));
+    return;
+end
+s = col(i);
+if iscell(s); s = s{1}; end
+s = strtrim(char(s));
+if digits_only
+    s = regexprep(s, '[^0-9]', '');   % 'F1' -> '1'
+end
+if isempty(s); v = NaN; else; v = str2double(s); end
+end
+
+function id = canonical_optimizer_id(name)
+%CANONICAL_OPTIMIZER_ID Public optimizer slugs use hyphens.
+% MATLAB function identifiers still use underscores, so only the external
+% experiment identifier is normalized here.
+id = lower(strtrim(char(name)));
+switch id
+    case 'atmals_gsk'
+        id = 'atmals-gsk';
+    case 'fdb_agsk'
+        id = 'fdb-agsk';
+end
+end
+
+function stem = optimizer_function_stem(optimizer)
+%OPTIMIZER_FUNCTION_STEM MATLAB-callable optimizer function stem.
+switch optimizer
+    case 'atmals-gsk'
+        stem = 'atmals_gsk';
+    case 'fdb-agsk'
+        stem = 'fdb_agsk';
+    otherwise
+        stem = optimizer;
+end
+end
+
+function out = center(s, w)
+% Center a string in a width-w field (no truncation if it is longer).
+s = char(s);
+n = numel(s);
+if n >= w; out = s; return; end
+total = w - n;
+left = floor(total / 2);
+out = [repmat(' ', 1, left) s repmat(' ', 1, total - left)];
+end
+
+function print_comparison_table(a, dim, func_ids, run_means)
+% Compare this run's per-function Mean error against the published reference
+% for the same optimizer/suite/dimension and report an improvement verdict.
+ref = load_reference_means(a.project_root, a.optimizer, a.suite, dim);
+if ref.Count == 0
+    fprintf('\n(no reference table for %s %s D%d -- comparison skipped)\n', a.optimizer, a.suite, dim);
+    return;
+end
+zt = report_zero_tol(a); % errors below this are treated as zero
+known = ~any(strcmp(a.suite, {'cec2011', 'cec2013lsgo'}));
+near_solved = 1.0;  % both error means below this -> "solved" (its % is just noise)
+box = ['+' repmat('=', 1, 78) '+'];
+if dim == 0; dlabel = 'native dims'; else; dlabel = sprintf('D=%d', dim); end
+title = sprintf('Mean Error Comparison: Reference %s vs %s_%s (%s)', ...
+                upper(a.optimizer), a.optimizer, a.suite, dlabel);
+fprintf('\n%s\n|%s|\n%s\n', box, center(title, 78), box);
+if known
+    fprintf('  Zero threshold: %g;  near-solved (both < %g) shown as ~ and counted =\n\n', zt, near_solved);
+else
+    fprintf('  Zero threshold: %g (values within this of zero are treated as zero)\n\n', zt);
+end
+
+wF = 8; wR = 20; wN = 14; wD = 14; wP = 14; wS = 10;
+sep = ['+' repmat('-',1,wF) '+' repmat('-',1,wR) '+' repmat('-',1,wN) '+' ...
+       repmat('-',1,wD) '+' repmat('-',1,wP) '+' repmat('-',1,wS) '+'];
+fprintf('%s\n', sep);
+fprintf('|%s|%s|%s|%s|%s|%s|\n', center('Func', wF), ...
+        center(sprintf('Reference %s Mean', upper(a.optimizer)), wR), ...
+        center(sprintf('%s Mean', a.optimizer), wN), center('Delta(New-Old)', wD), ...
+        center('% Improve', wP), center('Status', wS));
+fprintf('%s\n', sep);
+
+nimp = 0; nsame = 0; nworse = 0;
+for i = 1:numel(func_ids)
+    f = func_ids(i);
+    if ~isKey(ref, f); continue; end   % e.g. F2 has no published reference
+    ar = ref(f);          % reference mean (displayed as-is)
+    br = run_means(i);     % this run's mean (displayed as-is)
+    tar = ar; if abs(tar) < zt; tar = 0; end   % thresholded copies drive the
+    tbr = br; if abs(tbr) < zt; tbr = 0; end   % verdict; abs() so CEC2011
+    delta = br - ar;                            % negative objectives work
+    if abs(delta) < zt; delta = 0; end          % display tiny New-Old noise as exact zero
+    tdelta = tbr - tar;
+    if abs(tdelta) < zt; tdelta = 0; end        % verdict uses the same Delta(New-Old) tolerance
+    if tdelta == 0
+        status = '='; nsame = nsame + 1;
+        if tar == 0; pct = '-'; else; pct = '0.0%'; end
+    elseif known && abs(ar) < near_solved && abs(br) < near_solved
+        % both essentially solved -> the percentage would be meaningless noise
+        status = '='; nsame = nsame + 1; pct = '~';
+    elseif tdelta < 0
+        status = '^'; nimp = nimp + 1;
+        if tar ~= 0; pct = sprintf('+%.1f%%', (tar - tbr) / abs(tar) * 100); else; pct = '-'; end
+    else
+        status = 'v'; nworse = nworse + 1;
+        if tar ~= 0; pct = sprintf('%.1f%%', (tar - tbr) / abs(tar) * 100); else; pct = '-'; end
+    end
+    fprintf('|%s|%s|%s|%s|%s|%s|\n', center(sprintf('F%02d', f), wF), ...
+            center(sprintf('%.2E', ar), wR), center(sprintf('%.2E', br), wN), ...
+            center(sprintf('%.2E', delta), wD), center(pct, wP), center(status, wS));
+end
+fprintf('%s\n', sep);
+fprintf('\n  Summary: ^ Improved: %d  = Same: %d  v Worse: %d\n', nimp, nsame, nworse);
+end
+
+function n = make_convergence_graphs(graphs_dir, a, funcs, dims, xs, ys, session_tag)
+%MAKE_CONVERGENCE_GRAPHS One clean PNG per function (median-run convergence)
+% under curves/graphs. A light/eye-friendly theme is forced explicitly (white
+% background, dark text, light major grid only) so it never inherits the dark
+% MATLAB desktop theme. Log y-axis when all values are positive; linear
+% otherwise (CEC2011 raw objectives can be negative). Renders off-screen.
+fg   = [0.15 0.15 0.15];     % dark grey for axes/text
+blue = [0.00 0.447 0.741];   % clear line colour
+n = 0;
+total = numel(funcs);
+label = sprintf('Rendering convergence graphs (%s %s)', upper(a.optimizer), upper(a.suite));
+if total == 0
+    fprintf('  %s: none queued\n', label);
+    return;
+end
+fprintf('  %s: %d graph(s) queued\n', label, total);
+timer = tic;
+for i = 1:numel(funcs)
+    x = xs{i}(:);
+    y = ys{i}(:);
+    suffix = sprintf('F%d D%d', funcs(i), dims(i));
+    progress_bar(label, i - 1, total, suffix);
+    if isempty(x)
+        progress_bar(label, i, total, suffix);
+        continue;
+    end
+    mIdx = unique(round(linspace(1, numel(x), min(14, numel(x)))));  % marker spots
+    fig = figure('Visible', 'off', 'Color', 'w', 'Position', [100 100 780 470]);
+    ax  = axes('Parent', fig);
+    if any(y < 0)
+        % raw objectives (e.g. CEC2011, can be negative) -> linear axis
+        h = plot(ax, x, y, '-o', 'Color', blue, 'LineWidth', 1.6, ...
+                 'MarkerSize', 5, 'MarkerFaceColor', blue, 'MarkerIndices', mIdx);
+        ylabel(ax, 'Best objective (median run)', 'Color', fg);
+    else
+        % errors -> log axis; floor tiny/zero values so the axis stays finite
+        h = semilogy(ax, x, max(y, 1e-12), '-o', 'Color', blue, 'LineWidth', 1.6, ...
+                     'MarkerSize', 5, 'MarkerFaceColor', blue, 'MarkerIndices', mIdx);
+        ylabel(ax, 'Best error (median run)', 'Color', fg);
+    end
+    grid(ax, 'on');
+    set(ax, 'Color', 'w', 'XColor', fg, 'YColor', fg, ...
+            'GridColor', [0.6 0.6 0.6], 'GridAlpha', 0.4, ...
+            'XMinorGrid', 'off', 'YMinorGrid', 'off', ...
+            'FontSize', 11, 'Box', 'on', 'LineWidth', 0.75);
+    xlabel(ax, 'Function evaluations', 'Color', fg);
+    title(ax, sprintf('F%d', funcs(i)), 'Color', [0.1 0.1 0.1], 'FontSize', 12);
+    legend(ax, h, upper(a.optimizer), 'Location', 'northeast', ...
+           'TextColor', fg, 'Color', 'w', 'EdgeColor', [0.7 0.7 0.7]);
+    try
+        graph_path = fullfile(graphs_dir, sprintf('Figure_F%d_D%d.png', funcs(i), dims(i)));
+        archive_existing_file(graph_path, session_tag);
+        exportgraphics(fig, graph_path, ...
+                       'Resolution', 150, 'BackgroundColor', 'white');
+        n = n + 1;
+    catch
+        % a plotting/printing failure must never abort the sweep
+    end
+    close(fig);
+    progress_bar(label, i, total, suffix);
+end
+fprintf('  %s completed in %.1fs\n', label, toc(timer));
+end
+
+function progress_bar(label, current, total, suffix)
+%PROGRESS_BAR Compact command-window progress for post-processing phases.
+% The carriage return keeps the console readable during normal interactive
+% runs; the final update writes a newline so diary/log files remain parseable.
+if total <= 0
+    return;
+end
+bar_w = 28;
+current = max(0, min(current, total));
+filled = floor(bar_w * current / total);
+bar = [repmat('#', 1, filled) repmat('-', 1, bar_w - filled)];
+pct = floor(100 * current / total);
+if nargin < 4
+    suffix = '';
+end
+suffix = char(suffix);
+fprintf('\r  %s [%s] %3d%% (%d/%d) %-12s', label, bar, pct, current, total, suffix);
+if current >= total
+    fprintf('\n');
+end
+try
+    drawnow limitrate
+catch
+    drawnow
+end
+end
+
+function write_run_metadata(summary_dir, a, func_list, excluded_funcs, known_optimum, session_tag)
+%WRITE_RUN_METADATA run_config.json + phase0_protocol.json (reproducibility),
+% companions to environment.json and seed_schedule.csv.
+scheme = seed_scheme_string(a);
+% Audit strides for the active policy (reference vs derive_run_seed family).
+switch lower(char(a.seed_policy))
+    case 'reference'
+        run_stride = 1; dim_stride = 0; func_stride = 9973;
+    case 'unified'
+        run_stride = 1000037; dim_stride = 1000003; func_stride = 1000033;
+    otherwise   % native / derived -> derive_run_seed
+        run_stride = 10000379; dim_stride = 10000019;
+        func_stride = 10000169;
+end
+
+cfg = struct();
+cfg.alg_name = a.optimizer;
+cfg.suite = upper(a.suite);
+cfg.base_seed = a.base_seed;
+cfg.seed_policy = char(a.seed_policy);
+cfg.seed_scheme = scheme;
+cfg.rand_generator = char(effective_rand_generator(a));
+cfg.initial_population_policy = initial_population_policy_string(a);
+cfg.overwrite = logical(a.overwrite);
+cfg.overwrite_archived_to = a.overwrite_archived_to;
+cfg.stride_run = run_stride;
+cfg.dim_stride = dim_stride;
+cfg.func_stride = func_stride;
+cfg.runs = a.runs;
+cfg.dims = a.dimensions(:)';
+cfg.funcs = a.functions(:)';
+cfg.exclude_funcs = excluded_funcs(:)';
+cfg.funcs_to_run = func_list;
+cfg.max_nfes_override = a.max_nfes;
+cfg.statistics_basis = ternary(known_optimum, 'error_vs_optimum', 'raw_objective');
+cfg.report_zero_tol = report_zero_tol(a);
+cfg.verbose = logical(a.verbose);
+cfg.use_parallel = logical(a.use_parallel);
+cfg.write_graphs = logical(a.write_graphs);
+cfg.optimizer_options = optimizer_options_metadata(a.optimizer, a.suite);
+if strcmp(a.optimizer, 'gsk')
+    % reference GSK defaults -- the values this run actually used
+    cfg.pop_size = 100; cfg.KF = 0.5; cfg.KR = 0.9; cfg.K = 10; cfg.P = 0.1;
+end
+write_json(fullfile(summary_dir, 'run_config.json'), cfg, session_tag);
+
+proto = struct();
+proto.base_seed = a.base_seed;
+proto.stride_run = run_stride;
+proto.dim_stride = dim_stride;
+proto.func_stride = func_stride;
+proto.runs = a.runs;
+proto.dims = a.dimensions(:)';
+proto.suite = upper(a.suite);
+proto.excluded = excluded_funcs(:)';
+proto.funcs_to_run = func_list;   % the same set is run at every dimension here
+proto.seed_policy = struct('scheme', scheme, 'run_id_origin', 1, ...
+                           'base_seed_field', 'base_seed', 'stride_field', 'stride_run');
+proto.rand_generator = char(effective_rand_generator(a));
+proto.initial_population_policy = initial_population_policy_string(a);
+proto.overwrite = logical(a.overwrite);
+proto.overwrite_archived_to = a.overwrite_archived_to;
+proto.write_graphs = logical(a.write_graphs);
+proto.optimizer_options = optimizer_options_metadata(a.optimizer, a.suite);
+proto.smoke = false;
+write_json(fullfile(summary_dir, 'phase0_protocol.json'), proto, session_tag);
+end
+
+function s = seed_scheme_string(a)
+% Human-readable description of the active seed schedule, recorded in
+% environment.json / run_config.json / phase0_protocol.json. Keep in sync with
+% pick_run_seed and effective_rand_generator.
+switch lower(char(a.seed_policy))
+    case 'reference'
+        s = ['reference: gsk/ATMALS-GSK/eGSK seed = base_seed + 9973*func + (run-1); ' ...
+             'agsk/apgsk/fdb-agsk seed = dim*func*run; ' ...
+             'AGSK/APGSK/FDB-AGSK/eGSK/ATMALS-GSK generator uses legacy seed; ' ...
+             'GSK and fallback optimizers use twister'];
+    case 'unified'
+        s = ['unified: seed = mod(uint64(base_seed) + uint64(1000003)*uint64(dim)' ...
+             ' + uint64(1000033)*uint64(func) + uint64(1000037)*uint64(run),' ...
+             ' uint64(2147483646)) + 1; optimizer-independent fair cross-family schedule;' ...
+             ' generator resolved to threefry when available, otherwise twister;' ...
+             ' X0 drawn once in the runner'];
+    otherwise   % native / derived
+        s = ['derived/native: seed = mod(base_seed + 1000003*opt_code + 1000033*suite_code' ...
+             ' + 10000019*dim + 10000169*func + 10000379*run, 2^31-2) + 1' ...
+             ' (opt_code=sum(double(optimizer)), suite_code=sum(double(suite))); ' ...
+             'generator follows rand_generator'];
+end
+end
+
+function s = initial_population_policy_string(a)
+%INITIAL_POPULATION_POLICY_STRING Metadata for reference vs unified starts.
+if unified_initialization_enabled(a)
+    s = ['runner-generated shared X0 from get_cec_seed(base_seed,dim,func,run); ' ...
+         'post-initialization rng state restored inside optimizer'];
+else
+    s = 'optimizer draws its own reference/native initial population';
+end
+end
+
+function write_json(path, s, session_tag)
+archive_existing_file(path, session_tag);
+fid = fopen(path, 'w');
+if fid < 0; return; end
+fprintf(fid, '%s\n', jsonencode(s, 'PrettyPrint', true));
+fclose(fid);
+end

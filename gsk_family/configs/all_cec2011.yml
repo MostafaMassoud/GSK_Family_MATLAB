@@ -1,0 +1,8 @@
+optimizers: [gsk, agsk, apgsk, atmals-gsk, egsk, fdb-agsk]
+suite: cec2011
+functions: all
+runs: 25
+seed: 20240620
+seed_policy: reference
+rand_generator: threefry
+max_evaluations: 150000

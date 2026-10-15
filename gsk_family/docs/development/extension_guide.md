@@ -1,0 +1,232 @@
+# Extension Guide
+
+> **Orientation.** This page shows how to *add* to `gsk_family`: a new optimizer,
+> a benchmark suite, an output artifact, or a CLI command. It is for contributors
+> extending capability rather than fixing existing code. After reading it you can
+> create each kind of component, register it in the right place, and know which
+> tests and docs to add. It assumes you have read the
+> [Developer Guide](developer_guide.md) and the
+> [Code Reading Guide](code_reading_guide.md); follow the
+> [Contributor Guide](contributor_guide.md) when you submit. The optimizer
+> contract is specified in
+> [`matlab_interface.md`](../reference/matlab_interface.md), and per-suite
+> fidelity rules are in [`porting_notes.md`](../reference/porting_notes.md).
+
+Each section below is a self-contained recipe. Do the numbered steps in order;
+the registration step (where the new component becomes visible to the runner or
+CLI) is the one that is easy to forget. Remember the slug-vs-identifier split:
+public slugs are hyphenated (`atmals-gsk`, `fdb-agsk`) in configs, CLI commands,
+result folders, and reference folders, while MATLAB function and file names use
+underscores.
+
+## Add An Optimizer
+
+An optimizer is a single MATLAB function `result = <stem>_optimize(problem,
+options)` living under `src/optimizers/<slug>/`. The numbered contract below is
+the same one `src/optimizers/gsk/gsk_optimize.m` follows; the skeleton after it
+is a starting point that honors the structs in
+[`matlab_interface.md`](../reference/matlab_interface.md).
+
+1. Create `src/optimizers/<slug>/<stem>_optimize.m` (e.g.
+   `src/optimizers/example/example_optimize.m`).
+2. Expose `result = <stem>_optimize(problem, options)`.
+3. Seed first: call `gsk_set_rng(options)` before drawing any randomness.
+4. Read variant options from the `options` struct; defaults must equal the
+   reference values.
+5. Honor the runner-owned fair start: if `options.initial_population` is set,
+   use it as `X0` instead of drawing your own first population, then restore
+   `options.rng_state_after_initialization`.
+6. Evaluate candidates only through `problem.evaluate` (row-wise NPxD in, NPx1
+   out).
+7. Keep candidates inside `problem.lb` and `problem.ub` (use the shared
+   `gsk_bound_repair` midpoint rule).
+8. Stop at `problem.max_nfes` (and at `problem.target_error` only if the
+   reference algorithm does).
+9. Return the `result` struct with exactly the documented fields.
+10. Register the slug: add it to `optimizer_function_stem` in
+    `src/runners/run_experiment.m` if the slug-to-stem mapping is non-trivial
+    (hyphen-to-underscore), and to the reference-mode seed/RNG switches there.
+11. Add a smoke test `src/tests/test_<stem>_smoke.m`, and add a reference table
+    under `benchmarks/cec_reference_results/` plus a page under `docs/`.
+
+### Skeleton
+
+The `optimize` contract is the same one baseline GSK follows. The stub below
+shows the seeding, fair-start, option-reading, and `result` construction
+patterns. Fill the loop with the real search and keep every field name as
+written.
+
+```matlab
+function result = example_optimize(problem, options)
+%EXAMPLE_OPTIMIZE Example GSK-family optimizer (replace with the real search).
+%   result = EXAMPLE_OPTIMIZE(problem, options) honors the contract in
+%   docs/reference/matlab_interface.md.
+
+gsk_set_rng(options);                         % step 3: seed before any rand
+
+np  = get_option(options, 'np', 100);         % step 4: reference default
+dim = problem.dim;
+max_nfes = problem.max_nfes;
+
+% Step 5: runner-owned fair start (unified mode only). When the runner supplies
+% X0, use it and restore the post-initialization RNG state; otherwise draw your
+% own initial population in the reference location.
+if isfield(options, 'initial_population') && ~isempty(options.initial_population)
+    X = options.initial_population;
+    gsk_restore_rng_after_initialization(options);
+else
+    X = gsk_init_population(np, problem.lb, problem.ub);
+end
+
+start = tic;
+fit  = problem.evaluate(X);                   % step 6: NPxD in, NPx1 out
+nfes = size(X, 1);
+[best_fitness, ib] = min(fit);
+best_x = X(ib, :);
+conv_nfes = nfes;
+conv_best = best_fitness;
+
+% Search loop: build candidates inside problem.lb/problem.ub, evaluate only
+% through problem.evaluate, update best_x/best_fitness, and stop at max_nfes.
+while nfes < max_nfes
+    % ... reference update producing children U (NPxD) ...
+    U  = gsk_bound_repair(U, problem.lb, problem.ub);   % step 7
+    fu = problem.evaluate(U);
+    take = min(size(U, 1), max_nfes - nfes);            % budget-crossing
+    nfes = nfes + take;
+    [cb, jc] = min(fu(1:take));
+    if cb < best_fitness
+        best_fitness = cb;
+        best_x = U(jc, :);
+    end
+    conv_nfes(end+1, 1) = nfes;                          %#ok<AGROW>
+    conv_best(end+1, 1) = best_fitness;                  %#ok<AGROW>
+end
+
+if isnan(problem.optimum)
+    err = NaN;
+else
+    err = best_fitness - problem.optimum;               % target zeroing applied
+end
+
+result = struct( ...
+    'optimizer',       'example', ...
+    'suite',           problem.suite, ...
+    'func_id',         problem.func_id, ...
+    'dim',             dim, ...
+    'seed',            options.seed, ...
+    'best_x',          best_x, ...
+    'best_fitness',    best_fitness, ...
+    'error',           err, ...
+    'nfes',            nfes, ...
+    'termination',     'max_evaluations', ...
+    'convergence',     struct('nfes', conv_nfes, 'best_fitness', conv_best), ...
+    'runtime_seconds', toc(start), ...
+    'params',          struct('np', np), ...
+    'notes',           '');
+end
+```
+
+Register it (step 10) where the runner resolves the optimizer. The runner builds
+the function handle from the slug at `src/runners/run_experiment.m:86`
+(`optimize = str2func([optimizer_function_stem(a.optimizer) '_optimize'])`), so
+a hyphenated slug needs a `case` in `optimizer_function_stem`
+(`src/runners/run_experiment.m:1411`):
+
+```matlab
+function stem = optimizer_function_stem(optimizer)
+switch optimizer
+    case 'atmals-gsk'
+        stem = 'atmals_gsk';
+    case 'fdb-agsk'
+        stem = 'fdb_agsk';
+    case 'example-gsk'        % add a hyphenated slug here
+        stem = 'example_gsk';
+    otherwise
+        stem = optimizer;     % slug already equals the function stem
+end
+end
+```
+
+A new adaptive variant that needs reference-compatible seeding also gets a
+`case` in the reference seed switch (`src/runners/run_experiment.m:984`) and the
+reference-RNG selection just below it. The C++ side advertises optimizers
+independently; add the slug to `gsk_list` so `gsk_list --optimizers` lists it.
+
+## Add A Benchmark Suite
+
+A suite is a C++ port implementing the `BenchmarkProblem` interface plus a
+factory entry. Add both, wire the input data, then prove the port with
+fixed-vector ground-truth tests. See
+[`porting_notes.md`](../reference/porting_notes.md) for the fidelity bar each
+existing suite meets, and
+[architecture](../reference/architecture.md) for the benchmark layer.
+
+1. Implement the port under `benchmarks/cec_suite_cpp/<suite>/src/<suite>_problem.cpp`,
+   satisfying the interface in
+   `benchmarks/cec_suite_cpp/cec_tools/include/gskcec/benchmark/benchmark.hpp`:
+   `evaluate(x)`, `bounds()`, `optimum()`, `dimension()`. Load all data from an
+   explicit `data_root` (no current-directory dependence); throw exceptions that
+   name the offending suite/function/dimension/file.
+2. Expose a `gskcec::<suite>::make_problem(...)` and wire it into the generic
+   factory: add a suite branch in
+   `benchmarks/cec_suite_cpp/cec_tools/src/benchmark/factory.cpp::make_problem`
+   (the existing branches are at `factory.cpp:41`-`68`) and add the suite to
+   `suite_info`/`list_suites` in the same file so `gsk_list --benchmarks` shows
+   its functions and dimensions.
+3. Add input data under `benchmarks/cec_suite_cpp/<suite>/input_data/`.
+4. Add fixed-vector ground-truth data under
+   `benchmarks/cec_suite_cpp/cec_tools/tests/data/` and a unit test under
+   `benchmarks/cec_suite_cpp/cec_tools/tests/unit/` that compares the port against
+   it (bounds, dimensions, function ids, and probe values), plus a
+   `gsk_validate --suite <suite> --smoke` path.
+5. Expose the suite to the MATLAB side in
+   `src/runners/gskcec_make_problem.m` (budget, target, and the `gskcec_eval`
+   wiring); the `sphere` test suite stays pure MATLAB.
+6. Rebuild the C++ tree and run `ctest --test-dir build --output-on-failure`,
+   then rebuild the MEX bridge before running any MATLAB experiment on the new
+   suite.
+
+Keep `cec2013` and `cec2013lsgo` distinct; do not introduce a path ending in
+`cec2013.cpp` (a repo check forbids that Cython artifact name).
+
+## Add An Output Artifact
+
+An artifact is a file the runner writes per experiment (for example a CSV or a
+JSON summary). Add the writer, document its schema, and test by parsing it back.
+Existing artifacts and their byte-format conventions are in
+[`result_schema.md`](../reference/result_schema.md).
+
+1. Add the writer to `src/runners/run_experiment.m`, keeping output under the
+   CEC-competition layout `results/<optimizer>/<suite>/{summary,curves,gen_logs}`.
+2. Document the new file or column in
+   [`result_schema.md`](../reference/result_schema.md).
+3. Add a test that parses the artifact back rather than only checking that the
+   file exists.
+4. Keep generated output under `results/` only - never write into
+   `benchmarks/cec_reference_results`, and preserve the existing resume/archive
+   behavior (completed runs skipped, refreshed summaries archived under
+   `_archive/<timestamp>/`).
+
+## Add A CLI Command
+
+A CLI command is a small C++ tool that links the `gskcec` library and lives
+beside the existing tools. The current commands - `gsk_list`, `gsk_validate`,
+`gsk_run`, and `gsk_bench` - are under
+`benchmarks/cec_suite_cpp/cec_tools/src/cli/` and delegate all real work to the
+lower C++ layers (and, for `gsk_run`, to MATLAB in `-batch` mode). Follow that
+pattern.
+
+1. Create a new tool under
+   `benchmarks/cec_suite_cpp/cec_tools/src/cli/<command>.cpp`, linking the `gskcec`
+   library (the factory, config parser, and comparison live there).
+2. Add the executable target to `CMakeLists.txt` next to the existing CLI
+   targets.
+3. Keep the CLI thin: parsing and orchestration in the tool, real logic in the
+   `benchmark`/`experiment` library or (for experiment runs) in
+   `src/runners/run_experiment.m`. Locate MATLAB via `--matlab`, the
+   `GSKCEC_MATLAB` environment variable, or `PATH` - never a hard-coded install
+   path.
+4. Rebuild the C++ tree, add a unit test under
+   `benchmarks/cec_suite_cpp/cec_tools/tests/`, run `ctest`, and update the
+   [runbook](../getting-started/runbook.md).

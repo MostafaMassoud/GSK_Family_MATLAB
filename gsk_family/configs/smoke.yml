@@ -1,0 +1,12 @@
+# Quick end-to-end smoke: one optimizer, one function, tiny budget.
+# Run with: gsk_run --config configs/smoke.yml --root .
+optimizers: [gsk]
+suite: cec2017
+dimensions: [10]
+functions: [1]
+runs: 1
+seed: 20240620
+seed_policy: reference
+rand_generator: threefry
+max_evaluations: 2000
+overwrite: true

@@ -1,0 +1,20 @@
+# C++ formatting for gsk_variants. Matches the existing hand-written style:
+# 4-space indent, attached braces, left-aligned pointers, ~110 columns.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 110
+PointerAlignment: Left
+DerivePointerAlignment: false
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+FixNamespaceComments: true
+SortIncludes: CaseInsensitive
+IncludeBlocks: Preserve
+SpaceAfterCStyleCast: false
+AlwaysBreakTemplateDeclarations: Yes

@@ -1,0 +1,31 @@
+# Generated, never committed.
+
+# CMake build trees (incl. the native/sanitizer variants) and the MEX bridge.
+/build/
+/build-native/
+/build-san/
+CMakeFiles/
+**/CMakeFiles/
+
+# Generated experiment outputs (summary/curves/gen_logs/verification per run).
+# The imported reference tables under benchmarks/cec_reference_results are NOT here and
+# stay tracked.
+/results/
+
+# Generated HTML documentation site (the Markdown sources under docs/ are
+# tracked; rebuild the site with scripts/build_docs.ps1).
+/docs/html/
+
+# Editor / OS noise.
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Stray compiled artifacts outside the build tree.
+*.obj
+*.o
+*.exe
+*.mexw64
+*.mexa64

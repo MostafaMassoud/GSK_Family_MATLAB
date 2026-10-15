@@ -1,0 +1,3 @@
+# committed CEC2011 text asset from the validated port
+sequence: 3 2 2 3 5 6
+objective_type: total DV rndv

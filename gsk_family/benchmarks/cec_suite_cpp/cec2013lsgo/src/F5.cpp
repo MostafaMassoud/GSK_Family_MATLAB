@@ -1,0 +1,46 @@
+#include "F5.h"
+
+namespace gskcec::cec2013lsgo {
+
+F5::F5(const std::filesystem::path& dataDir) : Benchmarks(dataDir) {
+    minX = -5;
+    maxX = 5;
+    ID = 5;
+    s_size = 7;
+    anotherz.resize(static_cast<std::size_t>(dimension));
+    Ovector = readOvector();
+    Pvector = readPermVector();
+    r25 = readR(25);
+    r50 = readR(50);
+    r100 = readR(100);
+    s = readS(s_size);
+    w = readW(s_size);
+}
+
+double F5::compute(const double* x) {
+    int i;
+    double result = 0.0;
+
+    for (i = 0; i < dimension; i++) {
+        anotherz[i] = x[i] - Ovector[i];
+    }
+
+    // s_size non-separable parts with rotation
+    int c = 0;
+    for (i = 0; i < s_size; i++) {
+        std::vector<double>& anotherz1 = rotateVector(i, c);
+        result += w[i] * rastrigin(anotherz1.data(), s[i]);
+    }
+
+    // one separable part without rotation
+    std::vector<double> z(static_cast<std::size_t>(dimension - c));
+    for (i = c; i < dimension; i++) {
+        z[i - c] = anotherz[Pvector[i]];
+    }
+
+    result += rastrigin(z.data(), dimension - c);
+
+    return result;
+}
+
+} // namespace gskcec::cec2013lsgo

@@ -1,0 +1,5 @@
+# committed CEC2011 text asset from the validated port
+sequence: 3 2 2 1 1 1 1
+objective_type: orbit insertion
+objective_rp: 2640
+objective_e: 0.70399999999999996

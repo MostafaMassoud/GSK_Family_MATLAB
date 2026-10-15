@@ -1,0 +1,41 @@
+# Build before running MATLAB CEC launchers
+
+# Prerequisites: PowerShell, CMake >= 3.20, MinGW-w64 g++ with C++20 support, MATLAB.
+# Run this file from: the repository root (this file's directory; the folder that contains gsk_family/ and the run_all_cec*.m launchers).
+# Root run_all_cec*.m launchers use seed_policy 'unified' by default.
+# Unified mode requests rand_generator 'threefry' and falls back to 'twister'
+# when the installed MATLAB version does not support threefry.
+# Unified seed = mod(base_seed + 1000003*dim + 1000033*func + 1000037*run, 2147483646) + 1.
+# The default base_seed is centralized in gsk_family\src\runners\run_experiment.m as 20240620.
+# Rebuild C++ CLIs after C++/CMake/benchmark-port/test changes; this refreshes build\*.exe.
+# Rebuild the MEX bridge after CEC suite source or mex_bridge changes; MATLAB CEC runs use build\mex\gskcec_eval.<mexext>.
+# Rebuild documentation after Markdown, Doxygen, or docs-site changes; HTML is generated under docs\html.
+
+Set-Location -LiteralPath ".\gsk_family"
+
+cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+
+# Quick incremental rebuild + targeted test + smoke run (after editing gsk_run/config/comparison C++ code):
+cmake --build build --target gsk_run gskcec_experiment_tests -j
+ctest --test-dir build -R gskcec_experiment_tests --output-on-failure
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run_all.ps1 -SkipBuild -SkipTests
+
+.\build\gsk_validate.exe --references .\benchmarks\cec_reference_results
+.\build\gsk_validate.exe --suite cec2017 --smoke
+.\build\gsk_validate.exe --suite cec2020 --smoke
+.\build\gsk_validate.exe --suite cec2013 --smoke
+.\build\gsk_validate.exe --suite cec2013 --against saved_vectors
+.\build\gsk_validate.exe --suite cec2013lsgo --smoke
+.\build\gsk_validate.exe --suite cec2011 --smoke
+
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_mex_bridge.ps1
+
+matlab -batch "cd('src/tests'); run_matlab_smoke_tests"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_docs.ps1 -Clean
+
+Set-Location -LiteralPath ".."
+
+matlab -batch "run_all_cec2017"

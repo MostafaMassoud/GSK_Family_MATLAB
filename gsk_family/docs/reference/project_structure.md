@@ -93,9 +93,10 @@ benchmarks/cec_suite_cpp/cec_tools/
   include/gskcec/         public C++ headers (core/, benchmark/, experiment/)
   src/benchmark/          data loading, factory, reference-result loader
   src/experiment/         config parser, results-vs-reference comparison
-  src/cli/                gsk_list, gsk_validate, gsk_run
+  src/cli/                gsk_list, gsk_validate, gsk_run, gsk_bench
   src/mex_bridge/         optional gskcec_eval MEX bridge source
   tests/unit/             C++ unit tests for ports and tooling
+  tests/cli/              CLI exit-code test (stub MATLAB + gsk_run_exit_codes.cmake)
   tests/data/             ground-truth probe points and expected values
 ```
 
@@ -112,6 +113,8 @@ src/
     atmals-gsk/
     egsk/
     fdb-agsk/
+    dt-gsk/               dt_gsk_optimize.m, dt_gsk_config.m,
+                          dt_gsk_graph.m, README.md
   experiments/            MATLAB experiment definitions (default matrix)
   runners/                MATLAB runner entry points (run_experiment,
                           gskcec_make_problem, get_cec_seed,
@@ -121,7 +124,8 @@ src/
 
 `src` is MATLAB-only in this project. MATLAB provenance notes belong in local
 README/help text and `docs/reference/porting_notes.md`. Do not put CEC suite code, CEC
-input data, or C++ CEC tooling under `src`.
+input data, or C++ CEC tooling under `src`. `src/optimizers/dt-gsk/README.md` is
+the authoritative summary of DT-GSK's behavior and validation.
 
 ## Documentation
 
@@ -143,7 +147,7 @@ docs/
   research/               researcher_handbook, performance, reproducibility,
                           numerical_examples, validation_report
   algorithms/             one page per optimizer (gsk, agsk, apgsk,
-                          atmals-gsk, egsk, fdb-agsk)
+                          atmals-gsk, egsk, fdb-agsk, dt-gsk)
   prompts/                maintained prompts for agent and documentation reviews
 ```
 
@@ -169,6 +173,8 @@ It reinforces the same language and folder boundaries as this document.
 | `benchmarks/cec_suite_cpp/cec_tools/src/cli/gsk_run.cpp` | C++ CLI experiment entry point | Drives MATLAB from config files for CLI workflows. |
 | `scripts/build_docs.ps1` | HTML documentation generator | `docs/html` is generated from Markdown, not hand-edited. |
 | `scripts/analyze_results.m` | Post-run statistical analysis | Creates comparison/statistical figures without changing raw results. |
+| `scripts/compare_reference_runs.m` | Per-(dimension, function) comparison of two `per_run.csv` sets | Judges a campaign against an imported per-run reference (e.g. DT-GSK vs `cec2017/dt-gsk/evidence/per_run.csv`); needs the Statistics and Machine Learning Toolbox. |
+| `benchmarks/cec_reference_results/<suite>/dt-gsk/` | Imported DT-GSK reference tables (Python reference implementation) | Cross-implementation baseline; `cec2017/dt-gsk/` adds `PROVENANCE.md` and per-run `evidence/`. |
 
 When adding new documentation, prefer a focused page under `docs/` and then add
 it to `scripts/build_docs.ps1` so the HTML site stays complete.

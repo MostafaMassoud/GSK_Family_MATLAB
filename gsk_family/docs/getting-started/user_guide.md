@@ -14,7 +14,7 @@
 > reference tables, and find every file a run produces.
 
 This project has two halves joined by one bridge. The CEC benchmark suites are
-standalone C++20 ports under `benchmarks/`; the six GSK-family optimizers are
+standalone C++20 ports under `benchmarks/`; the seven GSK-family optimizers are
 MATLAB under `src/`; the `gskcec_eval` MEX bridge lets the MATLAB optimizers
 evaluate the C++ benchmarks. There is no Python anywhere.
 
@@ -114,12 +114,13 @@ apgsk
 atmals-gsk
 egsk
 fdb-agsk
+dt-gsk
 ```
 
 `--references` prints one line per imported reference file plus `files=` /
-`rows=` totals.
+`rows=` totals (currently `files=165`, `rows=1411`).
 
-The six registered optimizers (public hyphen-slug ids):
+The seven registered optimizers (public hyphen-slug ids):
 
 | Id | Name |
 |---|---|
@@ -129,6 +130,12 @@ The six registered optimizers (public hyphen-slug ids):
 | `fdb-agsk` | AGSK with fitness-distance-balance donor selection |
 | `atmals-gsk` | GSK with adaptive memory and local search |
 | `egsk` | Enhanced GSK |
+| `dt-gsk` | Dimension-Tiered GSK (mechanisms switched on by dimension tier; port of the Python DT-GSK reference) |
+
+DT-GSK differs from the other six in how it is seeded: it always uses the
+unified seed with `threefry`, whatever the seed policy, and samples its own
+`NP = 5*D` initial population instead of the runner's shared one (see
+[runbook.md](runbook.md#37-dt-gsk)).
 
 The five benchmark suites are `cec2017`, `cec2011`, `cec2020`, `cec2013`, and
 `cec2013lsgo`. See [benchmark_protocol.md](../reference/benchmark_protocol.md)
@@ -151,11 +158,18 @@ fits the moment.
 
 ### (a) Root launchers (whole-suite campaigns)
 
-The simplest entry point is a root `run_all_cec*.m` launcher, run from the
-project root. Each drives one MATLAB invocation per optimizer over its suite's
-default matrix:
+The simplest entry point is a root `run_all_cec*.m` launcher. The launchers sit
+one level above the project root, next to the `gsk_family\` folder, so run them
+from that parent folder. Each one runs, inside a single MATLAB session, every
+optimizer listed in its CONFIG block over the functions/dimensions/runs set
+there. The committed CONFIG blocks run only `optimizers = {'gsk'}`, and some
+use a reduced set (`run_all_cec2011.m` ships `functions = 4:6`,
+`run_all_cec2017.m` `dimensions = [10]`, `run_all_cec2020.m`
+`dimensions = [5 10]`); edit the CONFIG block for the full suite, other
+dimensions, or other optimizers:
 
 ```powershell
+Set-Location -LiteralPath ".."   # from gsk_family\ to the folder holding the launchers
 matlab -batch "run_all_cec2017"
 ```
 
@@ -176,10 +190,11 @@ A quick end-to-end smoke run from a saved config:
 build\gsk_run.exe --config configs\smoke.yml --root .
 ```
 
-`--root .` rewrites the config's relative `output_root`, `reference_root`, and
-`data_root` under the current project root, so a config moves between machines
-cleanly. `configs\smoke.yml` runs one optimizer on one CEC2017 cell at a tiny
-budget.
+`--root .` rebases the config's relative `output_root` and `reference_root`
+under the given project root, so a config behaves the same from any working
+directory (explicit `--output` / `--reference` flags resolve against the
+working directory). `configs\smoke.yml` runs one optimizer on one CEC2017 cell
+at a tiny budget.
 
 Or pass flags directly for a single cell:
 
@@ -188,14 +203,20 @@ build\gsk_run.exe --optimizer gsk --suite cec2017 --dimension 10 `
     --function 1 --runs 3
 ```
 
-`--function` and `--dimension` accept a single value, a repeated flag, or
-several values. Native-dimension suites (`cec2011`, `cec2013lsgo`) require
+`--function` and `--dimension` take one integer per flag; repeat the flag for
+several values (e.g. `--function 1 --function 3`). Comma lists such as `1,3`
+are rejected, as are non-integer values for `--runs`, `--seed`, and
+`--max-evaluations`. Native-dimension suites (`cec2011`, `cec2013lsgo`) require
 `--dimension 0`. Add `--matlab "C:\path\to\MATLAB\R2025b\bin\matlab.exe"` if
 MATLAB is not on `PATH`, and `--dry-run` to print the exact MATLAB `-batch`
 command without running (needs neither MATLAB nor the bridge). The orchestrator
 and the shipped configs default to the **reference** seed policy with the
 `threefry` generator (the published-table schedule). Every flag maps to a config
-field; see [configuration.md](configuration.md) for the full list.
+field; see [configuration.md](configuration.md) for the full list. A config that
+lists several optimizers runs and verifies every one of them even after an
+earlier one fails or `DEVIATES`, prints a per-optimizer summary, and exits with
+the first nonzero code (1 MATLAB failure, 2 verification error, 3 `DEVIATES` or
+no summary).
 
 ### (c) MATLAB direct (`run_experiment`)
 
@@ -226,22 +247,28 @@ required.
 
 ## Validate results
 
-Every `gsk_run` (and `run_experiment`) **automatically** verifies a run against
-the same optimizer's imported reference table and writes
-`summary\verification.json` (or `verification_1.json`, `verification_2.json`,
-... if a verdict already exists). The verdict is `CONSISTENT` when no
-hard-failure check fires, or `DEVIATES` when one does. `gsk_run` exits nonzero on
-`DEVIATES`; opt out with `--no-verify`.
+Every `gsk_run` **automatically** verifies a run against the same optimizer's
+imported reference table and writes `summary\verification.json` (or
+`verification_1.json`, `verification_2.json`, ... if a verdict already exists).
+The verdict is `CONSISTENT` when no hard-failure check fires, or `DEVIATES` when
+one does. `gsk_run` exits nonzero on `DEVIATES`; opt out with `--no-verify`. A
+direct `run_experiment(...)` call or a root `run_all_cec*.m` launcher writes no
+verdict; it only prints a console mean-error comparison table. To get
+`verification.json` for such a run, run `gsk_validate --verify` (below) on its
+output directory.
 
 To re-check an existing run directory without re-running the optimizer:
 
 ```powershell
-build\gsk_validate.exe --verify results\gsk\cec2017 benchmarks\cec_reference_results --reduced
+build\gsk_validate.exe --verify results\gsk\cec2017 benchmarks\cec_reference_results
 ```
 
-Use `--reduced` for a short or budget-overridden run and `--full` to apply the
-strict full-protocol context (where the gross-deviation magnitude check becomes a
-hard failure). `--verify` also writes the next available `verification*.json` and
+Without `--reduced` / `--full`, `--verify` reads `runs` and `max_nfes_override`
+from the run's `summary\environment.json` and applies the same reduced-protocol
+rule as `gsk_run` (full protocol when that file is absent), so the flags are
+only overrides: `--reduced` for the short-run context, `--full` for the strict
+full-protocol context (where the gross-deviation magnitude check becomes a hard
+failure). `--verify` also writes the next available `verification*.json` and
 exits nonzero on `DEVIATES`.
 
 To see the numbers side by side against the published tables across the whole
@@ -260,9 +287,18 @@ compared=<N> win=<...> tie=<...> loss=<...> no_reference=<...>
 ```
 
 Lower mean is better; a `tie` is within relative `1e-8`; `no_reference` counts
-functions with no published table for that optimizer/suite (for example
-`apgsk`/`egsk`/`fdb-agsk` on CEC2011, or anything on CEC2013/LSGO), where the
-verdict is still `CONSISTENT`.
+functions with no imported table for that optimizer/suite/dimension (for example
+any optimizer except `dt-gsk` on CEC2013LSGO, optimizers other than
+`gsk`/`dt-gsk` on CEC2013, or any optimizer except `agsk` and `dt-gsk` on
+CEC2020); for those the gross-deviation check cannot fire. The walk skips
+`_overwrite_archive\` and `_archive\` folders below the results root.
+
+`--compare` and the verdict work on per-function means. To compare a whole
+campaign run by run against an imported per-run record (today the DT-GSK
+CEC2017 evidence), use the MATLAB script `scripts/compare_reference_runs.m`
+(Wilcoxon rank-sum per cell with Holm-adjusted p-values; needs the Statistics
+and Machine Learning Toolbox); the runbook shows the call in
+[section 3.7](runbook.md#37-dt-gsk).
 
 **Reduced-budget runs will not reproduce full-budget reference statistics.** A
 tiny smoke run is legitimately worse than the published full-budget table, so
@@ -288,14 +324,15 @@ results\<optimizer>\<suite>\
 
 | Folder | Holds |
 |---|---|
-| `summary\` | Per-dimension `Function,Best,Median,Mean,Worst,SD` tables, `per_run.csv`, `seed_schedule.csv`, `environment.json`, and the `verification.json` verdict. |
+| `summary\` | Per-dimension `Function,Best,Median,Mean,Worst,SD` tables, `per_run.csv`, `seed_schedule.csv`, `environment.json`, and, for `gsk_run` or `gsk_validate --verify`, the `verification.json` verdict. |
 | `curves\` | One convergence-trace CSV per (function, dimension) cell (the median run). Rendered `graphs\*.png` files are optional and are written only when `write_graphs=true`. |
 | `gen_logs\` | Per-checkpoint generation-log CSVs (`CheckpointErrors_*`). |
 
 Re-running an `(optimizer, suite)` with `overwrite=false` preserves the existing
 tree: the runner resumes from `summary\per_run.csv`, skips completed run ids
-(only when the stored seed still matches the active policy), appends missing
-rows, and archives refreshed fixed-name artifacts under `_archive\<timestamp>\`.
+(only when the stored seed, budget and generator still match the active run;
+other run ids are re-run and appended), appends missing rows, and archives
+refreshed fixed-name artifacts under `_archive\<timestamp>\`.
 With `overwrite=true`, the previous active result tree is moved to
 `_overwrite_archive\<suite>_<timestamp>\` before a clean replacement tree is
 created.
@@ -306,13 +343,16 @@ Imported reference evidence stays read-only:
 benchmarks\cec_reference_results\
 ```
 
-The runner refuses to write generated output into this imported reference tree.
-For the exact filenames and CSV columns, see
+The runner refuses to write generated output into this imported reference tree:
+the check runs on every run, before anything is created, and raises
+`run_experiment:outputUnsafe`. Relative `output_dir` values are resolved against
+the current MATLAB folder. For the exact filenames and CSV columns, see
 [result_schema.md](../reference/result_schema.md).
 
 ## Documentation artifacts
 
-Build the browsable HTML documentation (PowerShell + Pandoc, with Doxygen for
+Build the browsable HTML documentation (PowerShell + Pandoc 3.8 or newer, with
+a built-in fallback renderer when Pandoc is absent or older, and Doxygen for
 the C++ API if present - no Python):
 
 ```powershell

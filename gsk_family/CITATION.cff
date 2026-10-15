@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it."
 title: "gsk_family: a verified hybrid C++/MATLAB toolkit for the Gaining-Sharing Knowledge optimizer family on CEC benchmark suites"
 abstract: >-
-  gsk_family packages six Gaining-Sharing Knowledge (GSK) metaheuristic
-  variants (GSK, AGSK, APGSK, ATMALS-GSK, eGSK, FDB-AGSK) as MATLAB
+  gsk_family packages seven Gaining-Sharing Knowledge (GSK) metaheuristic
+  variants (GSK, AGSK, APGSK, ATMALS-GSK, eGSK, FDB-AGSK, DT-GSK) as MATLAB
   optimizers together with standalone, dependency-free C++20 ports of five
   CEC benchmark suites (CEC2011, CEC2013, CEC2013LSGO, CEC2017, CEC2020).
   An optional MEX bridge lets the MATLAB optimizers evaluate the exact
@@ -141,9 +141,35 @@ references:
     volume: "190"
     year: 2020
     doi: "10.1016/j.knosys.2019.105169"
+  - type: article
+    title: "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm"
+    authors:
+      - given-names: "Mostafa Elsayed Ahmed"
+        family-names: "Masoud"
+      - given-names: "Heba Sayed Mohamed"
+        family-names: "Roshdy"
+      - given-names: "Ali Wagdy"
+        family-names: "Mohamed"
+    journal: "Algorithms"
+    status: in-press
+    year: 2026
+  - type: software
+    title: "DT-GSK: Dimension-Tiered Gaining-Sharing Knowledge Optimization"
+    authors:
+      - given-names: "Mostafa Elsayed Ahmed"
+        family-names: "Masoud"
+      - given-names: "Heba Sayed Mohamed"
+        family-names: "Roshdy"
+      - given-names: "Ali Wagdy"
+        family-names: "Mohamed"
+    version: "2.46"
+    license: MIT
+    repository-code: "https://github.com/MostafaMassoud/DT-GSK"
+    year: 2026
 keywords:
   - "Gaining-Sharing Knowledge"
   - "GSK"
+  - "DT-GSK"
   - "metaheuristics"
   - "numerical optimization"
   - "CEC benchmarks"

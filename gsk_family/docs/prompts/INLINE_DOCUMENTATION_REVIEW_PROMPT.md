@@ -52,12 +52,14 @@ Also include the root MATLAB launchers one level up:
 7. Preserve comments that protect reproducibility, reference compatibility,
    path safety, or benchmark provenance.
 8. Keep terminology consistent:
-   - optimizer IDs: `gsk`, `agsk`, `apgsk`, `fdb-agsk`, `atmals-gsk`, `egsk`;
+   - optimizer IDs: `gsk`, `agsk`, `apgsk`, `fdb-agsk`, `atmals-gsk`, `egsk`,
+     `dt-gsk`;
    - MATLAB function names use underscores where required;
    - benchmark path is `benchmarks/cec_suite_cpp`;
    - reference-result path is `benchmarks/cec_reference_results`.
 9. Do not add Python examples, Python scripts, or Python-specific terminology to
-   this MATLAB/C++ project.
+   this MATLAB/C++ project. Comments that cite the DT-GSK Python reference
+   implementation as provenance (its names, tests, or version) are allowed.
 10. Every revised comment should help a future maintainer avoid a mistake.
 
 ===============================================================================
@@ -80,6 +82,9 @@ Also include the root MATLAB launchers one level up:
 - Reference seeds:
   - GSK/eGSK/ATMALS-GSK: `base_seed + 9973*func + run - 1`
   - AGSK/APGSK/FDB-AGSK: `D*func*run`
+  - DT-GSK: the unified seed + `threefry` under every seed policy
+    (`is_unified_only`); it samples its own NP = 5*D population and ignores a
+    runner `X0` (documented fair-start exception).
 - CEC2017 F2 is implemented but excluded from default comparisons.
 - ATMALS-GSK on CEC2017 reports absolute error.
 - eGSK's fmincon-dependent refinement must not be silently stubbed when the
@@ -158,7 +163,7 @@ For each optimizer, comments should explain:
 - reference quirks intentionally preserved.
 
 Do not add broad tutorial prose inside optimizer code. Put long explanations in
-`docs/algorithms/*.md`.
+`docs/algorithms/*.md` (DT-GSK: `src/optimizers/dt-gsk/README.md`).
 
 Phase D - C++ and MEX comments:
 

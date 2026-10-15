@@ -2,8 +2,10 @@ function test_agsk_smoke()
 %TEST_AGSK_SMOKE Smoke test for agsk_optimize on a pure-MATLAB sphere problem.
 %
 % Checks the docs/reference/matlab_interface.md result contract, that optimization
-% actually happened, budget accounting, convergence consistency, and
-% seed-determinism. Raises error() on any failure.
+% actually happened, budget accounting, convergence consistency,
+% seed-determinism, the target-error semantics of both exits (target stop
+% zeroes, budget exit reports raw), and the min_pop_size >= 11 floor.
+% Raises error() on any failure.
 
 d = 10;
 % np_init default = 100 (< 0.1*max_nfes so the initial KW phase exists,
@@ -47,6 +49,39 @@ local_assert(r3.best_fitness ~= r1.best_fitness, ...
 r4 = agsk_optimize(problem, struct('seed', 42, 'np_init', 40 * d));
 local_check_contract(r4, problem, 'agsk');
 local_assert(r4.params.np_init == 40 * d, 'agsk: np_init option not honored');
+
+% both target branches, independent of how close the default fixture gets:
+% an easy target stops early with the error zeroed ...
+problem_t = problem;
+problem_t.target_error = 1e3;
+rt = agsk_optimize(problem_t, struct('seed', 42));
+local_check_contract(rt, problem_t, 'agsk');
+local_assert(strcmp(rt.termination, 'target_error_reached') && rt.error == 0 && ...
+    rt.nfes < problem_t.max_nfes, 'agsk: easy target must stop early with the error zeroed');
+% ... and a budget too small to reach 1e-8 exits on the budget with the raw error
+problem_b = local_sphere_problem(d, 2000);
+rb = agsk_optimize(problem_b, struct('seed', 42));
+local_check_contract(rb, problem_b, 'agsk');
+local_assert(strcmp(rb.termination, 'max_evaluations') && rb.nfes == problem_b.max_nfes && ...
+    rb.error == rb.best_fitness - problem_b.optimum && rb.error ~= 0, ...
+    'agsk: budget exit must consume the budget and report the raw (unzeroed) error');
+
+% population floor: the P = 0.05 senior partition needs NP >= 11, so the
+% smallest valid min_pop_size runs and anything below is rejected up front
+r11 = agsk_optimize(local_sphere_problem(d, 3000), struct('seed', 7, 'min_pop_size', 11));
+local_check_contract(r11, local_sphere_problem(d, 3000), 'agsk');
+bad = {struct('seed', 7, 'min_pop_size', 10), struct('seed', 7, 'min_pop_size', 4), ...
+    struct('seed', 7, 'np_init', 10, 'min_pop_size', 10), struct('seed', 7, 'np_init', 11)};
+for i = 1:numel(bad)
+    threw = false;
+    try
+        agsk_optimize(local_sphere_problem(d, 3000), bad{i});
+    catch err
+        threw = strcmp(err.identifier, 'agsk_optimize:options');
+    end
+    local_assert(threw, sprintf('agsk: invalid population sizes %s must raise agsk_optimize:options', ...
+        jsonencode(bad{i})));
+end
 
 end
 
@@ -106,9 +141,24 @@ bf = problem.evaluate(r.best_x);
 local_assert(abs(bf - r.best_fitness) <= 1e-12 * max(1, abs(bf)), ...
     sprintf('%s: best_x does not reproduce best_fitness', name));
 
-if r.error ~= 0
-    local_assert(abs(r.error - (r.best_fitness - problem.optimum)) <= 1e-12, ...
-        sprintf('%s: error field inconsistent', name));
+% error semantics (reference): zeroed only by the per-generation target
+% stop; a budget exit reports the raw error (no end-of-run zeroing)
+if isnan(problem.optimum)
+    local_assert(isnan(r.error), sprintf('%s: error must be NaN for unknown optimum', name));
+else
+    raw = r.best_fitness - problem.optimum;
+    if strcmp(r.termination, 'target_error_reached')
+        local_assert(~isnan(problem.target_error) && raw < problem.target_error, ...
+            sprintf('%s: target stop requires the raw error strictly below target', name));
+        local_assert(r.error == 0, sprintf('%s: target exit must zero the error', name));
+    else
+        local_assert(r.error == raw, ...
+            sprintf('%s: budget exit must report the raw error (no end-of-run zeroing)', name));
+        if ~isnan(problem.target_error) && numel(c.nfes) >= 2
+            local_assert(raw >= problem.target_error, ...
+                sprintf('%s: raw error below target on a budget exit (target stop did not fire)', name));
+        end
+    end
 end
 end
 

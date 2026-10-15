@@ -44,8 +44,9 @@ itself cannot rot.
 ground-truth matches (the 1e-12 CEC2011 WP-A and CEC2013 regression tests
 caught it - 3/12 failed). Adding **`-ffp-contract=off`** restores bit-exact
 IEEE results; `-O3` does not reassociate FP without `-ffast-math`, which is
-never enabled. With the fix the **native build passes all 12 ctest suites at
-the same tolerances as the default build** - so the speedup below is free of
+never enabled. With the fix the **native build passes all 12 ctest suites (all
+that existed then; the later 13th, `gskcec_cli_exit_codes`, checks CLI exit codes,
+not numerics) at the same tolerances as the default build** - so the speedup below is free of
 any numerical cost. This is the mandate's "prove no numerical change" gate in
 action.
 
@@ -109,7 +110,8 @@ do not add optimizer-specific values while tuning code.
   early failures cannot leave a live benchmark instance behind.
 - Existing output trees are resume/add targets when `overwrite=false`.
   `run_experiment` appends `per_run.csv`, `seed_schedule.csv`, and compatible
-  checkpoint logs, skips completed run ids, and archives fixed-name
+  checkpoint logs, skips completed run ids whose seed, budget and generator
+  match the active run, and archives fixed-name
   summaries/metadata/graphs before refreshing them. When `overwrite=true`, the
   previous active result tree is moved under `_overwrite_archive/` before a
   clean replacement run starts.
@@ -177,6 +179,12 @@ do not add optimizer-specific values while tuning code.
   order and therefore later trajectories.
 - Changing eGSK's `fmincon` options, IP trigger, or local-refinement budget is a
   behavioral change, not a performance tuning.
+- DT-GSK follows its Python reference's draw order per Threefry substream and
+  its floating-point operation order (sequential and NumPy-style pairwise sums,
+  stable sorts); vectorizing a sum or swapping a sort changes trajectories. A
+  speed rewrite must keep runs bit-identical to the current version, as the
+  compact three-file version did against the line-by-line port (see
+  `src/optimizers/dt-gsk/README.md`).
 
 ### Profiling Checklist
 
@@ -209,7 +217,7 @@ cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 build\gsk_bench.exe --root . --csv perf_default.csv
 
-# native (must still pass ctest 12/12 - that is the equivalence proof)
+# native (must still pass ctest 13/13 - that is the equivalence proof)
 cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DGSKCEC_NATIVE=ON
 cmake --build build -j
 ctest --test-dir build --output-on-failure

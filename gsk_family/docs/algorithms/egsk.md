@@ -151,10 +151,14 @@ if g >= 0.75 * G_Max:
 ```
 
 **Local-search budget** (`egsk_ip_refine.m:24-26,30,41`). The `fmincon` call is
-capped at `IP_FE = ceil(0.002 * max_nfes)` function evaluations over the box
+given `MaxFunEvals = IP_FE = ceil(0.002 * max_nfes)` over the box
 `[lb, ub]`, starting from `bestx'`, with options
 `optimset('Display','off','algorithm','sqp','UseParallel','never','MaxFunEvals',IP_FE)`.
-Each objective call adds to `details.funcCount`; the result is accepted only if
+`MaxFunEvals` is a soft limit: `fmincon` checks it only between SQP iterations,
+after evaluating the start point and a `D`-point forward-difference gradient, so
+one call spends at least `D + 1` evaluations and can exceed `IP_FE` (for example
+`funcCount` 11 for `IP_FE = 6` at `D = 10`, and 23 for `IP_FE = 20`). This is the
+reference behavior and is kept as is. Each objective call adds to `details.funcCount`; the result is accepted only if
 `f < best_fitness`. Because `details.funcCount` is added to `nfes`,
 `result.nfes` can **slightly exceed** `max_nfes`, exactly like the reference
 counter.
@@ -324,9 +328,14 @@ flowchart TD
 Per generation the GSK core is unchanged: `O(NP log NP)` to sort, `O(NP·D)` to
 build/repair trials, `O(NP)` evaluations. The eGSK additions are cheap —
 `KF1`/`KF2` and the selection twist are `O(NP)` vector ops. The only super-linear
-cost is the late-stage `fmincon`, bounded at `ceil(0.002·max_nfes)` evaluations
-per call and gated by the convergence test, so it fires rarely. Overall a run is
-still `O(max_nfes · D)` time and `O(NP·D)` memory.
+cost is the late-stage `fmincon`, which spends at least `D + 1` and often more
+than `IP_FE = ceil(0.002·max_nfes)` evaluations per call (`MaxFunEvals` is a soft
+limit, see above). Its gate (`std([a2 b2 c2])*1e-2 <= 1` while the target is not
+reached) is met in most late-stage generations, so it fires in most generations
+of the last quarter of the run (for example 6 of 7 late-stage generations on
+CEC2017 F5 and F7 at `D = 10` with a 3000-evaluation budget). Those evaluations
+are counted in `nfes`, so a run is still `O(max_nfes · D)` time and `O(NP·D)`
+memory.
 
 ## Toolbox policy (fmincon)
 
@@ -402,7 +411,15 @@ in [seed_policy.md](../reference/seed_policy.md).
   [atmals-gsk.md](atmals-gsk.md). Concepts:
   [explainer.md](../getting-started/explainer.md); terms:
   [glossary.md](../reference/glossary.md).
-- Tested for the eGSK senior helper, late-stage `KF1`/`KF2` factors, the selection
-  twist, deterministic replay, fair-start replay, budget crossing, and optional
-  local search on/off. See [Validation Report](../research/validation_report.md)
-  and [Numerical Examples](../research/numerical_examples.md).
+- Smoke-tested by `src/tests/test_egsk_smoke.m` on the pure-MATLAB `sphere`
+  problem: the result contract, same-seed deterministic replay, a different seed
+  changing the trajectory, budget crossing (the `nfes` window with the
+  reference-mode `fmincon` IP stage), and optional local search on/off, including
+  the explicit `egsk:fminconUnavailable` error. Replay and budget checks run only
+  when `fmincon` is available. The unified fair-start path (runner `X0` plus the
+  post-`X0` RNG state) is checked through `run_experiment` by
+  `src/tests/test_runner_fair_start.m`, which skips eGSK when the Optimization
+  Toolbox is absent. The fixed-block senior helper, the late-stage `KF1`/`KF2`
+  factors, and the selection twist run inside these cells but have no dedicated
+  assertions. See [Validation Report](../research/validation_report.md) and
+  [Numerical Examples](../research/numerical_examples.md).

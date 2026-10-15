@@ -1,7 +1,8 @@
 # Builds the comprehensive HTML documentation site for gsk_family.
 #
-# No Python (project contract). Primary renderer is Pandoc; if Pandoc is absent
-# a built-in minimal Markdown->HTML fallback is used so the script always
+# No Python (project contract). Primary renderer is Pandoc 3.8 or newer; if
+# Pandoc is absent, or older than 3.8 (it lacks --syntax-highlighting), a
+# built-in minimal Markdown->HTML fallback is used so the script always
 # produces a navigable site. Doxygen (if present) generates the C++ API
 # reference and is linked in. Mermaid diagrams render client-side via mermaid.js.
 #
@@ -12,7 +13,7 @@
 #
 # Options:
 #   -Doxygen <path>   doxygen executable (else 'doxygen' on PATH; skipped if absent)
-#   -Pandoc  <path>   pandoc executable  (else 'pandoc' on PATH; fallback if absent)
+#   -Pandoc  <path>   pandoc executable  (else 'pandoc' on PATH; fallback if absent or < 3.8)
 #   -Clean            remove docs/html before building
 
 param(
@@ -40,6 +41,27 @@ function Resolve-Tool([string]$given, [string]$name) {
 }
 $pandocExe = Resolve-Tool $Pandoc "pandoc"
 $doxygenExe = Resolve-Tool $Doxygen "doxygen"
+
+# The Pandoc call below passes --syntax-highlighting=none, an option added in
+# Pandoc 3.8; older releases reject it ("Unknown option") and would abort the
+# build on the first page. Treat an older (or unidentifiable) Pandoc like a
+# missing one: use the built-in fallback renderer and say why at the end.
+$pandocMinVersion = [version]"3.8"
+$pandocRejected = ""
+if ($pandocExe -ne "") {
+    $pandocVersion = $null
+    try {
+        $verLine = & $pandocExe --version | Select-Object -First 1
+        if ("$verLine" -match '^pandoc(?:\.exe)?\s+(\d+)\.(\d+)') {
+            $pandocVersion = [version]("{0}.{1}" -f $Matches[1], $Matches[2])
+        }
+    } catch { }
+    if ($null -eq $pandocVersion -or $pandocVersion -lt $pandocMinVersion) {
+        $found = if ($null -eq $pandocVersion) { "unknown version" } else { "version $pandocVersion" }
+        $pandocRejected = "Pandoc at '$pandocExe' is $found; $pandocMinVersion or newer is required"
+        $pandocExe = ""
+    }
+}
 
 if ($Clean -and (Test-Path $outDir)) { Remove-Item -Recurse -Force $outDir }
 New-Item -ItemType Directory -Force $outDir | Out-Null
@@ -79,6 +101,7 @@ $pages = @(
     @{ Src = "docs/algorithms/fdb-agsk.md";   Out = "algorithms_fdb-agsk.html";   Title = "FDB-AGSK";   Group = "Algorithm Guides" },
     @{ Src = "docs/algorithms/atmals-gsk.md"; Out = "algorithms_atmals-gsk.html"; Title = "ATMALS-GSK"; Group = "Algorithm Guides" },
     @{ Src = "docs/algorithms/egsk.md";       Out = "algorithms_egsk.html";       Title = "eGSK";       Group = "Algorithm Guides" },
+    @{ Src = "docs/algorithms/dt-gsk.md";     Out = "algorithms_dt-gsk.html";     Title = "DT-GSK";     Group = "Algorithm Guides" },
 
     @{ Src = "docs/development/developer_guide.md";             Out = "development_developer_guide.html";             Title = "Developer Guide";            Group = "Development" },
     @{ Src = "docs/development/contributor_guide.md";           Out = "development_contributor_guide.html";           Title = "Contributor Guide";          Group = "Development" },
@@ -395,7 +418,7 @@ $templateResolved = $template.Replace("__NAV__", $nav)
 $templatePath = Join-Path $env:TEMP "gskcec_doc_template.html"
 [System.IO.File]::WriteAllText($templatePath, $templateResolved, $utf8NoBom)
 
-# ---- Minimal fallback Markdown->HTML (used only if Pandoc is absent). ----------
+# ---- Minimal fallback Markdown->HTML (used if Pandoc is absent or < 3.8). ------
 function Convert-MarkdownFallback([string]$md) {
     $lines = $md -split "`r?`n"
     $html = [System.Text.StringBuilder]::new()
@@ -500,7 +523,8 @@ if ($doxygenExe -ne "" -and (Test-Path (Join-Path $docsDir "Doxyfile"))) {
 }
 
 Write-Host ("build_docs: {0} page(s) -> {1}" -f $built, $outDir)
-if ($pandocExe -eq "") { Write-Warning "Pandoc not found; used the minimal fallback renderer (install Pandoc for full fidelity)." }
+if ($pandocRejected -ne "") { Write-Warning "$pandocRejected; used the minimal fallback renderer (upgrade Pandoc for full fidelity)." }
+elseif ($pandocExe -eq "") { Write-Warning "Pandoc not found; used the minimal fallback renderer (install Pandoc for full fidelity)." }
 if (-not $apiBuilt) { Write-Warning "C++ API (Doxygen) not generated; the API link will 404 until 'doxygen docs/Doxyfile' is available." }
 if ($skipped.Count -gt 0) { Write-Warning ("Skipped missing source(s): " + ($skipped -join ", ")) }
 Write-Host ("Open: " + (Join-Path $outDir "index.html"))

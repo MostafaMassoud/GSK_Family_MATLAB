@@ -1,7 +1,7 @@
 # Researcher handbook
 
 > **What this is:** a single-document tour of the `gsk_family` project as a
-> research package -- the optimization problem, how each of the six GSK-family
+> research package -- the optimization problem, how each of the seven GSK-family
 > optimizers works, how experiments are made reproducible, and where the system
 > can be safely extended. **For:** a new graduate student meeting GSK, a
 > practitioner running CEC experiments reproducibly, and a developer extending
@@ -134,6 +134,18 @@ algorithms may consume different numbers of random values during initialization.
 By externalizing `X0`, the first population and the next random-number position
 are both controlled.
 
+**DT-GSK exception (unified-only).** DT-GSK's reference campaigns were produced
+on this unified schedule, so `run_experiment` gives DT-GSK
+`get_cec_seed(base_seed, dim, func, run)` and `threefry` under **every**
+`seed_policy` (`is_unified_only` in `run_experiment.m`, mirroring the Python
+reference's `UNIFIED_ONLY_OPTIMIZERS`). It does not take the shared `X0`: it
+derives named Threefry substreams from the run seed, samples its own
+`NP = 5*D` initial population, and ignores a supplied
+`options.initial_population`; the runner draws no `X0` for it and records
+`initial_population_policy = optimizer self-initializes NP = 5*D ...`. In a
+unified campaign DT-GSK therefore shares the seeds of the other six but not
+their initial population.
+
 ## 4. Initialization example
 
 Uniform initialization maps a random matrix `U` in `[0,1]` into the bounds:
@@ -237,6 +249,7 @@ behavior and must not be changed when reproducing published results.
 | ATMALS-GSK | Adaptive memory and local search | `KF`, `KR`, `K`, `P`, `PLS` probability pools | Yes, perturb around best | Uses growing reward memory and roulette selection. |
 | eGSK | Enhanced GSK | Late-stage `KF1`, `KF2` fuzzy factors | Yes, `fmincon` SQP IP stage | Requires Optimization Toolbox for reference mode. |
 | FDB-AGSK | AGSK with fitness-distance balance | AGSK pool probabilities and population size | No | Injects diversity-aware FDB donors. |
+| DT-GSK | Dimension-tiered GSK (`pub` profile) | `(KF, KR, Kexp)` pool probabilities (ACE), population size (NLPSR from `5*D`), learned linkage for `D >= 50` | Yes, coordinate search on elites; compass polish for `D >= 50` | Mechanisms switched on by tier (`D < 20`, `20 <= D < 50`, `D >= 50`, `D >= 100`); escapes and restarts. |
 
 ## 8. AGSK reward computation example
 
@@ -431,32 +444,39 @@ Budget rules are part of the algorithm definition:
 | ATMALS-GSK | No | Runs to budget; local search is internal perturbation, not a separate solver. |
 | eGSK | No | `fmincon` IP calls may push `nfes` slightly beyond `max_nfes`, matching reference behavior. |
 | FDB-AGSK | No in current interface | Full-generation behavior follows the reference case files. |
+| DT-GSK | No | Evaluates only the rows that still fit in the budget, so `nfes` ends exactly at `max_nfes`. |
 
 Why this matters: changing a termination rule can change both result quality and
 the random stream. A faster run is not necessarily a faithful run.
 
 ## 14. Archive and restart behavior
 
-There is no evolutionary external archive like the archive used in SHADE-family
-or CMA-ES restart methods. Diversity is handled by rank partitions, adaptive
-parameter choices, FDB donor injection, and local search, depending on the
-optimizer.
+The six MATLAB-origin optimizers keep no evolutionary external archive like the
+archive used in SHADE-family or CMA-ES restart methods. Diversity is handled by
+rank partitions, adaptive parameter choices, FDB donor injection, and local
+search, depending on the optimizer. DT-GSK is the exception: it keeps an elite
+archive (members at a minimum normalized distance from each other) that seeds
+part of its escape restarts, and adds a deep-stall full restart and, for
+`D >= 100`, basin-novelty restarts (see `src/optimizers/dt-gsk/README.md`).
 
 The project does have **experiment-level archival and resume**:
 
 - Existing result folders are preserved.
-- A run resumes by reusing completed per-run rows whose stored seed matches the
-  active seed schedule.
+- A run resumes by reusing completed per-run rows whose stored seed, budget
+  (`max_nfes`) and generator match the active run.
 - Fixed-name summaries and metadata are archived before refresh.
-- Stale-seed rows are ignored rather than deleted.
+- Stale rows (another seed, budget or generator) are ignored rather than
+  deleted; those run ids are re-run and appended.
+- An `output_dir` inside `benchmarks/cec_reference_results` is refused on every
+  run (`run_experiment:outputUnsafe`).
 - If `overwrite=true`, the previous active output tree is moved under
   `_overwrite_archive/` first, then the replacement run starts from empty
   `summary/`, `curves/`, and `gen_logs/` folders.
 
 This design protects long CEC campaigns. It also means that changing the seed
-policy or base seed intentionally starts a new logical schedule inside the same
-output tree unless the user selects a new output directory or enables
-`overwrite`.
+policy, base seed, budget, or generator intentionally starts a new logical
+schedule inside the same output tree unless the user selects a new output
+directory or enables `overwrite`.
 
 ## 15. File and module map
 
@@ -465,7 +485,7 @@ output tree unless the user selects a new output directory or enables
 | `run_all_cec2011.m`, `run_all_cec2017.m`, `run_all_cec2013.m`, `run_all_cec2013lsgo.m`, `run_all_cec2020.m` | Human-friendly MATLAB launchers for suite-level experiment campaigns. |
 | `gsk_family/src/runners/run_experiment.m` | Main MATLAB experiment engine: seeds, resume, execution, summary tables, curves, comparison output. |
 | `gsk_family/src/runners/get_cec_seed.m` | Unified deterministic seed formula. |
-| `gsk_family/src/runners/verify_unified_seed_schedule.m` | Post-run audit that all optimizers share the same seed for each `(D,F,run)` cell. |
+| `gsk_family/src/runners/verify_unified_seed_schedule.m` | Post-run audit that optimizers share the same seed on every `(D,F,run)` key present in two or more schedules; missing keys are warnings. |
 | `gsk_family/src/runners/gskcec_make_problem.m` | Creates the MATLAB `problem` struct around the C++ MEX benchmark handle. |
 | `gsk_family/src/common/*.m` | Shared GSK helpers: initialization, bound repair, donor selection, RNG setup, population reduction. |
 | `gsk_family/src/optimizers/*/*_optimize.m` | Algorithm implementations. Each accepts `(problem, options)` and returns `result`. |
@@ -475,6 +495,7 @@ output tree unless the user selects a new output directory or enables
 | `gsk_family/scripts/build_mex_bridge.ps1` | Builds the MATLAB MEX bridge. |
 | `gsk_family/scripts/build_docs.ps1` | Generates the HTML site under `docs/html`. |
 | `gsk_family/scripts/analyze_results.m` | Toolbox-free statistical analysis and figures over generated results. |
+| `gsk_family/scripts/compare_reference_runs.m` | Per-`(dimension, function)` comparison of two `per_run.csv` sets (Wilcoxon rank-sum, Holm-adjusted; Statistics and Machine Learning Toolbox), e.g. a DT-GSK campaign against the imported CEC2017 evidence. |
 
 ## 16. Extension guidance
 
@@ -488,6 +509,10 @@ Safe extension points:
 - Add smoke tests under `src/tests/`.
 - Update `run_experiment.m` only when the runner needs to know the new optimizer
   name, options metadata, or reference table mapping.
+- For a reference that is not a MATLAB release, follow the DT-GSK pattern:
+  verify the port against the unmodified reference code on identical random
+  numbers before trusting campaign statistics (see the
+  [Extension Guide](../development/extension_guide.md#port-from-a-non-matlab-reference)).
 
 Unsafe changes without a reference audit:
 
@@ -508,6 +533,8 @@ Unsafe changes without a reference audit:
 | CEC run fails before starting | MEX bridge missing or locked during rebuild | Run `build.txt` commands and close MATLAB before rebuilding the MEX. |
 | eGSK fails with `fminconUnavailable` | Optimization Toolbox unavailable | Install/enable toolbox or run explicit non-reference diagnostics with `use_fmincon=false`. |
 | FDB-AGSK case 2 errors on flat fitness | Reference degenerate behavior for empty FDB ranking | Use non-degenerate problems or another case for diagnostics. |
+| DT-GSK seeds ignore `seed_policy`; its first population differs from the shared `X0` | Expected: DT-GSK is unified-only and self-initializes (section 3) | `initial_population_policy` in `run_config.json`; nothing to fix. |
+| A DT-GSK campaign is not bit-identical to the Python reference runs | MATLAB's Threefry doubles differ from the Python replica by at most `2^-53` per uniform draw, so trajectories separate after a last-bit difference flips a discrete decision | Compare statistically with `scripts/compare_reference_runs.m`. |
 | Tiny `Delta(New-Old)` signs appear confusing | Absolute differences below `1e-8` are considered zero in the MATLAB comparison table | See `src/runners/README.md`. |
 
 ## 18. Research usage checklist
@@ -523,17 +550,20 @@ Before reporting results:
 6. Preserve `environment.json`, `seed_schedule.csv`, `per_run.csv`, and summary
    CSVs.
 7. Run smoke tests and C++ tests after source changes.
-8. Verify unified seed schedules when comparing multiple optimizers.
+8. Verify unified seed schedules when comparing multiple optimizers, and state
+   that DT-GSK shares the seeds but not the runner's initial population.
 9. State whether CEC2017 F2 was excluded.
 10. State whether eGSK used `fmincon` and which Optimization Toolbox version was
     installed.
 
 ## 19. Literature and provenance
 
-The implementations are tied to the historical MATLAB reference releases named
-in each optimizer header and algorithm page. The project uses those files as the
-primary provenance source because exact reproduction often depends on small code
-details that are not fully specified in papers.
+The implementations are tied to the reference releases named in each optimizer
+header and algorithm page: historical MATLAB releases for six optimizers, and
+the DT-GSK reference implementation (Python, MIT license) v2.46
+(<https://github.com/MostafaMassoud/DT-GSK>) for DT-GSK. The project uses those
+files as the primary provenance source because exact reproduction often depends
+on small code details that are not fully specified in papers.
 
 Research lineage:
 
@@ -545,6 +575,16 @@ Research lineage:
 - eGSK: enhanced GSK with late-stage fuzzy factor adaptation and SQP refinement;
   see the DOI linked in [egsk.md](../algorithms/egsk.md).
 - FDB-AGSK: AGSK combined with Fitness-Distance Balance donor selection.
+- DT-GSK: Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK:
+  Dimension-Tiered Adaptive Configuration Selection and Deterministic
+  Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm."
+  *Algorithms* (MDPI), 2026 (accepted, in production; DOI pending). A
+  line-by-line MATLAB port was verified against the unmodified Python code on
+  identical random numbers in all four dimension tiers and reproduces the
+  reference's golden values to `1e-13`; the compact three-file version shipped
+  here reproduces that port bit for bit. The full record, including the CEC2017
+  campaign against the imported reference results, is kept in
+  [src/optimizers/dt-gsk/README.md](../../src/optimizers/dt-gsk/README.md).
 - CEC benchmark suites: CEC2011 real-world problems, CEC2013, CEC2013 large-scale
   global optimization, CEC2017, and CEC2020.
 

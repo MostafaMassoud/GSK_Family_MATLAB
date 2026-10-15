@@ -22,9 +22,9 @@ This prompt is aligned with the current repository layout:
   `docs/prompts/` folder (this is a deliberate MATLAB-side divergence) and a
   `docs/index.html` that redirects into `docs/html/`.
 - The MATLAB docs site is built by `scripts/build_docs.ps1` (PowerShell + Pandoc
-  primary + a built-in fallback renderer + Doxygen, no Python). The Python
-  `scripts/build_docs_html.py` is NOT ported - only its OUTPUT features are
-  matched.
+  3.8+ primary + a built-in fallback renderer used when Pandoc is absent or older
+  than 3.8 + Doxygen, no Python). The Python `scripts/build_docs_html.py` is NOT
+  ported - only its OUTPUT features are matched.
 - Facts (seed policy, budgets, paths, formulas) come from the MATLAB code and
   the existing MATLAB docs, never from the Python wording.
 - Generated folders (`build/`, `results/`, `docs/html/`) are not source of truth
@@ -125,7 +125,9 @@ Target and ground truth (MATLAB):
    - src\common\gsk_set_rng.m, src\runners\choose_cec_rng_generator.m
      (threefry/twister/mcg16807 stream selection and the threefry fallback)
    - src\runners\gskcec_make_problem.m  (per-suite evaluation budgets)
-   - the six src\optimizers\<opt>\<opt>_optimize.m
+   - the seven src\optimizers\<slug>\<stem>_optimize.m entry points (DT-GSK
+     adds dt_gsk_config.m and dt_gsk_graph.m; its README.md is the
+     authoritative behavior and validation summary)
    - benchmarks\cec_suite_cpp\cec_tools\src\cli\gsk_run.cpp
    - benchmarks\cec_suite_cpp\cec_tools\src\experiment\comparison.cpp
    - benchmarks\cec_suite_cpp\cec_tools\src\mex_bridge\gskcec_eval_mex.cpp
@@ -133,33 +135,38 @@ Target and ground truth (MATLAB):
 ## Repository Contract And Non-Negotiable Preservation Rules
 
 - NO Python anywhere in this project - not in code, tooling, or the docs build.
-  The site is built by scripts\build_docs.ps1 (PowerShell + Pandoc primary, a
-  built-in fallback renderer Convert-MarkdownFallback, and Doxygen for the C++
-  API). DO NOT port the Python build_docs_html.py. Mirror its OUTPUT features;
-  keep the toolchain.
+  The site is built by scripts\build_docs.ps1 (PowerShell + Pandoc 3.8+ primary,
+  a built-in fallback renderer Convert-MarkdownFallback used when Pandoc is
+  absent or older than 3.8, and Doxygen for the C++ API). DO NOT port the
+  Python build_docs_html.py. Mirror its OUTPUT features; keep the toolchain.
 - Preserve reference behavior and documented quirks. Read
   reference\porting_notes.md before describing any benchmark; never "fix" a quirk
   in prose.
 - Public optimizer slugs are hyphenated everywhere they are identifiers
-  (atmals-gsk, fdb-agsk); MATLAB function and file names use underscores
-  (atmals_gsk_optimize.m, fdb_agsk_optimize.m). Keep both forms correct.
+  (atmals-gsk, fdb-agsk, dt-gsk); MATLAB function and file names use underscores
+  (atmals_gsk_optimize.m, fdb_agsk_optimize.m, dt_gsk_optimize.m). Keep both
+  forms correct.
 - The two CEC2013 suites (cec2013, cec2013lsgo) are separate and never merged.
 - SEED POLICY FACTS must be MATLAB-correct - verify against code, do not trust
   Python wording:
     * base_seed default = 20240620, centralized in run_experiment.m
-      (run_experiment.m:50, also the parameter default ~:58).
-    * The policy switch (run_experiment.m ~:982) accepts 'reference' and
-      'unified' explicitly; ANY other string falls through to derive_run_seed,
-      so 'native' and 'derived' are ALIASES of that same fallback path, not two
+      (run_experiment.m ~:56, also the parameter default ~:64).
+    * The policy switch (pick_run_seed, run_experiment.m ~:1356) handles
+      'reference' and 'unified' explicitly; the only other values
+      check_seed_policy accepts, 'native' and 'derived', fall through to
+      derive_run_seed, so they are ALIASES of that same fallback path, not two
       distinct policies. Say "reference, unified, and the native/derived fallback
       (aliases)" - do not imply native and derived behave differently.
     * unified seed = mod(base_seed + 1000003*dim + 1000033*func + 1000037*run,
-      2147483646) + 1  (get_cec_seed.m ~:35; the constant is MAX_SAFE_SEED =
+      2147483646) + 1  (get_cec_seed.m ~:35-39; the constant is MAX_SAFE_SEED =
       2147483646). It is optimizer-independent.
-    * reference per-optimizer seeds (run_experiment.m ~:986-992): gsk, egsk, and
+    * reference per-optimizer seeds (run_experiment.m ~:1356-1370): gsk, egsk, and
       atmals-gsk use base_seed + 9973*func + (run-1); agsk, apgsk, fdb-agsk use
-      D*func*run.
-    * effective_rand_generator (run_experiment.m ~:1009-1020): under reference,
+      D*func*run. dt-gsk is unified-only (is_unified_only ~:1402): it gets the
+      unified seed and 'threefry' under EVERY seed_policy, mirroring the Python
+      reference's UNIFIED_ONLY_OPTIMIZERS.
+    * effective_rand_generator (run_experiment.m ~:1377-1400): dt-gsk always
+      'threefry'; otherwise, under reference,
       agsk/apgsk/fdb-agsk/egsk/atmals-gsk use the legacy 'seed' stream (mcg16807)
       and gsk (plus any fallback) uses 'twister'; under unified the whole family
       resolves to threefry-or-twister; under native/derived the requested
@@ -168,18 +175,20 @@ Target and ground truth (MATLAB):
       mcg16807 RandStream, 'state'->swb2712 RandStream.
     * Default policy DIFFERS by entry point: run_experiment(...) defaults to
       seed_policy='unified' + rand_generator='threefry' (run_experiment.m
-      ~:64-65), and the root run_all_cec*.m launchers follow it; the gsk_run CLI,
+      ~:70-71), and the root run_all_cec*.m launchers follow it; the gsk_run CLI,
       the shipped configs, and run_all.ps1 default to seed_policy='reference' +
-      'threefry' (run_all.ps1 ~:15-16).
+      'threefry' (run_all.ps1 ~:15-19 defers to each config).
     * Fair-start X0 (unified only): the runner draws the NP=100 population once
-      via make_unified_initial_population (run_experiment.m ~:902), captures the
+      via make_unified_initial_population (run_experiment.m ~:1267), captures the
       post-initialization RNG state, and each optimizer restores it so the first
-      random decision is identical across all six algorithms.
+      random decision is identical across the six runner-X0 algorithms. DT-GSK
+      is the documented exception (unified_initialization_enabled ~:1258): it
+      samples its own NP = 5*D population and the runner draws no X0 for it.
 - CEC2017 F2 is implemented and validated but excluded from the default sweep
-  (run_experiment.m ~:139).
+  (run_experiment.m ~:180).
 - ATMALS-GSK on CEC2017 is the single reporting exception: it reports
-  abs(best_fitness - optimum) (run_experiment.m ~:866 and the
-  uses_atmals_cec2017_reference_reporting guard ~:934); every other case reports
+  abs(best_fitness - optimum) (curve_value, run_experiment.m ~:1230, and the
+  uses_atmals_cec2017_reference_reporting guard ~:1299); every other case reports
   the signed best_fitness - optimum. The 1e-8 zero cutoff is applied uniformly
   across optimizers.
 - Evaluation budgets (gskcec_make_problem.m ~:68-84): cec2017 and cec2013 =
@@ -252,8 +261,11 @@ The folders and pages below ALREADY EXIST. Tags now mean:
       (LICENSES.md is root-level, built into this group as "License and
        Provenance"; there is no docs/LICENSES.md to edit)
     algorithms/
-      gsk.md agsk.md apgsk.md fdb-agsk.md atmals-gsk.md egsk.md
-                                   ALIGN all six to the section skeleton below
+      gsk.md agsk.md apgsk.md fdb-agsk.md atmals-gsk.md egsk.md dt-gsk.md
+                                   ALIGN all seven to the section skeleton below
+                                   (DT-GSK's validation record stays in
+                                   src/optimizers/dt-gsk/README.md; dt-gsk.md
+                                   summarizes it and links there)
     development/
       developer_guide.md           ALIGN
       contributor_guide.md         ALIGN
@@ -415,8 +427,10 @@ The script is already on the five-folder + prompts taxonomy. Keep it that way:
   "C++ API (how-to)", "Provenance Inventory", "License and Provenance").
 - Rendering: Pandoc is primary (gfm -> html5, standalone, --toc --toc-depth=3,
   shared template); Convert-MarkdownFallback is the built-in renderer used when
-  Pandoc is absent; Doxygen (if present, with docs/Doxyfile) emits the C++ API
-  into docs/html/api with OUTPUT_DIRECTORY=docs/html, HTML_OUTPUT=api. The
+  Pandoc is absent or older than 3.8 (the build passes
+  --syntax-highlighting=none, a Pandoc 3.8 option); Doxygen (if present, with
+  docs/Doxyfile) emits the C++ API into docs/html/api with
+  OUTPUT_DIRECTORY=docs/html, HTML_OUTPUT=api. The
   -Clean switch wipes docs/html first. Keep the light/dark toggle, per-page TOC,
   copy buttons, mermaid, table wrapping, and no-BOM assets. Add nothing that
   requires Python.
@@ -439,8 +453,9 @@ The script is already on the five-folder + prompts taxonomy. Keep it that way:
 
 ## Consistency Matrix (cross-check before finishing)
 
-- Optimizer display names GSK / AGSK / APGSK / FDB-AGSK / ATMALS-GSK / eGSK are
-  identical on every page; slugs stay hyphenated and file names stay underscored.
+- Optimizer display names GSK / AGSK / APGSK / FDB-AGSK / ATMALS-GSK / eGSK /
+  DT-GSK are identical on every page; slugs stay hyphenated and file names stay
+  underscored.
 - One canonical base seed (20240620) and one unified formula, verbatim, on every
   page that states them.
 - The native/derived alias is described consistently (one fallback path, two
@@ -469,7 +484,7 @@ The script is already on the five-folder + prompts taxonomy. Keep it that way:
    MATLAB tree and list any parity gaps (added/renamed/removed Python pages).
 2. For each existing MATLAB page, ALIGN its sections and opening callout to the
    template; VERIFY MATLAB-only pages for fact-correctness and live links.
-3. Re-confirm the six algorithm pages against the section skeleton (incl. the
+3. Re-confirm the seven algorithm pages against the section skeleton (incl. the
    worked-example slug and the back-links to validation_report and
    numerical_examples).
 4. Author any genuinely missing counterpart pages (NEW) with MATLAB-correct
@@ -493,7 +508,8 @@ Run and report the output of each:
 - Search the sources and the built site for stale tokens that would describe THIS
   project: python, pip, numba, gsk-run, .py, ProcessPool - none should remain in
   prose about this project (a token inside the parity prompt's own translation
-  rules is allowed).
+  rules is allowed, and so is a provenance citation of the DT-GSK Python
+  reference implementation).
 - Spot-check at least ten cross-links per folder in docs\html, including several
   #worked-example links.
 - git status must show NO changes under src\ or benchmarks\ - this is docs-only,
@@ -506,7 +522,7 @@ Run and report the output of each:
 2. The maintained docs/ tree: every page on the template's section skeleton and
    opening callout, every MATLAB-only page fact-checked, any missing counterpart
    authored.
-3. The six algorithm pages confirmed on the section skeleton, with the
+3. The seven algorithm pages confirmed on the section skeleton, with the
    worked-example slug and the validation/numerical-examples back-links.
 4. An updated scripts\build_docs.ps1 IF and only if pages changed (page list, and
    the nav/rewriting that follows), PowerShell only.

@@ -19,7 +19,10 @@ behavioral constants for the CEC2011 P3/P4 port, because the reference
 *calls* `ode45` and its exact stepping is part of reference behavior. The
 project code is an original implementation of the published Dormand-Prince /
 Shampine mathematics, validated against MATLAB ground truth (see CEC2011
-below); no MathWorks source was copied.
+below); no MathWorks source was copied. The DT-GSK optimizer was ported from
+its Python reference implementation (MIT license), which was read as the
+porting source and run only outside this project for the parity checks; no
+Python code is part of the project (see DT-GSK below).
 
 Language contract:
 
@@ -34,7 +37,12 @@ Language contract:
 - C++: WinLibs MinGW-w64 GCC 16.1.0 (user-scope winget install
   `BrechtSanders.WinLibs.POSIX.UCRT`), `-std=c++20`; CMake (WinLibs 4.x or
   MATLAB-bundled 3.25 both work) with "MinGW Makefiles"; `-static` link so
-  binaries need no compiler DLLs.
+  binaries need no compiler DLLs. The MEX bridge built by
+  `scripts/build_mex_bridge.ps1` is now also linked `-static` (the MATLAB import
+  libraries are passed by full path), so it no longer imports
+  `libwinpthread-1.dll` from a posix-thread-model toolchain; its outputs are
+  bitwise identical to the previous `-static-libgcc -static-libstdc++` build
+  (1323 probe values across all five suites).
 - MATLAB: R2025b (`C:\path\to\MATLAB\R2025b`), used for optimizers, runners,
   smoke tests and validation.
 - The MATLAB MinGW support package (GCC 8.1) is too old for C++20 and is
@@ -219,14 +227,20 @@ on a removed local reference folder are intentionally absent.
 - `load_reference_file` treats empty cells, `-`, `nan`, `n/a` and `na` as
   missing statistics (`std::nullopt`), never parse errors. The AGSK
   CEC2020 D=5 table reports `N/A` for functions 6-7 (the source paper did
-  not evaluate them); the loader now ingests all 35 imported files / 894
-  rows. Regression covered by `reference_results_tests.cpp`.
+  not evaluate them); with that fix the loader ingested every table then
+  imported (recorded at the time as 35 files / 894 rows). Regression covered
+  by `reference_results_tests.cpp`.
+- Later imports, including the DT-GSK tables of all five suites (30 files /
+  297 rows), bring `gsk_list --references` to 165 files / 1411 rows. Only CSV/TXT
+  files directly under `cec*/<optimizer>/` are loaded, so nested folders such as
+  `curves/`, `gen_logs/`, and `cec2017/dt-gsk/evidence/` are ignored.
 
 ## GSK-Family MATLAB Optimizers (implemented under src/)
 
 Interface contract: `docs/reference/matlab_interface.md` (problem struct, options,
 result struct, row-wise NPxD populations, deterministic seeding through
-`src/common/gsk_set_rng.m` at entry).
+`src/common/gsk_set_rng.m` at entry; DT-GSK instead derives its own Threefry
+substreams from `options.seed`).
 
 - Baseline GSK (`src/optimizers/gsk/gsk_optimize.m`, from
   `GSK_Enhanced.m` cross-checked with `GSK.m`): `G_Max =
@@ -239,8 +253,11 @@ result struct, row-wise NPxD populations, deterministic seeding through
   per-generation reset to `[0.85 0.05 0.05 0.05]`; junior schedule is
   nfes-ratio based; per-individual K drawn once at init and trimmed on
   reduction; target stop checked per generation (strict <) after resize.
-- APGSK (`apgsk_optimize.m`, separate implementation): NP = 200*D (D>5)
-  else 250; KR always pooled; one scalar `rand` consumed every adaptive
+- APGSK (`apgsk_optimize.m`, separate implementation): interface default
+  NP = 100 (the CEC2017 competition NP; reproduces the CEC2017 tables). The
+  reference release's CEC2020-style NP = 200*D (D>5) else 250 is opt-in via
+  `options.np_init`, and a supplied X0 must then have at least that many rows.
+  KR always pooled; one scalar `rand` consumed every adaptive
   generation - positive `KF_pool` iff `rand>=0.3 && nfes>0.5*max_nfes`,
   else the negative pool (reference variable `KF_poool`, renamed
   `kf_pool_negative` with the original cited); stochastic junior schedule
@@ -290,12 +307,71 @@ result struct, row-wise NPxD populations, deterministic seeding through
   extension (the reference cases ran a sphere problem). Documented
   deviation: the initial best solution VECTOR is recorded (the reference
   stored only its fitness) - bookkeeping only, trajectory unchanged.
-- Sanctioned modernizations (the ONLY deviations): centralized
+- Sanctioned modernizations of the six MATLAB-source ports above (the ONLY
+  deviations; DT-GSK's are listed in its own entry below): centralized
   `gsk_set_rng(options)` replaces uncontrolled session seeding; runner
   reference mode uses deterministic scheduled seeds instead of wall-clock
   seeding where historical releases used `rand('seed', sum(100*clock))`;
   NaN-optimum guards for suites without known optima; `result` bookkeeping
   fields.
+- DT-GSK (`dt_gsk_optimize.m` + `dt_gsk_config.m`, `dt_gsk_graph.m`), the
+  seventh optimizer and the only one ported from a non-MATLAB source.
+  - Source: the DT-GSK reference implementation (Python, MIT license) v2.46,
+    <https://github.com/MostafaMassoud/DT-GSK> (tag `v2.46`, commit
+    `64c70bb54125c9361b821939802ee4810fb7af50`); paper Masoud, Roshdy,
+    Mohamed, "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and
+    Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization
+    Algorithm", *Algorithms* (MDPI), 2026 (accepted, in production; DOI
+    pending). MIT is compatible with the project's GPL-3.0-or-later; the
+    MATLAB port is part of this project (`LICENSES.md`). DT-GSK is
+    Dimension-Tiered GSK; the interaction-structure memory (SGSM) is one of its
+    components, not its name.
+  - Structure: exactly three code files. `dt_gsk_optimize.m` is the whole
+    optimizer (initialization; the generation loop with NLPSR population
+    reduction, ACE parameter selection, linkage crossover, DE/rand/1 entry,
+    greedy selection, ARGP, BSE escapes and restarts, coordinate local search,
+    final polish and deep-stall restart; the result struct), with small
+    helpers as local functions. `dt_gsk_config.m` holds every setting of the
+    published `pub` profile, grouped by dimension tier (`D < 20`,
+    `20 <= D < 50`, `D >= 50`, `D >= 100`). `dt_gsk_graph.m` is the SGSM
+    interaction graph (a handle class) used from `D = 50`. The tier table is
+    in `src/optimizers/dt-gsk/README.md`; the algorithm is explained in
+    `docs/algorithms/dt-gsk.md`.
+  - Behavior: `NP = 5*D` initial population with nonlinear reduction toward
+    `n_min` (12; 25 from `D = 50`); always the full budget (`termination =
+    'max_evaluations'`, evaluation batches clipped to the remaining budget,
+    so `nfes == max_nfes`); `error = best - optimum`, zeroed below
+    `target_error`, `NaN` without an optimum. Draw order and the order of the
+    floating-point operations (sequential and NumPy pairwise sums, stable
+    sorts, NumPy `argmin` NaN rule) follow the reference; dimension indices
+    are 1-based. Seeding is unified-only with named Threefry substreams and
+    the optimizer samples its own population, ignoring a runner `X0` (the
+    documented fair-start exception; `docs/reference/seed_policy.md`).
+  - Sanctioned differences (the only intended ones): (1) the error is the
+    IEEE subtraction `best_fitness - optimum`, the project-wide rule, where
+    the reference computes `float(Decimal(str(best)) - Decimal(str(optimum)))`
+    (its `compute_error`); the two can differ by about one ulp of
+    `best_fitness` (identical when the optimum is 0, as on CEC2013LSGO);
+    (2) MATLAB's `RandStream('threefry')` and the reference's Threefry replica
+    give the same 64-bit words but round them to doubles slightly
+    differently (MATLAB keeps up to one more bit below 0.5), so live runs
+    differ by at most `2^-53` per uniform draw; integer, permutation and mask
+    draws coincide.
+  - Validation: a line-by-line port was verified against the unmodified
+    Python code on identical random numbers in all four tiers and reproduces
+    the reference's golden values to `1e-13`; the committed three-file version
+    reproduces that port bit for bit on 25 full-budget runs plus 42
+    rare-branch problems. The full record, and the results of the CEC2017
+    campaign against the imported reference
+    (`benchmarks/cec_reference_results/cec2017/dt-gsk/`), are in
+    `src/optimizers/dt-gsk/README.md`.
+  - Scope / not ported: only the `pub` profile. Options that no `pub` tier
+    selects (LHS/oversampled initialization, Nelder-Mead/subspace local
+    search, event-triggered local search, state-driven DE policy, hysteresis
+    module gate, coverage-weighted ACE, per-half ARGP memories, linkage
+    reliability probes), research hooks, and telemetry/generation logs are
+    left out (listed in the `dt_gsk_optimize.m` header). DT-GSK uses none of
+    the `src/common/` helpers.
 
 ## Runners, Bridge, CLI (Phases 14-16)
 
@@ -315,11 +391,14 @@ result struct, row-wise NPxD populations, deterministic seeding through
   `get_cec_seed(base_seed,dim,func,run)` with the optimizer-independent formula
   `mod(base_seed + 1000003*dim + 1000033*func + 1000037*run, 2147483646) + 1`,
   supplies runner-generated `X0`, and restores the post-initialization RNG state.
+  DT-GSK is unified-only: it gets that seed and `threefry` under every policy
+  and no runner `X0` (it self-initializes).
   Wall-clock seeding is not a supported current mode.
 - Budgets/targets (`src/runners/gskcec_make_problem.m`): cec2017/cec2013
   10000*D and target 1e-8; cec2020 AGSK budgets and 1e-8; cec2011 150000,
   no target; cec2013lsgo 3e6, no target; overridable via
-  `max_evaluations`.
+  `max_evaluations`. They are suite budgets, the same for every optimizer
+  (DT-GSK included).
 - MEX bridge `gskcec_eval` (`benchmarks/cec_suite_cpp/cec_tools/src/mex_bridge/`,
   built by `scripts/build_mex_bridge.ps1` with the WinLibs toolchain into
   `build/mex/`): OPTIONAL component so MATLAB optimizers evaluate the
@@ -344,9 +423,12 @@ All phases complete and verified on 2026-06-13:
 - Clean CMake build (WinLibs GCC 16.1, `-std=c++20 -static`); all 12 ctest
   suites pass (core, reference-results, experiment, cec2011 wpa/wpb/wpc +
   integration, cec2013, cec2013lsgo, cec2017, cec2020, and the gsk_bench smoke).
+  A 13th suite, the `gskcec_cli_exit_codes` CLI exit-code test, was added later;
+  all 13 now pass.
 - `gsk_list --optimizers` lists all six; `--benchmarks` lists all five
   suites with functions/dimensions; `--references` loads 35 files / 894
-  rows.
+  rows. (Since DT-GSK was added it lists seven optimizers, and
+  `--references` loads 165 files / 1411 rows.)
 - `gsk_validate --suite <s> --smoke` passes for all five suites (CEC2020
   reports its 4 data-gap cells as explicit SKIPs); `--suite cec2013
   --against saved_vectors` matches at 0 deviation; `--references` passes.
@@ -358,7 +440,9 @@ All phases complete and verified on 2026-06-13:
   `summary/curves/gen_logs` tree in the documented schema; `gsk_validate --compare`
   loads them and reports win/tie/loss vs the imported references.
 - MATLAB smoke suite (`run_matlab_smoke_tests`) green: common helpers, all
-  six optimizers, the runner, and the bridge cross-check.
+  six optimizers, the runner, and the bridge cross-check. DT-GSK
+  (`test_dt_gsk_smoke.m`) and the runner resume and fair-start tests were
+  added later; the suite now has 13 tests.
 - Language-contract checks (no `.py`/`.pyx`, no `cec2013.cpp`, no
   `.m`/`.R`/`.c` under `cec_suite_cpp`, no top-level include/tests/matlab)
   return nothing.

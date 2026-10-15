@@ -43,11 +43,17 @@ is a starting point that honors the structs in
 8. Stop at `problem.max_nfes` (and at `problem.target_error` only if the
    reference algorithm does).
 9. Return the `result` struct with exactly the documented fields.
-10. Register the slug: add it to `optimizer_function_stem` in
-    `src/runners/run_experiment.m` if the slug-to-stem mapping is non-trivial
-    (hyphen-to-underscore), and to the reference-mode seed/RNG switches there.
+10. Register the slug: add it to `optimizer_function_stem` (and the underscore
+    alias to `canonical_optimizer_id`) in `src/runners/run_experiment.m` if the
+    slug-to-stem mapping is non-trivial (hyphen-to-underscore), and to the
+    reference-mode seed/RNG switches there.
 11. Add a smoke test `src/tests/test_<stem>_smoke.m`, and add a reference table
     under `benchmarks/cec_reference_results/` plus a page under `docs/`.
+
+Steps 3 and 5 assume the reference uses MATLAB's global RNG and ordinary
+uniform initialization. A reference that defines its own random streams and
+initialization keeps them, with the runner adjusted instead; DT-GSK is the
+worked example ([Port From A Non-MATLAB Reference](#port-from-a-non-matlab-reference)).
 
 ### Skeleton
 
@@ -128,10 +134,10 @@ end
 ```
 
 Register it (step 10) where the runner resolves the optimizer. The runner builds
-the function handle from the slug at `src/runners/run_experiment.m:86`
+the function handle from the slug in `src/runners/run_experiment.m`
 (`optimize = str2func([optimizer_function_stem(a.optimizer) '_optimize'])`), so
-a hyphenated slug needs a `case` in `optimizer_function_stem`
-(`src/runners/run_experiment.m:1411`):
+a hyphenated slug needs a `case` in the local function `optimizer_function_stem`
+of `src/runners/run_experiment.m`:
 
 ```matlab
 function stem = optimizer_function_stem(optimizer)
@@ -140,6 +146,8 @@ switch optimizer
         stem = 'atmals_gsk';
     case 'fdb-agsk'
         stem = 'fdb_agsk';
+    case 'dt-gsk'
+        stem = 'dt_gsk';
     case 'example-gsk'        % add a hyphenated slug here
         stem = 'example_gsk';
     otherwise
@@ -149,9 +157,61 @@ end
 ```
 
 A new adaptive variant that needs reference-compatible seeding also gets a
-`case` in the reference seed switch (`src/runners/run_experiment.m:984`) and the
-reference-RNG selection just below it. The C++ side advertises optimizers
-independently; add the slug to `gsk_list` so `gsk_list --optimizers` lists it.
+`case` in the reference seed switch (`pick_run_seed` in
+`src/runners/run_experiment.m`) and in the reference-RNG selection
+(`effective_rand_generator`). Keep the reference-mode metadata in step: the
+same optimizer lists drive `seed_scheme_string` and the strides /
+`seed_formula` written by `write_run_metadata`. The C++ side advertises optimizers
+independently; add the slug to `gsk_list` so `gsk_list --optimizers` lists it,
+and to `kOptimizers` in `gsk_run.cpp` so `gsk_run` accepts it. The comparison
+code needs no change: it reads the slug from the summary file name, which is the
+reference folder name.
+
+## Port From A Non-MATLAB Reference
+
+DT-GSK (`src/optimizers/dt-gsk/`) is the example of an optimizer whose
+reference is not a MATLAB release: it was ported from the DT-GSK reference
+implementation (Python, MIT license, v2.46). With no MATLAB original to diff
+against, the unmodified reference code serves as the oracle. The route it took,
+recorded in `src/optimizers/dt-gsk/README.md`:
+
+1. **Pin the reference.** Work from a read-only checkout at a tagged release
+   and record the version and commits (DT-GSK:
+   `benchmarks/cec_reference_results/cec2017/dt-gsk/PROVENANCE.md`). Check the
+   license is compatible with this project's GPL-3.0-or-later (MIT is) and
+   record it in `LICENSES.md`.
+2. **Port line by line first.** Translate module by module, keeping the draw
+   order and the order of floating-point operations (DT-GSK keeps sequential
+   and NumPy-style pairwise sums and stable sorts).
+3. **Verify against the oracle on identical random numbers.** Run the port and
+   the unmodified reference on the same random numbers and compare
+   generations, evaluations, per-stream draw counts and convergence traces, on
+   every configuration branch (DT-GSK: all four dimension tiers). Expect
+   agreement to round-off until a last-bit difference flips a discrete
+   decision (exact ties, one-ulp improvements). The oracle harness and the
+   foreign code stay outside this repository; no Python is committed.
+4. **Reproduce the reference's own golden values** and keep them in the smoke
+   test (DT-GSK: seed 12345, 3,000 evaluations, reproduced to `1e-13`;
+   `src/tests/test_dt_gsk_smoke.m` checks the sphere cells).
+5. **Compact only afterwards.** A refactored version must reproduce the
+   line-by-line port bit for bit (DT-GSK: best point, fitness, `nfes` and full
+   trace on 25 full-budget runs across every tier, plus 42 problems aimed at
+   rare branches).
+6. **Document RNG differences.** MATLAB's Threefry and the Python replica give
+   the same 64-bit words but convert them to doubles differently (at most
+   `2^-53` per uniform draw), so live campaigns are compared statistically, not
+   bit for bit.
+7. **Mirror the reference protocol in the runner** rather than forcing the
+   family's conventions onto the port. DT-GSK's campaigns used the unified seed
+   with its own initialization, so `run_experiment` treats it as unified-only
+   (`is_unified_only`: `get_cec_seed` and `threefry` under every
+   `seed_policy`, no runner `X0`) and records the fair-start exception in the
+   metadata.
+8. **Import the reference's results** under
+   `benchmarks/cec_reference_results/<suite>/<slug>/` (aggregate tables, plus
+   per-run evidence in an `evidence/` subfolder, which the table loader
+   ignores), then compare a full campaign run by run with
+   `scripts/compare_reference_runs.m`.
 
 ## Add A Benchmark Suite
 

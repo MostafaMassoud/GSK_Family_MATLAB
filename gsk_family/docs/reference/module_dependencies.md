@@ -21,7 +21,7 @@ optimizer, and the MATLAB side never parses a config.
 
 The project has two halves joined at one thin bridge. The C++ half (under
 `benchmarks/`) owns the benchmark problems and the tooling that runs and checks
-them; the MATLAB half (under `src/`) owns the six GSK-family optimizers and the
+them; the MATLAB half (under `src/`) owns the seven GSK-family optimizers and the
 experiment runner. They meet only at the `gskcec_eval` MEX bridge.
 
 The arrows below read "depends on" / "calls into": the item on the left uses the
@@ -53,9 +53,10 @@ MATLAB half (src)
     -> optimizers
     -> common
     -> NEVER parses a config (the C++ experiment parser owns that)
-  optimizers  (gsk, agsk, apgsk, atmals-gsk, egsk, fdb-agsk)
-    -> common
+  optimizers  (gsk, agsk, apgsk, atmals-gsk, egsk, fdb-agsk, dt-gsk)
+    -> common          (not dt-gsk: its helpers are local to src/optimizers/dt-gsk)
     -> the problem struct + seeded RNG handed in by the runner
+                       (dt-gsk: only the seed; it builds its own Threefry substreams)
 ```
 
 The same picture as a graph (arrows point from a layer to what it depends on).
@@ -89,7 +90,9 @@ Two facts the diagram encodes:
   They receive an already-built `problem` struct (with a `problem.evaluate`
   handle) and a seeded RNG from `runners`, and use only the documented struct
   fields. See `src/optimizers/gsk/gsk_optimize.m:1` and the contract in
-  [matlab_interface.md](matlab_interface.md).
+  [matlab_interface.md](matlab_interface.md). DT-GSK receives only the seed
+  and derives its own Threefry substreams, leaving the global RNG untouched;
+  it also depends on nothing in `common`.
 - The C++ `benchmark` layer never reaches "up" into the optimizer or experiment
   layers. A `BenchmarkProblem` exposes only `evaluate`, `bounds`, `optimum`, and
   `dimension` (`benchmarks/cec_suite_cpp/cec_tools/include/gskcec/benchmark/benchmark.hpp`),
@@ -116,7 +119,7 @@ boundary is what keeps the directions above clean.
 | C++ `cli` | `cec_tools/src/cli` | argument parsing, process exit codes, locating and driving MATLAB. | Algorithm behavior. |
 | MATLAB `optimizers` | `src/optimizers/<opt>` | candidate generation and the result struct, faithful to the reference sources. | File I/O; reference comparison; config parsing; benchmark construction. |
 | MATLAB `common` | `src/common` | genuinely shared reference helpers (donor indices, init, bound repair, population reduction). | Variant-specific behavior; suite policy. |
-| MATLAB `runners` | `src/runners` | campaign expansion, seed schedule, fair-start `X0`, result artifacts, resume, post-run verification trigger. | Optimizer internals; config parsing. |
+| MATLAB `runners` | `src/runners` | campaign expansion, seed schedule (including the unified-only DT-GSK schedule), fair-start `X0` (not drawn for DT-GSK), result artifacts, resume, post-run verification trigger. | Optimizer internals; config parsing. |
 | MATLAB `launchers` | `run_all_cec*.m` (next to `gsk_family/`) | a ready-to-run CONFIG block per suite; multi-optimizer loop; unified-seed cross-check. | Anything `runners` already owns. |
 
 ## Why This Matters

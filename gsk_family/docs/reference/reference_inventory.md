@@ -19,7 +19,7 @@ tables, and committed expected-value test data.
 
 | Area | Current location | Maintained purpose |
 |---|---|---|
-| MATLAB optimizers | `src/optimizers/` | GSK, AGSK, APGSK, ATMALS-GSK, eGSK, and FDB-AGSK algorithm implementations. |
+| MATLAB optimizers | `src/optimizers/` | GSK, AGSK, APGSK, ATMALS-GSK, eGSK, FDB-AGSK, and DT-GSK algorithm implementations. |
 | Shared MATLAB helpers | `src/common/` | Initialization, boundary handling, gained-shared operators, FDB scoring, seed/RNG helpers, and statistics utilities. |
 | Experiment runners | `src/runners/`, `src/experiments/` | Reproducible experiment execution, benchmark construction, result writing, and default matrices. |
 | CEC benchmark ports | `benchmarks/cec_suite_cpp/<suite>/src/` | Standalone C++20 implementations of CEC2011, CEC2013, CEC2013LSGO, CEC2017, and CEC2020. |
@@ -38,6 +38,7 @@ tables, and committed expected-value test data.
 | ATMALS-GSK | `src/optimizers/atmals-gsk/atmals_gsk_optimize.m` | Multi-parameter adaptation, roulette selection, and local-search logic. |
 | eGSK | `src/optimizers/egsk/egsk_optimize.m` | eGSK variant with late-stage refinement helpers. |
 | FDB-AGSK | `src/optimizers/fdb-agsk/fdb_agsk_optimize.m` | FDB case selection plus best/ranking/roulette scoring helpers. |
+| DT-GSK | `src/optimizers/dt-gsk/dt_gsk_optimize.m` | Dimension-Tiered GSK, ported from the DT-GSK reference implementation (Python, MIT license) v2.46, <https://github.com/MostafaMassoud/DT-GSK>; `pub` profile in `dt_gsk_config.m`, SGSM interaction graph in `dt_gsk_graph.m`. Port record and validation: `src/optimizers/dt-gsk/README.md`. |
 
 ## Benchmark Provenance
 
@@ -69,8 +70,38 @@ Current reference inventory:
   comparisons and ablation plots.
 - The current CEC2011/CEC2017 curated convergence archive contains 828 curve
   CSV files, 828 rendered graph PNG files, and 828 checkpoint-log CSV files.
-- CEC2013LSGO reference folders: `cec2013lsgo/decc-g/` and `cec2013lsgo/mos/`.
+- CEC2013LSGO reference folders: `cec2013lsgo/decc-g/`, `cec2013lsgo/mos/`,
+  and `cec2013lsgo/dt-gsk/`.
 - CEC2017 F2 is intentionally absent from aggregate reference tables.
+- `gsk_list --references` loads 165 files / 1411 rows. Only CSV/TXT files
+  directly under `<suite>/<optimizer>/` are reference tables; nested folders
+  (`curves/`, `gen_logs/`, `evidence/`) are ignored by the loader.
+
+DT-GSK reference results (`<suite>/dt-gsk/`, 30 tables / 297 rows) were
+imported from the DT-GSK reference implementation (Python, MIT license, tag
+`v2.46`). They were produced by that implementation, not by this toolkit, so
+agreement with them is cross-implementation evidence. Protocol: `pub` profile,
+unified seed `get_cec_seed(20240620, dim, func, run)`, Threefry substreams,
+`NP = 5*D`, full suite budgets.
+
+| Suite | DT-GSK tables | Runs |
+|---|---|---|
+| `cec2011` | `dt-gsk_cec2011_D<dim>.csv` per native dimension + `dt-gsk_cec2011.csv` rollup | 25 |
+| `cec2013` | `D10`, `D30`, `D50` | 51 |
+| `cec2013lsgo` | `D1000` (13 functions), `D905` (F13, F14) | 25 |
+| `cec2017` | `D10`, `D30`, `D50`, `D100` | 51 |
+| `cec2020` | `D5`, `D10`, `D15`, `D20` (`D5` has no F6/F7 rows) | 30 |
+
+`cec2017/dt-gsk/PROVENANCE.md` records the source repository, tag and commit,
+the producing commit and run date of each suite, and the protocol.
+`cec2017/dt-gsk/evidence/` holds the reference campaign's per-run evidence
+(`per_run.csv`, `seed_schedule.csv`, `environment.json`, `run_config.json`,
+`phase0_protocol.json`, `verification.json`), the input for
+`scripts/compare_reference_runs.m`. The reference's curated curves and
+generation logs were not imported. The DT-GSK CEC2020 tables include F1 and F8
+at `D5` and `D15`, cells this project's CEC2020 port reports as data-gap SKIPs
+(see [porting_notes.md](porting_notes.md)), so those rows have no generated
+counterpart.
 
 Generated local results must go under `results/` and must never overwrite these
 imported or curated references. If a future study promotes a generated

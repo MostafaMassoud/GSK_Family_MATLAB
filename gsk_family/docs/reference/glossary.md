@@ -39,6 +39,13 @@ protocol rules, see [benchmark_protocol.md](benchmark_protocol.md).
   how good a candidate is with how far it is from the best) instead of pure
   ranking. Five selectable cases; default `fdb_case = 1`.
   `src/optimizers/fdb-agsk/`.
+- **DT-GSK — Dimension-Tiered GSK.** The seventh optimizer, a MATLAB port of
+  the DT-GSK reference implementation (Python, MIT license) v2.46. It keeps the
+  GSK junior/senior operators and switches its control machinery (ACE, ARGP,
+  NLPSR, BSE, SGSM, TERRA and local refinement, below) on by **dimension
+  tier**. It starts from `NP = 5 × D`, always uses the full budget, and is
+  **unified-only** (below). `src/optimizers/dt-gsk/`; behavior and validation
+  in its `README.md`; algorithm page [../algorithms/dt-gsk.md](../algorithms/dt-gsk.md).
 
 ## GSK mechanics
 
@@ -59,7 +66,48 @@ protocol rules, see [benchmark_protocol.md](benchmark_protocol.md).
   individual from mostly-junior behavior early in the run to mostly-senior
   behavior later. Baseline GSK default `10`.
 - **NP.** The population size — the number of candidate solutions carried each
-  generation. Baseline GSK default `100`.
+  generation. Baseline GSK default `100`; DT-GSK starts at `5 × D`.
+
+## DT-GSK mechanisms
+
+- **Dimension tier.** The dimension band that fixes which DT-GSK mechanisms
+  run and with which settings: `D < 20`, `20 ≤ D < 50`, `D ≥ 50`, and `D ≥ 100`
+  (each tier adds to the previous one). The settings are the published **`pub`
+  profile**, `dt_gsk_config.m`.
+- **ACE — Adaptive Configuration Engine.** Draws a `(KF, KR, Kexp)` setting per
+  individual from a small pool and learns the pool probabilities from the
+  fitness changes each entry produces (separate top-half and bottom-half
+  memories from `D ≥ 20`; a DE/rand/1 pool entry for `20 ≤ D < 100`).
+- **ARGP — Acceptance-Rate Gated Pool Pruning.** Freezes ACE pool entries whose
+  rolling acceptance rate falls below a tier threshold after a warm-up share of
+  the budget.
+- **NLPSR — Nonlinear Population Size Reduction.** Shrinks the population from
+  `5 × D` toward a floor `n_min` (12; 25 from `D = 50`) along a nonlinear
+  schedule. **SP-NLPSR** (`D ≥ 100`) keeps a higher floor until the learned
+  linkage has enough samples or 70% of the budget is spent.
+- **BSE — Budget-Safe Escape.** The stagnation response: Cauchy kicks on the
+  worst rows, then an archive-seeded partial restart, capped so it never
+  overshoots the budget (from `D ≥ 20` the trigger also needs low acceptance
+  and low diversity). A separate deep-stall full restart runs in every tier.
+- **SGSM — Success-Graph Structural Memory** (also called interaction-structure
+  memory, ISM). The `D ≥ 50` interaction graph (`dt_gsk_graph.m`): it learns
+  which coordinates improve together, turns them into linkage blocks for the
+  crossover, and gives the basis of the final polish. A component of DT-GSK,
+  not its name.
+- **TERRA.** The `D ≥ 100` budget policy (from the TERRA-GSK prototype in the
+  reference code): the endgame local search runs only once 70% of the budget
+  is spent, judged before the generation's escape step spends evaluations.
+  The same tier adds basin-novelty restarts and the late controllers A1
+  (late-acceptance clipping), A2 (frozen-streak KR broadening), and FC4
+  (learned/random linkage mixing).
+- **Final polish.** A one-shot deterministic compass search from the incumbent
+  along the SGSM eigenbasis, at 96% of the budget (`D ≥ 50`); it complements
+  the endgame coordinate local search on the elites (every tier).
+- **Unified-only.** DT-GSK always gets the unified seed
+  `get_cec_seed(base_seed, dim, func, run)` and `threefry`, whatever
+  `seed_policy` is requested, and samples its own initial population instead
+  of the runner's fair-start `X0` (the documented fair-start exception). See
+  [seed_policy.md](seed_policy.md).
 
 ## Problem and run terminology
 
@@ -81,8 +129,9 @@ protocol rules, see [benchmark_protocol.md](benchmark_protocol.md).
   best; it is the headline metric for suites with a known optimum (smaller is
   better, 0 is perfect), with values below the target threshold (`1e-8`) zeroed
   exactly as the reference drivers do. Suites *without* a published optimum
-  (CEC2011; CEC2013LSGO as imported) report **raw objectives**, and the `error`
-  column is `NaN`.
+  (CEC2011; CEC2013LSGO as imported) report **raw objectives**; the `error`
+  column is `NaN` on CEC2011 and equals the raw objective on CEC2013LSGO (its
+  optimum is 0 by construction).
 - **Convergence curve.** Best-so-far score (or error) plotted against `nfes`.
   The median run's trace is recorded per (function, dimension) in
   `curves/Figure_F<f>_D<d>_Run#<r>.csv`.
@@ -126,6 +175,11 @@ protocol rules, see [benchmark_protocol.md](benchmark_protocol.md).
   **two** algorithms across matched problems, to judge whether one is
   significantly better. The per-run verification reports an informational
   "Wilcoxon-style" win/tie/loss tally against the reference.
+- **Wilcoxon rank-sum test and Holm adjustment.** The unpaired two-sample test
+  that `scripts/compare_reference_runs.m` applies per (dimension, function) cell
+  to two sets of runs (e.g. a MATLAB DT-GSK campaign and the imported Python
+  reference runs); Holm's step-down method adjusts its p-values for the number
+  of cells compared.
 - **Friedman (test / ranking).** A non-parametric test that ranks **several**
   algorithms across many problems at once, producing an average rank per
   algorithm. Used in cross-algorithm comparison reporting.
@@ -165,7 +219,7 @@ protocol rules, see [benchmark_protocol.md](benchmark_protocol.md).
 ## The three CLI tools
 
 - **`gsk_list`.** Enumerates the benchmark suites (with their functions and
-  dimensions), the six optimizers, and the imported reference tables.
+  dimensions), the seven optimizers, and the imported reference tables.
 - **`gsk_validate`.** Validates reference tables, smoke-tests a suite
   (`--suite <name> --smoke`), runs the CEC2013 saved-vector check, compares
   generated results against references (`--compare`), and re-runs the per-run

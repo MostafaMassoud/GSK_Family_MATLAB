@@ -11,13 +11,16 @@
 %
 % CEC2020 notes: 10 functions, known optima. Budgets scale steeply with
 % dimension: D5=50k, D10=1M, D15=3M, D20=10M evaluations -- D15/D20 are
-% EXTREMELY long. Only AGSK has a published CEC2020 reference, so for other
-% optimizers the comparison table is skipped (the run still produces results).
+% EXTREMELY long. Only AGSK (published) and DT-GSK (imported from its
+% reference implementation) have CEC2020 references, so for other optimizers
+% the comparison table is skipped (the run still produces results). DT-GSK
+% runs the unified seed + threefry under every seed_policy and samples its
+% own NP = 5*D initial population (it ignores the runner X0).
 % =========================================================================
 
 %% ------------------------------ CONFIG ----------------------------------
-optimizers  = {'gsk'};       % set to {'agsk'} to get the reference comparison
-% optimizers = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk'};
+optimizers  = {'gsk'};       % set to {'agsk'} or {'dt-gsk'} to get the reference comparison
+% optimizers = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk', 'dt-gsk'};
 
 functions   = 1:10;           % CEC2020 has 10 functions
 dimensions  = [5 10];         % start small; full set is [5 10 15 20] (D15/D20 are huge)

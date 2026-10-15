@@ -229,8 +229,9 @@ GSK is the baseline: a strong, low-parameter starting point and the control in
 every comparison. If a run needs population reduction or self-tuned `KF`/`KR`,
 reach for a variant — [AGSK](agsk.md) (adaptive pools + LPSR),
 [APGSK](apgsk.md) (negative-KF pool + stochastic schedule),
-[FDB-AGSK](fdb-agsk.md), [ATMALS-GSK](atmals-gsk.md), or [eGSK](egsk.md) — all of
-which reuse the junior/senior core above.
+[FDB-AGSK](fdb-agsk.md), [ATMALS-GSK](atmals-gsk.md), [eGSK](egsk.md), or
+[DT-GSK](dt-gsk.md) (dimension-tiered control) — all of which reuse the
+junior/senior core above.
 
 Default reproduction matrix: **CEC2017** (functions 1-30; D in {10, 30, 50, 100};
 budget `10000 * D`; target error `1e-8`) and **CEC2011** (22 real-world problems,

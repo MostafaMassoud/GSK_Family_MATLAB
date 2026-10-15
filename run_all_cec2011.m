@@ -7,19 +7,23 @@
 %   2. Press the green Run button (click "Change Folder" if MATLAB asks).
 %   3. Each problem prints one results row; a results table and a
 %      Reference-GSK comparison print. The full report is also saved to
-%      results/_run_all/<opt>/cec2011/summary/report.txt.
+%      results/_run_all/<opt>/cec2011/summary/<opt>_native_log_*.txt
+%      (per-run detail in <opt>_native_runs_log_*.txt).
 %
 % CEC2011 notes: 22 real-world problems with NATIVE (per-problem) dimensions
 % and NO known optimum -- statistics are over raw objective values, which can
 % be negative. The budget is 150,000 evaluations per problem. Keep
-% dimensions = [0] (0 = each problem's own dimension).
+% dimensions = [0] (0 = each problem's own dimension). The CONFIG below runs
+% a subset (problems 4:6); set functions = 1:22 for the full suite.
+% DT-GSK runs the unified seed + threefry under every seed_policy and samples
+% its own NP = 5*D initial population (it ignores the runner X0).
 % =========================================================================
 
 %% ------------------------------ CONFIG ----------------------------------
 optimizers  = {'gsk'};
-% optimizers = {'gsk', 'agsk', 'apgsk','fdb-agsk','egsk','atmals-gsk'};
+% optimizers = {'gsk', 'agsk', 'apgsk','fdb-agsk','egsk','atmals-gsk','dt-gsk'};
 
-functions   = 4:6;         % 22 real-world problems (none excluded)
+functions   = 4:6;         % subset; full suite is 1:22 (22 problems, none excluded)
 dimensions  = 0;            % 0 = each problem's native dimension (required for CEC2011)
 runs        = 25;           % CEC2011 protocol (adjust as needed)
 max_nfes    = 0;            % 0 = suite default (150,000 evaluations)
@@ -31,7 +35,7 @@ max_nfes    = 0;            % 0 = suite default (150,000 evaluations)
 %   'native'/'derived' -> optimizer/suite-hashed diagnostic schedules
 seed_policy = 'unified';
 rand_generator = 'threefry';
-use_parallel = true;       % true = parfor run loop; set false for serial troubleshooting
+use_parallel = true;       % true = parfor run loop; false = serial baseline / troubleshooting
 write_graphs = false;      % false = keep numeric curves/gen_logs, skip slow PNG rendering
 overwrite = true;          % true = archive previous result tree and start a clean run
 % -------------------------------------------------------------------------

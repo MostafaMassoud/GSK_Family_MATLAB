@@ -92,8 +92,19 @@ sequenceDiagram
 
 The `'new'` and `'info'` calls happen once per `(function, dimension)` cell, when
 `gskcec_make_problem` builds the struct. The `'eval'` call happens once per
-generation for the whole population. `run_experiment` owns the matching `'free'`
-when the cell finishes, so handles never leak.
+generation for the whole population. DT-GSK, whose population starts at
+`NP = 5*D`, also makes smaller `'eval'` calls inside a generation (Cauchy-kicked
+and restarted rows, local-search probes, the final polish), each clipped to the
+remaining budget. `run_experiment` owns the matching `'free'` when the cell
+finishes, so handles never leak.
+
+Handle contract: `function_id`, `dimension` and the handle must be finite,
+integer-valued double scalars; anything else raises `gskcec:badInput` and is
+never truncated (`1.7` is not treated as `1`, nor `h + 0.5` as `h`). While any
+handle is live the bridge is `mexLock`ed, so `clear mex` / `clear functions` do
+not unload it and cannot recycle live handle ids underneath MATLAB variables
+that still hold them. Freeing the last handle, or `gskcec_eval('clear')`, unlocks
+it (for example before rebuilding the bridge).
 
 ## Suite Coverage
 
@@ -140,7 +151,7 @@ column count, checks `D` against `problem.dimension()`, and walks one column at 
 time:
 
 ```cpp
-// gskcec_eval_mex.cpp:104-117
+// gskcec_eval_mex.cpp:142-155
 const auto dim = static_cast<int>(mxGetM(prhs[2]));   // rows = D
 const auto np  = mxGetN(prhs[2]);                     // cols = NP
 // ... dimension check ...
@@ -152,8 +163,11 @@ for (std::size_t k = 0; k < np; ++k) {
 
 Because MATLAB stores matrices column-major, candidate `k` already occupies a
 contiguous `D`-length span at offset `k * D`, so the bridge slices it with no
-copy. A `D`-mismatch raises `gskcec:badInput` naming both the supplied row count
-and the expected dimension. CEC2011 F8 is the one special case: its handle first
+copy. Before the `D` check the bridge requires `X` to be a real, full
+(non-sparse) double matrix: sparse storage holds only the nonzeros, so a sparse,
+complex, or non-double `X` raises `gskcec:badInput` instead of being read as a
+dense block. A `D`-mismatch raises `gskcec:badInput` naming both the supplied
+row count and the expected dimension. CEC2011 F8 is the one special case: its handle first
 maps the discrete candidate index into `[eps, 15]` before the transpose
 (`repair_cec2011_f8_population`, `gskcec_make_problem.m:62/102`).
 
@@ -181,8 +195,8 @@ from the bridge's `'info'` call:
 | Quantity | Field | Source |
 |---|---|---|
 | Bounds | `problem.lb`, `problem.ub` (`1 x D`) | `info.lb` / `info.ub` from `BenchmarkProblem::bounds()` |
-| Known optimum | `problem.optimum` | `info.optimum` from `BenchmarkProblem::optimum()` (`NaN` for cec2011/cec2013lsgo) |
-| Evaluation budget | `problem.max_nfes` | suite policy in `gskcec_make_problem.m:68-87` |
+| Known optimum | `problem.optimum` | `info.optimum` from `BenchmarkProblem::optimum()` (`NaN` for cec2011; `0` for cec2013lsgo, whose statistics are nonetheless over raw objectives, so its per-run `error` equals `best_fitness`) |
+| Evaluation budget | `problem.max_nfes` | suite policy in `gskcec_make_problem.m:68-87`, the same for every optimizer (DT-GSK included) |
 | Target error | `problem.target_error` | `1e-8` for known-optimum suites, `NaN` otherwise |
 
 ## Reference Table Use
@@ -203,3 +217,7 @@ Two senses of "correct" stay distinct here:
   bridge means evaluating a port that already matched its ground truth.
 - The **optimizers** are checked statistically against the same optimizer's
   published reference table -- a quality comparison, not a bit-exact one.
+  The DT-GSK tables (`<suite>/dt-gsk/`) were produced by its Python reference
+  implementation, so agreement with them is cross-implementation evidence;
+  `scripts/compare_reference_runs.m` compares a DT-GSK campaign's
+  `per_run.csv` with the imported per-run CEC2017 evidence.

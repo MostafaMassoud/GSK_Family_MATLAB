@@ -12,8 +12,11 @@ param(
     [string]$Matlab = "",
     [string]$Output = "",
     [string]$Reference = "",
-    [string]$SeedPolicy = "reference",
-    [string]$RandGenerator = "threefry"
+    # Empty = each config's own seed_policy / rand_generator applies (gsk_run
+    # falls back to reference + threefry when a config omits them). Pass a
+    # value only to override every config.
+    [string]$SeedPolicy = "",
+    [string]$RandGenerator = ""
 )
 
 $ErrorActionPreference = "Stop"

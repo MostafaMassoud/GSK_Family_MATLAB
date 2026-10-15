@@ -27,10 +27,11 @@ build\gsk_list.exe --references benchmarks\cec_reference_results
 build\gsk_run.exe --config configs\smoke.yml --root .
 ```
 
-`gsk_list --optimizers` should list all six optimizers; `--benchmarks` should
-list all five suites with their functions and dimensions; `--references` should
-load the imported tables (35 files / 894 rows) and confirm the reference data is
-reachable. Use the per-suite smoke validators to confirm each port still matches
+`gsk_list --optimizers` should list all seven optimizers (`dt-gsk` last);
+`--benchmarks` should list all five suites with their functions and dimensions;
+`--references` should load the imported tables (currently 165 files / 1411 rows)
+and confirm the reference data is reachable. `ctest` should report 13 suites and
+the MATLAB smoke runner 13 tests. Use the per-suite smoke validators to confirm each port still matches
 its ground truth:
 
 ```powershell
@@ -88,6 +89,12 @@ If new external evidence is added, document in
 - budget and run count;
 - any format-conversion steps.
 
+Per-run evidence that comes with a reference (for example
+`cec2017/dt-gsk/evidence/per_run.csv`, `seed_schedule.csv`, and the run's JSON
+metadata) goes in an `evidence/` subfolder, which the table loader ignores, with
+a `PROVENANCE.md` beside the tables recording sources and commits, as for
+`cec2017/dt-gsk/`.
+
 The imported-reference loader already tolerates `-`, `nan`, `n/a`, and `na` as
 missing statistics (for example the AGSK CEC2020 D=5 table reports `N/A` for
 functions 6-7); record such gaps rather than fabricating values.
@@ -117,4 +124,8 @@ Slower-moving upkeep that keeps the evidence base broad and current.
 - Keep the two CEC2013 suites (`cec2013`, `cec2013lsgo`) separate; never merge
   them.
 - Expand imported reference-comparison tables for `cec2013`, `cec2013lsgo`, and
-  `cec2020`, which are currently thinner than `cec2011` and `cec2017`.
+  `cec2020`, which are currently thinner than `cec2011` and `cec2017` (beyond
+  `gsk` on `cec2013` and `agsk` on `cec2020`, only `dt-gsk` has tables there).
+- When a DT-GSK campaign completes, record its `compare_reference_runs.m`
+  summary in `src/optimizers/dt-gsk/README.md`, the one place that holds the
+  DT-GSK validation numbers.

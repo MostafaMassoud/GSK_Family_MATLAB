@@ -85,6 +85,10 @@ still pass `options.protocol` explicitly.
 `NLS = round(0.05*np)`, `RP_Min/RP_Max = 3/5`,
 `RangeLS_Max/RangeLS_Min = 0.2/1e-10`. Overridable via `options`
 (`np`, `kf_pool`, `kr_pool`, `k_pool`, `p_pool`, `pls_pool`, `protocol`).
+An overridden `kf_pool` / `kr_pool` / `k_pool` / `p_pool` / `pls_pool` must
+contain the hard-coded initial pick `0.5` / `0.9` / `10` / `0.1` / `1`
+(the first-generation probability update looks it up in the pool); otherwise
+`atmals_gsk:options` is raised before any RNG draw.
 
 ## Sanctioned modernizations / interface notes
 
@@ -101,8 +105,16 @@ still pass `options.protocol` explicitly.
 - Convergence is recorded once per generation (interface), whereas the
   reference cec2017 driver appended per evaluation and the cec2011 driver per
   generation. Bookkeeping only; no RNG or trajectory impact.
+- The reference per-child counter reads `max_nfes + 1` when a generation
+  crosses the budget (`max_nfes` not a multiple of `np`, or below `np`);
+  `result.nfes` and `convergence.nfes` are clipped at `max_nfes`. The loop
+  counter and the crossing semantics are unchanged (only children within
+  budget update the best-so-far). Bookkeeping only; no RNG or trajectory
+  impact.
 - The reference never stops early, so `termination` is always
   `'max_evaluations'`.
 
 Smoke test: `src/tests/test_atmals_gsk_smoke.m` (both protocols, determinism,
-budget accounting, interface contract).
+interface contract; budget-crossing accounting for non-divisible and below-NP
+budgets under both protocols; fair-start X0 reuse with the post-X0 RNG
+restore; the cec2011 `D == 1` senior-only branch; pool-override validation).

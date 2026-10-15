@@ -2,8 +2,9 @@ function test_gsk_smoke()
 %TEST_GSK_SMOKE Smoke test for gsk_optimize on a pure-MATLAB sphere problem.
 %
 % Checks the docs/reference/matlab_interface.md result contract, that optimization
-% actually happened, budget accounting, convergence consistency, and
-% seed-determinism. Raises error() on any failure.
+% actually happened, budget accounting, convergence consistency,
+% seed-determinism, and the end-of-run target-error zeroing (both
+% branches). Raises error() on any failure.
 
 d = 10;
 problem = local_sphere_problem(d, 8000);
@@ -25,6 +26,21 @@ local_assert(strcmp(r1.termination, 'max_evaluations'), ...
     'gsk: termination must be max_evaluations');
 local_assert(r1.nfes == problem.max_nfes, ...
     'gsk: full budget must be consumed (counter clipped at max_nfes)');
+local_assert(r1.error ~= 0, ...
+    'gsk: fixture must leave the raw error above target (exercises the unzeroed branch)');
+
+% end-of-run zeroing branch: a target the run surely beats zeroes the error
+% but must not stop the run early
+problem_t = problem;
+problem_t.target_error = 1e3;
+rt = gsk_optimize(problem_t, struct('seed', 42));
+local_check_contract(rt, problem_t, 'gsk');
+local_assert(rt.best_fitness - problem_t.optimum < problem_t.target_error && rt.error == 0, ...
+    'gsk: error strictly below target must be zeroed at the end of the run');
+local_assert(strcmp(rt.termination, 'max_evaluations') && rt.nfes == problem_t.max_nfes, ...
+    'gsk: target zeroing must not stop the run early');
+local_assert(rt.best_fitness == r1.best_fitness, ...
+    'gsk: target_error must not change the trajectory (it only zeroes the final error)');
 
 % determinism: same seed must reproduce everything bit-for-bit
 r2 = gsk_optimize(problem, struct('seed', 42));
@@ -100,10 +116,17 @@ bf = problem.evaluate(r.best_x);
 local_assert(abs(bf - r.best_fitness) <= 1e-12 * max(1, abs(bf)), ...
     sprintf('%s: best_x does not reproduce best_fitness', name));
 
-% error semantics: equal to best_fitness - optimum, or zeroed below target
-if r.error ~= 0
-    local_assert(abs(r.error - (r.best_fitness - problem.optimum)) <= 1e-12, ...
-        sprintf('%s: error field inconsistent', name));
+% error semantics: best_fitness - optimum, zeroed at the end of the run
+% when strictly below the target (GSK never stops early)
+if isnan(problem.optimum)
+    local_assert(isnan(r.error), sprintf('%s: error must be NaN for unknown optimum', name));
+else
+    raw = r.best_fitness - problem.optimum;
+    if ~isnan(problem.target_error) && raw < problem.target_error
+        local_assert(r.error == 0, sprintf('%s: error below target must be zeroed', name));
+    else
+        local_assert(r.error == raw, sprintf('%s: error field inconsistent', name));
+    end
 end
 end
 

@@ -12,10 +12,13 @@ function run_experiment(varargin)
 % Set 'verbose',false to suppress the per-run lines and print only one
 % summary row per (function, dimension) -- useful for long multi-run sweeps.
 % Existing output directories are resume/add targets by default: generated CSVs
-% are appended where possible, completed run ids are skipped, and fixed-name
-% artifacts are archived under _archive/<timestamp>/ before refresh. Set
-% 'overwrite',true to archive the existing output tree first and start a clean
-% replacement run without reusing old per-run rows.
+% are appended where possible, completed run ids are skipped when their stored
+% seed, cell budget (max_nfes) and generator match the active run (otherwise
+% they are re-run and appended), and fixed-name artifacts are archived under
+% _archive/<timestamp>/ before refresh. Set 'overwrite',true to archive the
+% existing output tree first and start a clean replacement run without reusing
+% old per-run rows. An output_dir inside benchmarks/cec_reference_results is
+% always refused.
 %
 % Writes the CEC-competition results layout (docs/reference/result_schema.md):
 %
@@ -64,7 +67,7 @@ p.addParameter('project_root', '', @ischar);
 p.addParameter('output_dir', '', @ischar);
 p.addParameter('overwrite', false, @(x) islogical(x) || isnumeric(x));
 p.addParameter('verbose', true, @(x) islogical(x) || isnumeric(x));
-p.addParameter('seed_policy', 'unified', @(x) ischar(x) || isstring(x));
+p.addParameter('seed_policy', 'unified', @check_seed_policy);
 p.addParameter('rand_generator', 'threefry', @(x) any(strcmpi(char(x), {'threefry', 'twister', 'seed', 'state', 'auto', 'default'})));
 p.addParameter('use_parallel', false, @(x) islogical(x) || isnumeric(x));
 p.addParameter('write_graphs', false, @(x) islogical(x) || isnumeric(x));
@@ -77,6 +80,19 @@ assert(~isempty(a.suite), 'run_experiment:args', 'suite is required');
 assert(~isempty(a.functions), 'run_experiment:args', 'functions is required');
 assert(~isempty(a.project_root), 'run_experiment:args', 'project_root is required');
 assert(~isempty(a.output_dir), 'run_experiment:args', 'output_dir is required');
+% 'auto'/'default' are resolved only by the unified policy (threefry when
+% available, else twister). native/derived hand rand_generator straight to
+% gsk_set_rng, which rejects them, so every cell would fail as a SKIP.
+if any(strcmpi(char(a.seed_policy), {'native', 'derived'})) && ...
+        any(strcmpi(char(a.rand_generator), {'auto', 'default'}))
+    error('run_experiment:args', ...
+        ['rand_generator ''%s'' is resolved only under seed_policy=''unified''; ' ...
+         'use threefry, twister, seed, or state with seed_policy=''%s'''], ...
+        char(a.rand_generator), char(a.seed_policy));
+end
+% Generated output must never land in the imported reference tree; checked on
+% every run (not only overwrite) and before any directory is created.
+assert_output_dir_outside_reference(a.output_dir, a.project_root);
 
 setup_paths(a.project_root);
 if ~strcmpi(a.suite, 'sphere')
@@ -129,17 +145,26 @@ known_optimum = ~any(strcmp(a.suite, {'cec2011', 'cec2013lsgo'}));
 
 % Existing result records make reruns resumable: completed runs are skipped,
 % new cells are added, and summary tables are refreshed from old + new data.
+% Each per-run row records the cell budget and effective generator it was run
+% with; a per_run.csv written before those columns existed is upgraded once
+% (upgrade_legacy_per_run) before it is read.
+per_run_path = fullfile(summary_dir, 'per_run.csv');
+per_run_header = ['optimizer,suite,function,dimension,run,seed,best_fitness,error,' ...
+                  'nfes,termination,runtime_seconds,max_nfes,rand_generator'];
+upgrade_legacy_per_run(per_run_path, per_run_header, summary_dir, a.project_root, session_tag);
 existing_records = load_existing_per_run_records(summary_dir, a.optimizer, a.suite);
 stats = load_existing_summary_stats(summary_dir, a.optimizer, a.suite);
 if ~isempty(stats)
     fprintf('run_experiment: loaded %d existing summary row(s) for resume/add mode.\n', numel(stats));
 end
+% Latest seed_schedule.csv seed per (Dim,Function,Run), so reused runs can be
+% re-recorded when an intermediate session wrote a different seed for them.
+schedule_seeds = load_latest_schedule_seeds(fullfile(summary_dir, 'seed_schedule.csv'));
 
 % Full per-run schema is preserved under summary/per_run.csv (seeds, nfes,
-% termination, runtime) in addition to the CEC-style aggregates. Existing files
-% are appended, never truncated.
-fr = open_csv_for_append(fullfile(summary_dir, 'per_run.csv'), ...
-    'optimizer,suite,function,dimension,run,seed,best_fitness,error,nfes,termination,runtime_seconds');
+% termination, runtime, budget, generator) in addition to the CEC-style
+% aggregates. Existing files are appended, never truncated.
+fr = open_csv_for_append(per_run_path, per_run_header);
 closer = onCleanup(@() fclose(fr));
 
 % seed_schedule.csv: the (Dim,Function,Run,Seed) actually used, written live.
@@ -205,19 +230,34 @@ for dim = a.dimensions(:)'
         existing_cell_records = records_for_cell(existing_records, D, func_id);
         requested_runs = 1:a.runs;
         [existing_cell_records, stale_runs] = keep_records_matching_current_seed( ...
-            existing_cell_records, a, D, func_id, requested_runs);
+            existing_cell_records, a, D, func_id, requested_runs, ...
+            problem.max_nfes, effective_rand_generator(a));
         if ~isempty(stale_runs)
             dim_resume_messages{end + 1} = sprintf( ... %#ok<AGROW>
-                'RESUME %s f%d D%d: ignoring stale-seed existing run(s): %s', ...
+                ['RESUME %s f%d D%d: ignoring stale existing run(s) ' ...
+                 '(seed, budget or generator differ from this run): %s'], ...
                 a.suite, func_id, D, run_list_text(stale_runs));
         end
         existing_runs = unique([existing_cell_records.run]);
         runs_to_do = setdiff(requested_runs, existing_runs);
+        % Reused runs belong to the active schedule too: when the latest
+        % seed_schedule.csv row for one of them came from another session's
+        % configuration, append the active seed again, so the latest row per
+        % (Dim,Function,Run) always describes the current results (that is
+        % the row verify_unified_seed_schedule compares).
+        for r = setdiff(requested_runs, runs_to_do)
+            seed_r = pick_run_seed(a, D, func_id, r);
+            key = schedule_key(D, func_id, r);
+            if ~isKey(schedule_seeds, key) || ~seeds_equal(schedule_seeds(key), seed_r)
+                fprintf(fs, '%d,%d,%d,%s\n', D, func_id, r, seed_to_text(seed_r));
+                schedule_seeds(key) = seed_r;
+            end
+        end
         if isempty(runs_to_do)
             dim_resume_messages{end + 1} = sprintf( ... %#ok<AGROW>
                 'RESUME %s f%d D%d: runs 1:%d already present; skipping cell', ...
                 a.suite, func_id, D, a.runs);
-            [~, combined_values] = combine_existing_and_new_values( ...
+            [combined_runs, combined_values] = combine_existing_and_new_values( ...
                 existing_cell_records, runs_to_do, [], known_optimum, a.runs);
             if ~isempty(combined_values)
                 row = stat_row_from_values(func_id, D, combined_values, known_optimum, report_zero_tol(a));
@@ -231,6 +271,18 @@ for dim = a.dimensions(:)'
                 dim_done = dim_done + 1;
                 dim_func_ids(end + 1) = func_id; %#ok<AGROW>
                 dim_means(end + 1) = row.mean;  %#ok<AGROW>
+                % The median over the reported runs changes when the requested
+                % run count does; keep only that run's curve in curves/.
+                med_run_id = median_run_id(combined_runs, combined_values, runs_to_do);
+                [n_moved, has_trace] = keep_only_median_curve(curves_dir, graphs_dir, func_id, D, ...
+                    med_run_id, combined_values(combined_runs == med_run_id), false, session_tag);
+                if ~has_trace
+                    dim_resume_messages{end + 1} = missing_curve_message(a.suite, func_id, D, med_run_id); %#ok<AGROW>
+                elseif n_moved > 0
+                    [cx, cy] = read_curve(curves_dir, func_id, D, med_run_id);   % re-render its graph
+                    curve_f(end + 1) = func_id; curve_d(end + 1) = D;      %#ok<AGROW>
+                    curve_x{end + 1} = cx;      curve_y{end + 1} = cy;     %#ok<AGROW>
+                end
             end
             clear problem_guard
             continue;
@@ -324,7 +376,7 @@ for dim = a.dimensions(:)'
                 ge = arrayfun(@(b) curve_value(b, optimum_local, opt_name, suite_name), gb);
                 conv_nfes{rr} = gn;
                 conv_err{rr} = ge;
-                chk_errors(rr, :) = checkpoint_errors(gn, ge, checkpoints);
+                chk_errors(rr, :) = checkpoint_errors(min(gn, wp.max_nfes), ge, checkpoints);
                 if known_optimum
                     run_errors(rr) = result.error;
                 else
@@ -341,10 +393,10 @@ for dim = a.dimensions(:)'
                 run_rt(rr)   = result.runtime_seconds;
                 run_term{rr} = result.termination;
                 notes_c{rr} = result.notes;
-                prun_rows{rr} = sprintf('%s,%s,%d,%d,%d,%s,%.10e,%.10e,%d,%s,%.6f\n', ...
+                prun_rows{rr} = sprintf('%s,%s,%d,%d,%d,%s,%.17g,%.17g,%d,%s,%.6f,%d,%s\n', ...
                         opt_name, suite_name, func_id, D, run_id, seed_to_text(seed), ...
                         result.best_fitness, err_out, result.nfes, ...
-                        result.termination, result.runtime_seconds);
+                        result.termination, result.runtime_seconds, wp.max_nfes, rand_gen);
                 if verbose
                     verb_rows{rr} = sprintf('%s %s f%d D%d run %d/%d: best=%.6e error=%.6e nfes=%d (%.1fs)\n', ...
                             opt_name, suite_name, func_id, D, run_id, nruns, ...
@@ -372,7 +424,7 @@ for dim = a.dimensions(:)'
                 ge = arrayfun(@(b) curve_value(b, optimum_local, opt_name, suite_name), gb);
                 conv_nfes{rr} = gn;
                 conv_err{rr} = ge;
-                chk_errors(rr, :) = checkpoint_errors(gn, ge, checkpoints);
+                chk_errors(rr, :) = checkpoint_errors(min(gn, wp.max_nfes), ge, checkpoints);
                 if known_optimum
                     run_errors(rr) = result.error;
                 else
@@ -386,10 +438,10 @@ for dim = a.dimensions(:)'
                 run_rt(rr)   = result.runtime_seconds;
                 run_term{rr} = result.termination;
                 notes_c{rr} = result.notes;
-                prun_rows{rr} = sprintf('%s,%s,%d,%d,%d,%s,%.10e,%.10e,%d,%s,%.6f\n', ...
+                prun_rows{rr} = sprintf('%s,%s,%d,%d,%d,%s,%.17g,%.17g,%d,%s,%.6f,%d,%s\n', ...
                         opt_name, suite_name, func_id, D, run_id, seed_to_text(seed), ...
                         result.best_fitness, err_out, result.nfes, ...
-                        result.termination, result.runtime_seconds);
+                        result.termination, result.runtime_seconds, wp.max_nfes, rand_gen);
                 if verbose
                     verb_rows{rr} = sprintf('%s %s f%d D%d run %d/%d: best=%.6e error=%.6e nfes=%d (%.1fs)\n', ...
                             opt_name, suite_name, func_id, D, run_id, nruns, ...
@@ -412,12 +464,23 @@ for dim = a.dimensions(:)'
         [combined_runs, combined_values] = combine_existing_and_new_values( ...
             existing_cell_records, runs_to_do, run_errors, known_optimum, a.runs);
         [med_run_id, med_new_idx] = median_run_id(combined_runs, combined_values, runs_to_do);
+        % One median-run curve per cell: curves from earlier sessions whose run
+        % is no longer the median are archived, never left beside this one.
+        [~, has_trace] = keep_only_median_curve(curves_dir, graphs_dir, func_id, D, ...
+            med_run_id, combined_values(combined_runs == med_run_id), med_new_idx > 0, session_tag);
         if med_new_idx > 0
             write_curve(curves_dir, func_id, D, med_run_id, conv_nfes{med_new_idx}, conv_err{med_new_idx}, session_tag);
             curve_f(end + 1) = func_id;                    %#ok<AGROW>
             curve_d(end + 1) = D;                          %#ok<AGROW>
             curve_x{end + 1} = conv_nfes{med_new_idx};      %#ok<AGROW>
             curve_y{end + 1} = conv_err{med_new_idx};       %#ok<AGROW>
+        elseif has_trace
+            % The median is an earlier run whose stored trace is still current.
+            [cx, cy] = read_curve(curves_dir, func_id, D, med_run_id);
+            curve_f(end + 1) = func_id; curve_d(end + 1) = D;      %#ok<AGROW>
+            curve_x{end + 1} = cx;      curve_y{end + 1} = cy;     %#ok<AGROW>
+        else
+            dim_resume_messages{end + 1} = missing_curve_message(a.suite, func_id, D, med_run_id); %#ok<AGROW>
         end
 
         row = stat_row_from_values(func_id, D, combined_values, known_optimum, report_zero_tol(a));
@@ -455,7 +518,7 @@ for dim = a.dimensions(:)'
             fprintf('(comparison table skipped: %s)\n', cmp_err.message);
         end
         try
-            fprintf('\nPost-processing artifacts for %s %s D%d...\n', upper(a.optimizer), upper(a.suite), D);
+            fprintf('\nPost-processing artifacts for %s %s %s...\n', upper(a.optimizer), upper(a.suite), dtag);
             if logical(a.write_graphs)
                 ng = make_convergence_graphs(graphs_dir, a, curve_f, curve_d, curve_x, curve_y, session_tag);
                 fprintf('Saved %d convergence graph(s) to %s\n', ng, graphs_dir);
@@ -506,9 +569,11 @@ if write_header
 end
 end
 
-function archive_existing_file(path, session_tag)
+function ok = archive_existing_file(path, session_tag)
 %ARCHIVE_EXISTING_FILE Copy a fixed-name artifact before refreshing it.
 % The previous file remains recoverable under <folder>/_archive/<session_tag>/.
+% ok is false only when an existing file could not be copied.
+ok = true;
 if ~isfile(path)
     return;
 end
@@ -524,10 +589,117 @@ end
 try
     copyfile(path, target);
 catch err
+    ok = false;
     warning('run_experiment:archive', ...
             'Could not archive %s before refresh (%s). Existing file remains in place until write.', ...
             path, err.message);
 end
+end
+
+function upgrade_legacy_per_run(path, header, summary_dir, project_root, session_tag)
+%UPGRADE_LEGACY_PER_RUN Add the trailing max_nfes,rand_generator columns once.
+% Resume reuses a per_run.csv row only when its seed, cell budget and effective
+% generator all match the active run (keep_records_matching_current_seed). A
+% file written before those two columns existed (its header is a prefix of the
+% current one) is archived, its header is replaced, and each older row gets the
+% two fields from the tree's previous run_config.json: the configuration of
+% the session that last wrote the tree, with the budget resolved per cell the
+% way that session did (gskcec_make_problem). Rows that cannot be resolved get
+% blank fields, so they are re-run rather than reused. Existing field values
+% are copied unchanged.
+if ~isfile(path); return; end
+fid = fopen(path, 'r');
+if fid < 0; return; end
+raw = fread(fid, Inf, '*char')';
+fclose(fid);
+lines = regexp(raw, '\r?\n', 'split');
+first = strtrim(lines{1});
+if isempty(first) || ~startsWith(header, [first ',']); return; end   % current or unknown header
+legacy_cols = numel(strsplit(first, ','));
+[override, generator] = previous_tree_config(summary_dir);
+budgets = containers.Map('KeyType', 'char', 'ValueType', 'double');
+for i = 2:numel(lines)
+    f = strsplit(lines{i}, ',', 'CollapseDelimiters', false);
+    if isempty(strtrim(lines{i})) || numel(f) ~= legacy_cols; continue; end
+    key = strjoin(f(2:4), '|');   % suite|function|dimension
+    if ~isKey(budgets, key)
+        budgets(key) = legacy_cell_budget(f{2}, str2double(f{3}), str2double(f{4}), project_root, override);
+    end
+    if isfinite(budgets(key)) && ~isempty(generator)
+        lines{i} = sprintf('%s,%d,%s', lines{i}, budgets(key), generator);
+    else
+        lines{i} = [lines{i} ',,'];
+    end
+end
+lines{1} = header;
+assert(archive_existing_file(path, session_tag), 'run_experiment:io', ...
+       'cannot archive %s before adding the max_nfes,rand_generator columns', path);
+fid = fopen(path, 'w');
+assert(fid > 0, 'run_experiment:io', 'cannot open %s', path);
+fprintf(fid, '%s', strjoin(lines, newline));
+fclose(fid);
+fprintf(['run_experiment: per_run.csv upgraded with max_nfes,rand_generator columns ' ...
+         '(previous file archived under summary/_archive/%s/).\n'], session_tag);
+end
+
+function [override, generator] = previous_tree_config(summary_dir)
+%PREVIOUS_TREE_CONFIG max_nfes override and effective generator recorded in the
+% tree's run_config.json by the previous session (NaN / '' when unavailable).
+override = NaN;
+generator = '';
+path = fullfile(summary_dir, 'run_config.json');
+if ~isfile(path); return; end
+try
+    cfg = jsondecode(fileread(path));
+    if isfield(cfg, 'max_nfes_override') && isnumeric(cfg.max_nfes_override)
+        if isempty(cfg.max_nfes_override)
+            override = 0;   % empty override = suite default budget
+        elseif isscalar(cfg.max_nfes_override)
+            override = double(cfg.max_nfes_override);
+        end
+    end
+    if isfield(cfg, 'rand_generator') && ischar(cfg.rand_generator)
+        generator = cfg.rand_generator;
+    end
+catch
+end
+end
+
+function budget = legacy_cell_budget(suite, func_id, D, project_root, override)
+%LEGACY_CELL_BUDGET Cell budget under a recorded max_nfes override (NaN if unknown).
+budget = NaN;
+if ~isfinite(override) || ~all(isfinite([func_id D])); return; end
+if override > 0
+    budget = override;
+    return;
+end
+try
+    p = gskcec_make_problem(suite, func_id, D, project_root, override);
+    budget = p.max_nfes;
+    free_problem(p);
+catch
+end
+end
+
+function m = load_latest_schedule_seeds(path)
+%LOAD_LATEST_SCHEDULE_SEEDS Latest seed_schedule.csv seed per (Dim,Function,Run).
+m = containers.Map('KeyType', 'char', 'ValueType', 'double');
+if ~isfile(path); return; end
+fid = fopen(path, 'r');
+if fid < 0; return; end
+closer = onCleanup(@() fclose(fid)); %#ok<NASGU>
+fgetl(fid);   % header
+data = textscan(fid, '%f%f%f%f', 'Delimiter', ',', 'CollectOutput', true);
+rows = data{1};
+for i = 1:size(rows, 1)
+    if all(isfinite(rows(i, :)))
+        m(schedule_key(rows(i, 1), rows(i, 2), rows(i, 3))) = rows(i, 4);
+    end
+end
+end
+
+function key = schedule_key(D, func_id, run)
+key = sprintf('%d,%d,%d', D, func_id, run);
 end
 
 function archived_to = overwrite_output_tree(output_dir, project_root, session_tag)
@@ -571,11 +743,26 @@ assert(ok, 'run_experiment:overwriteArchive', ...
        out_abs, archived_to, msg);
 end
 
+function assert_output_dir_outside_reference(output_dir, project_root)
+%ASSERT_OUTPUT_DIR_OUTSIDE_REFERENCE Refuse an output_dir inside (or equal to)
+% the imported reference tree benchmarks/cec_reference_results. Its tables are
+% read-only evidence; generated files there would also break the C++ reference
+% loader for every later verify/compare.
+out_abs = canonical_path(output_dir);
+reference_abs = canonical_path(fullfile(project_root, 'benchmarks', 'cec_reference_results'));
+assert(~is_path_within_or_equal(out_abs, reference_abs), 'run_experiment:outputUnsafe', ...
+       'Refusing to write generated results inside imported reference results: %s', out_abs);
+end
+
 function p = canonical_path(path)
+% Relative paths resolve against MATLAB's pwd (java.io.File alone would use the
+% JVM start directory, which differs after a cd).
+p = char(string(path));
 try
-    p = char(java.io.File(char(path)).getCanonicalPath());
+    f = java.io.File(p);
+    if ~f.isAbsolute(); f = java.io.File(fullfile(pwd, p)); end
+    p = char(f.getCanonicalPath());
 catch
-    p = char(string(path));
 end
 end
 
@@ -596,7 +783,8 @@ tf = strcmp(child, parent) || startsWith(child, [parent filesep]);
 end
 
 function records = empty_run_records()
-records = struct('dim', {}, 'func', {}, 'run', {}, 'seed', {}, 'best', {}, 'error', {});
+records = struct('dim', {}, 'func', {}, 'run', {}, 'seed', {}, 'best', {}, 'error', {}, ...
+                 'nfes', {}, 'max_nfes', {}, 'rand_generator', {});
 end
 
 function records = load_existing_per_run_records(summary_dir, optimizer, suite)
@@ -612,15 +800,24 @@ while true
     line = fgetl(fid);
     if ~ischar(line); break; end
     if isempty(strtrim(line)); continue; end
-    f = strsplit(line, ',');
+    f = strsplit(line, ',', 'CollapseDelimiters', false);
     if numel(f) < 8; continue; end
     if ~strcmp(f{1}, optimizer) || ~strcmp(f{2}, suite); continue; end
+    % Rows without the trailing max_nfes,rand_generator fields (older files
+    % that could not be upgraded) stay readable; an unknown budget/generator
+    % never matches, so such a run is re-run rather than reused.
     rec = struct('dim', str2double(f{4}), ...
                  'func', str2double(f{3}), ...
                  'run', str2double(f{5}), ...
                  'seed', str2double(f{6}), ...
                  'best', str2double(f{7}), ...
-                 'error', str2double(f{8}));
+                 'error', str2double(f{8}), ...
+                 'nfes', NaN, 'max_nfes', NaN, 'rand_generator', '');
+    if numel(f) >= 9; rec.nfes = str2double(f{9}); end
+    if numel(f) >= 13
+        rec.max_nfes = str2double(f{12});
+        rec.rand_generator = strtrim(f{13});
+    end
     if all(isfinite([rec.dim rec.func rec.run])) && (isfinite(rec.best) || isfinite(rec.error))
         records(end + 1) = rec; %#ok<AGROW>
     end
@@ -636,7 +833,7 @@ mask = [records.dim] == D & [records.func] == func_id;
 out = records(mask);
 end
 
-function [kept, stale_runs] = keep_records_matching_current_seed(records, a, D, func_id, requested_runs)
+function [kept, stale_runs] = keep_records_matching_current_seed(records, a, D, func_id, requested_runs, max_nfes, rand_gen)
 %KEEP_RECORDS_MATCHING_CURRENT_SEED Reuse only rows matching today's schedule.
 %
 % Existing result directories are preserved, but stale rows from a previous
@@ -648,6 +845,12 @@ function [kept, stale_runs] = keep_records_matching_current_seed(records, a, D, 
 % generated with a different seed. The project contract is append-only results,
 % not blind trust in old rows; reuse is allowed only when the saved Seed column
 % agrees with pick_run_seed for the active configuration.
+%
+% The seed formula deliberately has no budget or generator term, so the saved
+% max_nfes and rand_generator columns must also equal this cell's budget
+% (max_nfes) and the effective generator (rand_gen). Otherwise a reduced-budget
+% smoke run, or a twister run resumed under threefry, would be reused as a
+% completed run of the new configuration.
 kept = empty_run_records();
 stale_runs = [];
 if isempty(records)
@@ -659,13 +862,15 @@ for i = 1:numel(records)
         continue;
     end
     expected_seed = pick_run_seed(a, D, func_id, r);
-    if seeds_equal(records(i).seed, expected_seed)
+    if seeds_equal(records(i).seed, expected_seed) && records(i).max_nfes == max_nfes && ...
+            strcmpi(records(i).rand_generator, rand_gen)
         kept(end + 1) = records(i); %#ok<AGROW>
     else
         stale_runs(end + 1) = r; %#ok<AGROW>
     end
 end
-stale_runs = unique(stale_runs);
+% A run that also has a matching row is reused, so it is not reported stale.
+stale_runs = setdiff(unique(stale_runs), [kept.run]);
 end
 
 function tf = seeds_equal(a, b)
@@ -757,8 +962,9 @@ cell_best = min(values); cell_median = median(values);
 cell_mean = mean(values); cell_worst = max(values); cell_sd = std(values);
 if known_optimum
     % CEC zero-cutoff: a reported error with |x| < 1e-8 is written as 0.
-    % Per-run errors keep full precision in per_run.csv / the runs log;
-    % this only affects the summary stats.
+    % Per-run values are stored at round-trip precision (%.17g in
+    % per_run.csv, %.16e in the runs log), so a resumed summary matches an
+    % uninterrupted run; this cutoff only affects the summary stats.
     zc = @(x) x * (abs(x) >= zero_tol);
     cell_best = zc(cell_best); cell_median = zc(cell_median);
     cell_mean = zc(cell_mean); cell_worst = zc(cell_worst); cell_sd = zc(cell_sd);
@@ -881,6 +1087,68 @@ end
 fclose(f);
 end
 
+function [n_moved, has_trace] = keep_only_median_curve(curves_dir, graphs_dir, func_id, D, keep_run, keep_value, will_write, session_tag)
+%KEEP_ONLY_MEDIAN_CURVE Leave at most one median-run curve per cell.
+% After a resume the median is re-selected over old + new runs, so curves
+% written by earlier sessions for other run ids are moved (archive copy, then
+% removal) to curves/_archive/<session_tag>/. A stored curve for the median run
+% id is kept only if it ends at that run's final value (keep_value); one from a
+% stale row of the same run id (another seed, budget or generator) is moved
+% too. has_trace says whether the median run's curve exists or is about to be
+% written (will_write). When the median changed, or its trace is unavailable,
+% the cell's graph PNG was drawn from another run and is archived the same
+% way; it is re-rendered from the median trace when write_graphs is on.
+n_moved = 0;
+L = dir(fullfile(curves_dir, sprintf('Figure_F%d_D%d_Run#*.csv', func_id, D)));
+for k = 1:numel(L)
+    tok = regexp(L(k).name, '_Run#(\d+)\.csv$', 'tokens', 'once');
+    if isempty(tok) || str2double(tok{1}) == keep_run; continue; end
+    n_moved = n_moved + move_to_archive(fullfile(L(k).folder, L(k).name), session_tag);
+end
+keep_path = fullfile(curves_dir, sprintf('Figure_F%d_D%d_Run#%d.csv', func_id, D, keep_run));
+has_trace = will_write || isfile(keep_path);
+if ~will_write && has_trace
+    [~, y] = read_curve(curves_dir, func_id, D, keep_run);
+    % Final curve value vs the run's statistic: equal up to the 1e-8 zero cut
+    % and the 11-digit rounding of per_run.csv rows written before %.17g.
+    if isempty(y) || ~(abs(y(end) - keep_value) <= max(1e-8, 1e-9 * abs(keep_value)))
+        n_moved = n_moved + move_to_archive(keep_path, session_tag);
+        has_trace = false;
+    end
+end
+if n_moved > 0 || ~has_trace
+    move_to_archive(fullfile(graphs_dir, sprintf('Figure_F%d_D%d.png', func_id, D)), session_tag);
+end
+end
+
+function moved = move_to_archive(path, session_tag)
+%MOVE_TO_ARCHIVE Archive a superseded file, then remove it from the active tree.
+moved = false;
+if ~isfile(path); return; end
+if archive_existing_file(path, session_tag)
+    delete(path);
+    moved = true;
+end
+end
+
+function [x, y] = read_curve(curves_dir, func_id, D, run)
+%READ_CURVE Stored curve (Eval, BestError) of an earlier run; empty if absent.
+x = [];
+y = [];
+fid = fopen(fullfile(curves_dir, sprintf('Figure_F%d_D%d_Run#%d.csv', func_id, D, run)), 'r');
+if fid < 0; return; end
+closer = onCleanup(@() fclose(fid)); %#ok<NASGU>
+fgetl(fid);   % header
+data = textscan(fid, '%f%f%*[^\n]', 'Delimiter', ',');
+x = data{1};
+y = data{2};
+end
+
+function s = missing_curve_message(suite, func_id, D, run)
+s = sprintf(['RESUME %s f%d D%d: median run %d was reused from an earlier session ' ...
+             'whose curve was not stored; no curve/graph for this cell'], suite, func_id, D, run);
+end
+
 function write_summary_files(summary_dir, optimizer, suite, stats, known_optimum, session_tag)
 % Per-dimension summary tables (Function,Best,Median,Mean,Worst,SD), and a
 % dimensionless rollup for native-dim suites (cec2011, cec2013lsgo).
@@ -926,7 +1194,10 @@ env.rand_generator = char(effective_rand_generator(a));
 % Report the actual scheme for whatever policy is in effect (reference /
 % unified / native / derived). seed_scheme_string is the single source of truth, so
 % environment.json stays consistent with run_config.json and the real seeds.
-env.seed_policy = [char(a.seed_policy) ': ' seed_scheme_string(a)];
+% The scheme text already starts with its own label ('unified: ...'); drop it
+% so the field reads '<seed_policy>: <scheme>' without a duplicated prefix.
+env.seed_policy = [char(a.seed_policy) ': ' ...
+                   regexprep(seed_scheme_string(a), '^[^:]+:\s*', '', 'once')];
 env.initial_population_policy = initial_population_policy_string(a);
 env.max_nfes_override = a.max_nfes;
 env.statistics_basis = ternary(known_optimum, 'error_vs_optimum', 'raw_objective');
@@ -988,8 +1259,9 @@ function tf = unified_initialization_enabled(a)
 %UNIFIED_INITIALIZATION_ENABLED Strict fair-start mode for cross-family runs.
 % Only unified mode supplies runner-owned X0. Reference/native/derived modes
 % keep each optimizer's original initialization draw order so published-table
-% reproduction and diagnostic RNG investigations remain unchanged.
-tf = strcmpi(char(a.seed_policy), 'unified');
+% reproduction and diagnostic RNG investigations remain unchanged. DT-GSK
+% self-initializes from its own 'init' substream, so no runner X0 is drawn.
+tf = strcmpi(char(a.seed_policy), 'unified') && ~is_unified_only(a.optimizer);
 end
 
 function [x0, rng_after_x0] = make_unified_initial_population(problem, seed, rng_generator)
@@ -1040,6 +1312,10 @@ function e = checkpoint_errors(conv_nfes, conv_err, checkpoints)
 % Best-so-far value at each checkpoint = the recorded value at the largest
 % generation whose nfes <= checkpoint (the convergence trace is monotone in
 % best-so-far). Before the first record, fall back to the first value.
+% Callers pass conv_nfes clipped at max_nfes: a budget-crossing final counter
+% (FDB-AGSK/eGSK max_nfes+1, the eGSK IP overshoot) then folds into the final
+% checkpoint, so E<max_nfes> equals the per-run final error. The curves and
+% optimizer counters themselves are not changed.
 e = zeros(1, numel(checkpoints));
 for c = 1:numel(checkpoints)
     idx = find(conv_nfes <= checkpoints(c), 1, 'last');
@@ -1072,6 +1348,11 @@ function seed = pick_run_seed(a, D, func, run)
 % name, or alg_code to the unified branch. Those values belong only to
 % reference reproduction (where historical drivers differed) or to the explicit
 % diagnostic hashed policy in derive_run_seed.
+%   unified-only optimizers (dt-gsk) use get_cec_seed under EVERY policy.
+if is_unified_only(a.optimizer)
+    seed = get_cec_seed(a.base_seed, D, func, run);
+    return;
+end
 switch lower(char(a.seed_policy))
     case 'reference'
         switch a.optimizer
@@ -1098,7 +1379,11 @@ function g = effective_rand_generator(a)
 % the documented reference-compatible family for each optimizer; 'unified' uses
 % the resolved CEC generator (threefry when available, otherwise twister) for
 % fair cross-family studies; native/derived honour options.rand_generator for
-% diagnostics.
+% diagnostics. Unified-only optimizers (dt-gsk) always use threefry.
+if is_unified_only(a.optimizer)
+    g = 'threefry';
+    return;
+end
 switch lower(char(a.seed_policy))
     case 'reference'
         opt = lower(char(a.optimizer));
@@ -1112,6 +1397,15 @@ switch lower(char(a.seed_policy))
     otherwise
         g = char(a.rand_generator);
 end
+end
+
+function tf = is_unified_only(optimizer)
+%IS_UNIFIED_ONLY Optimizers whose reference protocol IS the unified schedule.
+% DT-GSK (the Python reference's UNIFIED_ONLY_OPTIMIZERS) is forced onto
+% get_cec_seed + threefry under every seed_policy: its reference campaign was
+% produced that way, and it derives its 13 Threefry substreams from the run
+% seed and draws its own initial population (documented fair-start exception).
+tf = strcmp(optimizer, 'dt-gsk');
 end
 
 function g = resolve_unified_rng_generator(requested)
@@ -1429,6 +1723,8 @@ function s = optimizer_banner_params(name)
 switch name
     case 'gsk'
         s = 'Pop=100  KF=0.5 KR=0.9 K=10 P=0.1';
+    case 'dt-gsk'
+        s = 'Pop=5*D  pub profile (dimension-tiered)';
     otherwise
         s = '';   % adaptive variants set parameters at run time; left blank
 end
@@ -1501,6 +1797,21 @@ switch id
         id = 'atmals-gsk';
     case 'fdb_agsk'
         id = 'fdb-agsk';
+    case 'dt_gsk'
+        id = 'dt-gsk';
+end
+end
+
+function tf = check_seed_policy(x)
+%CHECK_SEED_POLICY inputParser validator: one of the four documented policies,
+% matched case-insensitively (the value itself is kept as given). A typo must
+% not silently fall through to the hashed native/derived schedule.
+tf = (ischar(x) || (isstring(x) && isscalar(x))) && ...
+     any(strcmpi(char(x), {'reference', 'unified', 'native', 'derived'}));
+if ~tf
+    if (ischar(x) && isrow(x)) || (isstring(x) && isscalar(x)); got = char(x); else; got = class(x); end
+    error('run_experiment:args', ...
+          'seed_policy must be reference, unified, native, or derived (got ''%s'')', got);
 end
 end
 
@@ -1511,6 +1822,8 @@ switch optimizer
         stem = 'atmals_gsk';
     case 'fdb-agsk'
         stem = 'fdb_agsk';
+    case 'dt-gsk'
+        stem = 'dt_gsk';
     otherwise
         stem = optimizer;
 end
@@ -1548,7 +1861,7 @@ else
     fprintf('  Zero threshold: %g (values within this of zero are treated as zero)\n\n', zt);
 end
 
-wF = 8; wR = 20; wN = 14; wD = 14; wP = 14; wS = 10;
+wF = 8; wR = 26; wN = 14; wD = 14; wP = 14; wS = 10;   % wR fits 'Reference ATMALS-GSK Mean'
 sep = ['+' repmat('-',1,wF) '+' repmat('-',1,wR) '+' repmat('-',1,wN) '+' ...
        repmat('-',1,wD) '+' repmat('-',1,wP) '+' repmat('-',1,wS) '+'];
 fprintf('%s\n', sep);
@@ -1686,15 +1999,35 @@ function write_run_metadata(summary_dir, a, func_list, excluded_funcs, known_opt
 %WRITE_RUN_METADATA run_config.json + phase0_protocol.json (reproducibility),
 % companions to environment.json and seed_schedule.csv.
 scheme = seed_scheme_string(a);
-% Audit strides for the active policy (reference vs derive_run_seed family).
-switch lower(char(a.seed_policy))
+% Audit strides for the seed formula actually used (mirrors pick_run_seed).
+base_field = 'base_seed';
+stride_field = 'stride_run';
+policy_for_strides = lower(char(a.seed_policy));
+if is_unified_only(a.optimizer)
+    policy_for_strides = 'unified';   % dt-gsk uses get_cec_seed under every policy
+end
+switch policy_for_strides
     case 'reference'
-        run_stride = 1; dim_stride = 0; func_stride = 9973;
+        switch a.optimizer
+            case {'gsk', 'egsk', 'atmals-gsk'}
+                run_stride = 1; dim_stride = 0; func_stride = 9973;
+                seed_formula = 'base_seed + 9973*func + (run-1)';
+            case {'agsk', 'apgsk', 'fdb-agsk'}
+                % multiplicative D*func*run: no additive strides, base_seed unused
+                run_stride = NaN; dim_stride = NaN; func_stride = NaN;   % null in JSON
+                seed_formula = 'dim*func*run';
+                base_field = ''; stride_field = '';
+            otherwise   % pick_run_seed falls back to get_cec_seed
+                run_stride = 1000037; dim_stride = 1000003; func_stride = 1000033;
+                seed_formula = 'get_cec_seed(base_seed, dim, func, run)';
+        end
     case 'unified'
         run_stride = 1000037; dim_stride = 1000003; func_stride = 1000033;
+        seed_formula = 'get_cec_seed(base_seed, dim, func, run)';
     otherwise   % native / derived -> derive_run_seed
         run_stride = 10000379; dim_stride = 10000019;
         func_stride = 10000169;
+        seed_formula = 'derive_run_seed(base_seed, optimizer, suite, dim, func, run)';
 end
 
 cfg = struct();
@@ -1703,6 +2036,7 @@ cfg.suite = upper(a.suite);
 cfg.base_seed = a.base_seed;
 cfg.seed_policy = char(a.seed_policy);
 cfg.seed_scheme = scheme;
+cfg.seed_formula = seed_formula;
 cfg.rand_generator = char(effective_rand_generator(a));
 cfg.initial_population_policy = initial_population_policy_string(a);
 cfg.overwrite = logical(a.overwrite);
@@ -1725,6 +2059,9 @@ cfg.optimizer_options = optimizer_options_metadata(a.optimizer, a.suite);
 if strcmp(a.optimizer, 'gsk')
     % reference GSK defaults -- the values this run actually used
     cfg.pop_size = 100; cfg.KF = 0.5; cfg.KR = 0.9; cfg.K = 10; cfg.P = 0.1;
+elseif strcmp(a.optimizer, 'dt-gsk')
+    % dimension-tiered pub profile (dt_gsk_pub_config); NP_init = 5*D
+    cfg.profile = 'pub';
 end
 write_json(fullfile(summary_dir, 'run_config.json'), cfg, session_tag);
 
@@ -1738,8 +2075,8 @@ proto.dims = a.dimensions(:)';
 proto.suite = upper(a.suite);
 proto.excluded = excluded_funcs(:)';
 proto.funcs_to_run = func_list;   % the same set is run at every dimension here
-proto.seed_policy = struct('scheme', scheme, 'run_id_origin', 1, ...
-                           'base_seed_field', 'base_seed', 'stride_field', 'stride_run');
+proto.seed_policy = struct('scheme', scheme, 'formula', seed_formula, 'run_id_origin', 1, ...
+                           'base_seed_field', base_field, 'stride_field', stride_field);
 proto.rand_generator = char(effective_rand_generator(a));
 proto.initial_population_policy = initial_population_policy_string(a);
 proto.overwrite = logical(a.overwrite);
@@ -1754,12 +2091,28 @@ function s = seed_scheme_string(a)
 % Human-readable description of the active seed schedule, recorded in
 % environment.json / run_config.json / phase0_protocol.json. Keep in sync with
 % pick_run_seed and effective_rand_generator.
+if is_unified_only(a.optimizer)
+    s = ['unified: seed = mod(uint64(base_seed)' ...
+         ' + uint64(1000003)*uint64(dim) + uint64(1000033)*uint64(func)' ...
+         ' + uint64(1000037)*uint64(run), uint64(2147483646)) + 1; ' a.optimizer ...
+         ' is unified-only, so this schedule and threefry are forced under every seed_policy;' ...
+         ' 13 named Threefry substreams derived from the run seed; X0 drawn by the optimizer'];
+    return;
+end
 switch lower(char(a.seed_policy))
     case 'reference'
-        s = ['reference: gsk/ATMALS-GSK/eGSK seed = base_seed + 9973*func + (run-1); ' ...
-             'agsk/apgsk/fdb-agsk seed = dim*func*run; ' ...
-             'AGSK/APGSK/FDB-AGSK/eGSK/ATMALS-GSK generator uses legacy seed; ' ...
-             'GSK and fallback optimizers use twister'];
+        % Only the active optimizer's historical formula and generator.
+        switch a.optimizer
+            case {'gsk', 'egsk', 'atmals-gsk'}
+                formula = 'seed = base_seed + 9973*func + (run-1)';
+            case {'agsk', 'apgsk', 'fdb-agsk'}
+                formula = 'seed = dim*func*run (base_seed unused)';
+            otherwise
+                formula = 'seed = get_cec_seed(base_seed, dim, func, run) (fallback)';
+        end
+        generator = char(effective_rand_generator(a));
+        if strcmp(generator, 'seed'); generator = 'legacy seed (mcg16807)'; end
+        s = sprintf('reference: %s; %s reference generator: %s', formula, a.optimizer, generator);
     case 'unified'
         s = ['unified: seed = mod(uint64(base_seed) + uint64(1000003)*uint64(dim)' ...
              ' + uint64(1000033)*uint64(func) + uint64(1000037)*uint64(run),' ...
@@ -1776,7 +2129,10 @@ end
 
 function s = initial_population_policy_string(a)
 %INITIAL_POPULATION_POLICY_STRING Metadata for reference vs unified starts.
-if unified_initialization_enabled(a)
+if is_unified_only(a.optimizer)
+    s = ['optimizer self-initializes NP = 5*D from its own init substream; ' ...
+         'runner X0 not used (documented DT-GSK fair-start exception)'];
+elseif unified_initialization_enabled(a)
     s = ['runner-generated shared X0 from get_cec_seed(base_seed,dim,func,run); ' ...
          'post-initialization rng state restored inside optimizer'];
 else

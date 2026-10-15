@@ -27,9 +27,11 @@ struct SummaryRow {
 };
 
 /// Loads every per-dimension summary table (summary/<opt>_<suite>_D<dim>.csv)
-/// found below @p results_root (recursive); optimizer/suite come from the
-/// path, the dimension from the filename. The dimensionless rollup and
-/// per_run.csv are skipped.
+/// found below @p results_root (recursive); optimizer, suite and dimension
+/// all come from the file name (not the enclosing folders). The
+/// dimensionless rollup and per_run.csv are skipped, and the runner's
+/// archive folders (`_overwrite_archive/`, `_archive/`) below
+/// @p results_root are not descended into.
 /// @throws std::runtime_error naming file/line on schema problems.
 std::vector<SummaryRow> load_summaries(const std::filesystem::path& results_root);
 
@@ -58,8 +60,10 @@ struct ComparisonReport {
 ///
 /// Reference files are matched by (suite, algorithm, dimension) parsed
 /// from their paths (e.g. cec2017/agsk/agsk_cec2017_D10.csv; CEC2011
-/// files carry no dimension). Optimizer names are mapped to reference
-/// algorithm folder names (`atmals-gsk`, `fdb-agsk`).
+/// files carry no dimension). The generated optimizer name is used as-is:
+/// summary file names carry run_experiment's canonical hyphenated slug
+/// (`atmals-gsk`, `fdb-agsk`), which is the reference folder name.
+/// Emits exactly one entry per generated row, in input order.
 /// Win/tie/loss uses the mean statistic, lower is better, tie at
 /// relative 1e-8.
 ComparisonReport compare_with_references(const std::vector<SummaryRow>& generated,
@@ -96,8 +100,8 @@ struct FunctionCheck {
 
 /// Whole-run verdict produced after an optimizer/suite run.
 struct RunVerification {
-    std::string optimizer;
-    std::string suite;
+    std::string optimizer;          ///< comma-joined if the input mixes several
+    std::string suite;              ///< comma-joined if the input mixes several
     std::string verdict;            ///< "CONSISTENT" or "DEVIATES"
     /// Win/tie/loss is always informational (never a hard failure). This flag
     /// only downgrades the gross-deviation check to informational, since a
@@ -116,9 +120,21 @@ struct RunVerification {
 /// True for suites that have known optima (errors meaningful, sign check applies).
 bool suite_has_known_optimum(const std::string& suite);
 
+/// The shared reduced-protocol rule used by gsk_run and gsk_validate
+/// --verify: a run is reduced when its budget was overridden
+/// (@p max_nfes_override != 0) or it has fewer than 25 runs.
+bool is_reduced_protocol(long long runs, long long max_nfes_override);
+
+/// Reads `runs` and `max_nfes_override` from a run's environment.json (as
+/// written by run_experiment.m) and applies is_reduced_protocol. Returns
+/// std::nullopt when the file cannot be read or lacks either field.
+std::optional<bool> reduced_protocol_from_environment(const std::filesystem::path& environment_json);
+
 /// Classifies one run's summaries against the imported references.
 ///
-/// @param generated     summary rows for a single optimizer/suite run.
+/// @param generated     summary rows, normally a single optimizer/suite run;
+///                      each row is judged under its own suite's rules and
+///                      against its own reference row.
 /// @param reference_root imported reference table tree.
 /// @param reduced_budget whether the run used a reduced (non-reference) budget;
 ///                       when true the gross-deviation check and win/tie/loss

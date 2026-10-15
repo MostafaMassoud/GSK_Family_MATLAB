@@ -6,13 +6,17 @@ Gaining-Sharing Knowledge (GSK) algorithm family and the CEC benchmark suites.
 - CEC benchmark suites (CEC2011, CEC2013, CEC2013LSGO, CEC2017, CEC2020)
   are standalone C++20 ports under `benchmarks/` - no MATLAB, R, MEX or
   Python needed to evaluate them.
-- The six GSK-family optimizers (gsk, agsk, apgsk, atmals-gsk, egsk,
-  fdb-agsk) are MATLAB implementations under `src/`, with provenance and
-  known behavior differences documented in `docs/`.
+- The seven GSK-family optimizers (gsk, agsk, apgsk, atmals-gsk, egsk,
+  fdb-agsk, dt-gsk) are MATLAB implementations under `src/`, with provenance and
+  known behavior differences documented in `docs/`. DT-GSK, the seventh, is a
+  MATLAB port of the DT-GSK reference implementation (Python, MIT license,
+  v2.46); its record is
+  [src/optimizers/dt-gsk/README.md](src/optimizers/dt-gsk/README.md) and its
+  algorithm page [docs/algorithms/dt-gsk.md](docs/algorithms/dt-gsk.md).
 - Public optimizer IDs, CLI/config names, result folders, and reference folders
-  use hyphenated slugs (`atmals-gsk`, `fdb-agsk`). MATLAB entry-point function
-  names keep underscores where MATLAB requires valid identifiers, for example
-  `atmals_gsk_optimize` and `fdb_agsk_optimize`.
+  use hyphenated slugs (`atmals-gsk`, `fdb-agsk`, `dt-gsk`). MATLAB entry-point
+  function names keep underscores where MATLAB requires valid identifiers, for
+  example `atmals_gsk_optimize`, `fdb_agsk_optimize` and `dt_gsk_optimize`.
 - Python code, wrappers, generated Cython bindings and Python tooling are
   not part of this project.
 
@@ -49,6 +53,7 @@ in [CITATION.cff](CITATION.cff) and [codemeta.json](codemeta.json).
 | ATMALS-GSK | Alfadli, N. M.; Oun, E. M.; Mohamed, A. W. "Auto-Tuning Memory-Based Adaptive Local Search Gaining-Sharing Knowledge-Based Algorithm for Solving Optimization Problems." *Algorithms*, 18(7), 398, 2025. DOI: [10.3390/a18070398](https://doi.org/10.3390/a18070398). |
 | eGSK | Jawad, M. A.; Roshdy, H. S. M.; Mohamed, A. W. "Enhanced Gaining-Sharing Knowledge-based algorithm." *Results in Control and Optimization*, 19, 100542, 2025. DOI: [10.1016/j.rico.2025.100542](https://doi.org/10.1016/j.rico.2025.100542). |
 | FDB-AGSK | Bakir, H.; Duman, S.; Guvenc, U.; Kahraman, H. T. "Improved adaptive gaining-sharing knowledge algorithm with FDB-based guiding mechanism for optimization of optimal reactive power flow problem." *Electrical Engineering*, 105, 3121-3160, 2023. DOI: [10.1007/s00202-023-01803-9](https://doi.org/10.1007/s00202-023-01803-9). |
+| DT-GSK | Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm." *Algorithms* (MDPI), 2026 (accepted, in production; DOI pending). Reference implementation: DT-GSK v2.46 (Python, MIT license), <https://github.com/MostafaMassoud/DT-GSK>. |
 
 FDB-AGSK also depends conceptually on the Fitness-Distance Balance selection
 idea: Kahraman, H. T.; Aras, S.; Gedikli, E. "Fitness-distance balance (FDB): a
@@ -179,9 +184,12 @@ experiment (needs MATLAB and the MinGW toolchain):
 powershell -File scripts\build_mex_bridge.ps1
 ```
 
-This creates `build\mex\gskcec_eval.mexw64`. The root `run_all_cec*.m`
-launchers check for that project-local file before starting and stop with a
-build hint if it is missing, preventing partial all-skipped result folders.
+This creates `build\mex\gskcec_eval.mexw64`, linked fully static (no MinGW
+runtime DLL is needed on PATH when MATLAB loads it). The root `run_all_cec*.m`
+launchers (and `run_experiment` for CEC suites) check that this project-local
+file exists and actually loads before starting, and stop with a build hint if it
+is missing (`gskcec:mexMissing`) or cannot be loaded (`gskcec:mexNotLoadable`),
+preventing partial all-skipped result folders.
 Rebuild this MEX bridge after changes to CEC suite source files or
 `benchmarks/cec_suite_cpp/cec_tools/src/mex_bridge/`; MATLAB CEC experiments use
 `build\mex\gskcec_eval.<mexext>`, not the C++ CLI executables.
@@ -194,6 +202,7 @@ build\gsk_run.exe --optimizer gsk --suite cec2017 --dimension 10 --function 1 --
 build\gsk_run.exe --config configs\all_cec2017.yml --root .     # full CEC2017 matrix
 build\gsk_run.exe --config configs\all_cec2011.yml --root .     # full CEC2011 matrix
 build\gsk_run.exe --config configs\agsk_cec2020.yml --root .    # AGSK on CEC2020
+build\gsk_run.exe --optimizer dt-gsk --suite cec2017 --dimension 10 --function 1 --runs 3 --seed 20240620
 ```
 
 (`--dry-run` prints the MATLAB invocations; MATLAB is found via
@@ -206,6 +215,10 @@ uses the same `(dimension,function,run)` seed for every optimizer, draws the
 initial population once in the runner, restores the post-initialization RNG
 state inside each optimizer, and uses `threefry` when MATLAB supports it
 (otherwise `twister`) for the whole family.
+DT-GSK is unified-only: under every `--seed-policy` it is scheduled with the
+unified seed and `threefry` (as in its Python reference campaign), and it
+samples its own `NP = 5*D` initial population instead of the runner's `X0`
+(the documented fair-start exception).
 The unified seed formula is:
 
 ```text
@@ -237,13 +250,16 @@ convergence traces; optional `curves/graphs/` PNGs when `write_graphs=true`)
 and `gen_logs/` (per-run checkpoint errors); see
 [docs/reference/result_schema.md](docs/reference/result_schema.md). Generated results never
 overwrite the imported reference tables or curated benchmark-side convergence
-assets under `benchmarks/cec_reference_results`.
+assets under `benchmarks/cec_reference_results` (`run_experiment` refuses any
+`output_dir` inside that tree with `run_experiment:outputUnsafe`).
 Existing result directories are preserved on rerun: completed run ids are
-skipped only when their stored seed still matches the active policy, missing or
-stale-seed runs are appended, and refreshed fixed-name summaries/metadata are
-archived under `_archive/<timestamp>/` before being rewritten.
-This means an old result row produced by a previous seed policy stays available
-for audit history, but it is not treated as complete for the current policy.
+skipped only when their stored seed, budget (`max_nfes`) and generator still
+match the active run, missing or stale runs are appended, and refreshed
+fixed-name summaries/metadata are archived under `_archive/<timestamp>/` before
+being rewritten.
+This means an old result row produced under a previous seed policy, budget, or
+generator stays available for audit history, but it is not treated as complete
+for the current run.
 Set `overwrite=true` when you need a clean replacement run; the previous active
 result tree is moved to `_overwrite_archive/<suite>_<timestamp>/` beside the
 suite folder before new files are written.
@@ -257,14 +273,23 @@ next verdict is written as `verification_1.json`, `verification_2.json`, etc.
 opt out with `--no-verify`, or re-check a directory with
 `gsk_validate --verify <run_dir> benchmarks\cec_reference_results`.
 
+For a run-level check, `scripts/compare_reference_runs.m` compares two
+`per_run.csv` sets per (dimension, function) with Wilcoxon rank-sum tests and
+Holm-adjusted p-values (needs the Statistics and Machine Learning Toolbox); see
+[scripts/README.md](scripts/README.md). The DT-GSK port was verified against the
+unmodified Python reference on identical random numbers and reproduces its
+golden values; the validation and the CEC2017 campaign results are recorded in
+[src/optimizers/dt-gsk/README.md](src/optimizers/dt-gsk/README.md).
+
 ## MATLAB tests
 
 ```powershell
 matlab -batch "cd('src/tests'); run_matlab_smoke_tests"
 ```
 
-runs the optimizer/common-helper/runner smoke tests on pure-MATLAB
-problems (no MEX bridge required).
+runs the 13 optimizer/common-helper/runner smoke tests (one per optimizer,
+including `test_dt_gsk_smoke.m`) on pure-MATLAB problems (no MEX bridge
+required).
 
 ## CEC layout
 

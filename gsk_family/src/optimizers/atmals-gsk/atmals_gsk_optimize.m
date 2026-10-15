@@ -103,6 +103,22 @@ if isfield(options, 'pls_pool') && ~isempty(options.pls_pool); PLS_VAL = options
 
 alpha = 0.98;
 PLS = 1;
+
+% The first-generation atmals_prob_update looks the hard-coded initial picks
+% up in their pools (find(abs(VALs - val) < eps)); an overridden pool that
+% lacks its initial pick would otherwise crash inside atmals_gaussmf. Same
+% match predicate; no RNG draws, defaults unchanged.
+pool_checks = {'kf_pool', KF_VAL, KF_GSK; 'kr_pool', KR_VAL, KR_GSK; ...
+    'k_pool', K_VAL, K_GSK; 'p_pool', P_VAL, P_GSK; 'pls_pool', PLS_VAL, PLS};
+for c = 1:size(pool_checks, 1)
+    if ~any(abs(pool_checks{c, 2} - pool_checks{c, 3}) < eps)
+        error('atmals_gsk:options', ...
+            ['options.%s must contain the hard-coded initial value %g ' ...
+             '(the first-generation probability update looks it up in the pool)'], ...
+            pool_checks{c, 1}, pool_checks{c, 3});
+    end
+end
+
 NLS = round(0.05 * pop_size);
 
 RP_Min = 3;
@@ -162,12 +178,15 @@ for i = 1:pop_size
     end
 end
 
-% Per-generation convergence recording (interface requirement)
+% Per-generation convergence recording (interface requirement). The
+% reference per-child counter reads max_nfes+1 when a generation crosses the
+% budget; only the RECORDED copies are clipped at max_nfes (bookkeeping only,
+% the loop counter and its crossing semantics are untouched).
 max_records = ceil(max_nfes / pop_size) + 2;
 conv_nfes = zeros(max_records, 1);
 conv_fit = zeros(max_records, 1);
 n_rec = 1;
-conv_nfes(n_rec) = nfes;
+conv_nfes(n_rec) = min(nfes, max_nfes);
 conv_fit(n_rec) = bsf_fit_var;
 
 g = 0;
@@ -414,7 +433,7 @@ while nfes < max_nfes
     popold(Child_is_better_index == 2, :) = ui(Child_is_better_index == 2, :);
 
     n_rec = n_rec + 1;
-    conv_nfes(n_rec) = nfes;
+    conv_nfes(n_rec) = min(nfes, max_nfes); % recorded copy clipped (see above)
     conv_fit(n_rec) = bsf_fit_var;
 end % end while loop
 
@@ -464,7 +483,7 @@ result.seed = actual_seed;
 result.best_x = bsf_solution;
 result.best_fitness = bsf_fit_var;
 result.error = err;
-result.nfes = nfes;
+result.nfes = min(nfes, max_nfes); % counted evaluations; reference counter may read max_nfes+1
 result.termination = 'max_evaluations'; % the reference never stops early
 result.convergence = struct('nfes', conv_nfes(1:n_rec), 'best_fitness', conv_fit(1:n_rec));
 result.runtime_seconds = toc(start_time);

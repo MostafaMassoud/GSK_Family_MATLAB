@@ -1,0 +1,183 @@
+function report = compare_reference_runs(generated, reference, varargin)
+%COMPARE_REFERENCE_RUNS Per-cell statistical comparison of two per_run.csv result sets.
+%
+%   report = compare_reference_runs(generated, reference)
+%   report = compare_reference_runs(..., 'alpha', 0.05, 'out', 'comparison.csv', ...
+%                                   'zero_tol', 1e-8, 'decades', 1)
+%
+% generated / reference: a per_run.csv path, or a folder containing
+% summary/per_run.csv or per_run.csv (the schema of docs/reference/result_schema.md:
+% optimizer,suite,function,dimension,run,seed,best_fitness,error,...).
+% Typical use: compare a MATLAB campaign against an imported reference
+% campaign of the same optimizer, e.g. DT-GSK against the Python reference
+% under benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv.
+%
+% For every (dimension, function) cell present in both sets it reports the
+% Best / Median / Mean of the per-run values (errors for known-optimum suites,
+% raw objectives otherwise), and judges agreement two ways:
+%   magnitude : Median and Mean agree to within 'decades' orders of magnitude
+%               (values with |v| < zero_tol count as 0; two zeros agree)
+%   rank-sum  : two-sided Wilcoxon rank-sum test (ranksum) at level alpha; a
+%               cell whose values are identical on both sides gets p = 1
+% When both sets carry the same seed for each run (same seed schedule), the
+% paired Wilcoxon signed-rank p-value is reported too (informational).
+% verdict = MATCH when both checks pass, else DIFFERS.
+%
+% Duplicate rows for one (dimension, function, run) - append/resume history in
+% per_run.csv - keep the LAST row, matching run_experiment's resume rules.
+% Requires the Statistics and Machine Learning Toolbox (ranksum/signrank).
+
+p = inputParser;
+p.addParameter('alpha', 0.05, @(x) isnumeric(x) && isscalar(x) && x > 0 && x < 1);
+p.addParameter('out', '', @(x) ischar(x) || isstring(x));
+p.addParameter('zero_tol', 1e-8, @(x) isnumeric(x) && isscalar(x) && x >= 0);
+p.addParameter('decades', 1, @(x) isnumeric(x) && isscalar(x) && x > 0);
+p.addParameter('verbose', true, @(x) islogical(x) || isnumeric(x));
+p.parse(varargin{:});
+o = p.Results;
+if exist('ranksum', 'file') == 0
+    error('compare_reference_runs:toolbox', ...
+          'ranksum (Statistics and Machine Learning Toolbox) is required.');
+end
+
+G = read_per_run(resolve_path(generated));
+R = read_per_run(resolve_path(reference));
+keys = intersect(unique(G(:, 1:2), 'rows'), unique(R(:, 1:2), 'rows'), 'rows');
+
+rows = struct('dim', {}, 'func', {}, 'n_gen', {}, 'n_ref', {}, ...
+              'best_gen', {}, 'best_ref', {}, 'median_gen', {}, 'median_ref', {}, ...
+              'mean_gen', {}, 'mean_ref', {}, 'magnitude_ok', {}, 'p_ranksum', {}, ...
+              'p_signrank', {}, 'verdict', {});
+for k = 1:size(keys, 1)
+    g = G(G(:, 1) == keys(k, 1) & G(:, 2) == keys(k, 2), :);
+    r = R(R(:, 1) == keys(k, 1) & R(:, 2) == keys(k, 2), :);
+    gv = zero_cut(g(:, 5), o.zero_tol);
+    rv = zero_cut(r(:, 5), o.zero_tol);
+    s = struct();
+    s.dim = keys(k, 1);
+    s.func = keys(k, 2);
+    s.n_gen = numel(gv);
+    s.n_ref = numel(rv);
+    s.best_gen = min(gv);       s.best_ref = min(rv);
+    s.median_gen = median(gv);  s.median_ref = median(rv);
+    s.mean_gen = zero_cut(mean(gv), o.zero_tol);
+    s.mean_ref = zero_cut(mean(rv), o.zero_tol);
+    s.magnitude_ok = same_magnitude(s.median_gen, s.median_ref, o.decades) && ...
+                     same_magnitude(s.mean_gen, s.mean_ref, o.decades);
+    if isequal(sort(gv), sort(rv))
+        s.p_ranksum = 1;
+    else
+        s.p_ranksum = ranksum(gv, rv);
+    end
+    s.p_signrank = NaN;
+    [common, ig, ir] = intersect(g(:, 3), r(:, 3));
+    if ~isempty(common) && isequal(g(ig, 4), r(ir, 4))
+        dpair = zero_cut(g(ig, 5), o.zero_tol) - zero_cut(r(ir, 5), o.zero_tol);
+        if any(dpair ~= 0)
+            s.p_signrank = signrank(dpair);
+        else
+            s.p_signrank = 1;
+        end
+    end
+    if s.magnitude_ok && s.p_ranksum >= o.alpha
+        s.verdict = 'MATCH';
+    else
+        s.verdict = 'DIFFERS';
+    end
+    rows(end + 1) = s; %#ok<AGROW>
+end
+
+T = struct2table(rows);
+% Holm step-down adjustment across all cells: with many cells, about
+% alpha * cells raw rank-sum rejections are expected by chance alone.
+T.p_holm = holm(T.p_ranksum);
+report = struct('table', T, 'alpha', o.alpha, 'cells', height(T), ...
+                'matches', sum(strcmp(T.verdict, 'MATCH')), ...
+                'differs', sum(strcmp(T.verdict, 'DIFFERS')), ...
+                'holm_significant', sum(T.p_holm < o.alpha));
+if strlength(string(o.out)) > 0
+    writetable(T, char(o.out));
+end
+if logical(o.verbose)
+    print_report(T, report, o);
+end
+end
+
+% ---- helpers ------------------------------------------------------------------
+
+function path = resolve_path(x)
+x = char(x);
+if isfile(x)
+    path = x;
+    return;
+end
+for cand = {fullfile(x, 'summary', 'per_run.csv'), fullfile(x, 'per_run.csv')}
+    if isfile(cand{1})
+        path = cand{1};
+        return;
+    end
+end
+error('compare_reference_runs:missing', 'No per_run.csv found at %s', x);
+end
+
+function M = read_per_run(path)
+% Columns of M: dimension, function, run, seed, value (error if finite, else best).
+T = readtable(path, 'Delimiter', ',', 'TextType', 'char', 'VariableNamingRule', 'preserve');
+names = lower(T.Properties.VariableNames);
+col = @(n) column(T, names, n, path);
+value = col('error');
+best = col('best_fitness');
+value(~isfinite(value)) = best(~isfinite(value));
+M = [col('dimension'), col('function'), col('run'), col('seed'), value];
+% Resume history: keep the last row per (dimension, function, run).
+[~, last] = unique(M(:, 1:3), 'rows', 'last');
+M = M(sort(last), :);
+end
+
+function adj = holm(pv)
+% Holm-Bonferroni adjusted p-values (same order as the input).
+m = numel(pv);
+[ps, order] = sort(pv(:));
+a = min(1, (m - (1:m)' + 1) .* ps);
+a = cummax(a);
+adj = zeros(m, 1);
+adj(order) = a;
+end
+
+function v = column(T, names, n, path)
+k = find(strcmp(names, n), 1);
+if isempty(k)
+    error('compare_reference_runs:schema', 'per_run.csv column "%s" missing in %s', n, path);
+end
+v = double(T{:, k});
+end
+
+function v = zero_cut(v, tol)
+v(abs(v) < tol) = 0;
+end
+
+function tf = same_magnitude(a, b, decades)
+if a == 0 && b == 0
+    tf = true;
+elseif a == 0 || b == 0 || sign(a) ~= sign(b)
+    tf = false;
+else
+    tf = abs(log10(abs(a)) - log10(abs(b))) <= decades;
+end
+end
+
+function print_report(T, report, o)
+fprintf('\n%-5s %-4s %4s  %11s %11s  %11s %11s  %11s %11s  %5s %8s %8s  %s\n', 'Dim', 'Func', 'n', ...
+        'Best(gen)', 'Best(ref)', 'Median(gen)', 'Median(ref)', 'Mean(gen)', 'Mean(ref)', ...
+        'mag', 'p_rank', 'p_pair', 'verdict');
+for i = 1:height(T)
+    fprintf('%-5d F%-3d %4d  %11.3e %11.3e  %11.3e %11.3e  %11.3e %11.3e  %5s %8.3g %8.3g  %s\n', ...
+            T.dim(i), T.func(i), T.n_gen(i), T.best_gen(i), T.best_ref(i), ...
+            T.median_gen(i), T.median_ref(i), T.mean_gen(i), T.mean_ref(i), ...
+            char(string(T.magnitude_ok(i))), T.p_ranksum(i), T.p_signrank(i), T.verdict{i});
+end
+fprintf('\n%d cell(s): %d MATCH, %d DIFFERS (rank-sum alpha = %g, magnitude within %g decade(s), zero_tol = %g)\n', ...
+        report.cells, report.matches, report.differs, o.alpha, o.decades, o.zero_tol);
+fprintf('Holm-adjusted rank-sum: %d of %d cell(s) significant at alpha = %g (about %.1f raw rejections expected by chance)\n', ...
+        report.holm_significant, report.cells, o.alpha, o.alpha * report.cells);
+end

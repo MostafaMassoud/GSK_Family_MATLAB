@@ -13,6 +13,7 @@ optimizers/apgsk/
 optimizers/atmals-gsk/
 optimizers/egsk/
 optimizers/fdb-agsk/
+optimizers/dt-gsk/
 experiments/
 runners/
 tests/
@@ -20,7 +21,7 @@ tests/
 
 Rules:
 
-- Keep GSK, AGSK, APGSK, ATMALS-GSK, eGSK, and FDB-AGSK in MATLAB.
+- Keep GSK, AGSK, APGSK, ATMALS-GSK, eGSK, FDB-AGSK, and DT-GSK in MATLAB.
 - Keep provenance notes in local README/help text and `docs/reference/porting_notes.md`.
 - Do not translate GSK-family optimizers into C++.
 - Do not put CEC suite code, CEC input data, or CEC C++ tooling here.
@@ -29,7 +30,10 @@ Rules:
   `options.seed` and `options.rand_generator`; under unified mode they may also
   receive runner-owned `options.initial_population` and
   `options.rng_state_after_initialization` so fair-start experiments share the
-  same seed, `X0`, and post-`X0` random stream position.
+  same seed, `X0`, and post-`X0` random stream position. DT-GSK is the
+  exception: it is unified-only (unified seed and `threefry` under every
+  `seed_policy`), samples its own `NP = 5*D` population from its own Threefry
+  substreams, and ignores a runner `X0` (see `optimizers/dt-gsk/README.md`).
 
 ## How the MATLAB layer is activated
 
@@ -65,6 +69,9 @@ options.rand_generator = 'twister';
 
 result = gsk_optimize(problem, options);
 ```
+
+`dt_gsk_optimize(problem, options)` takes the same arguments but requires
+`options.rand_generator = 'threefry'` (empty/`'auto'`/`'default'` accepted).
 
 This direct pattern is useful for teaching and debugging. For publication
 experiments, prefer `run_experiment` or the root launchers so seed schedules,

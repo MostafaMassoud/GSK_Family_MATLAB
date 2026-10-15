@@ -7,9 +7,10 @@
 A verified hybrid **MATLAB + C++** toolkit for the Gaining-Sharing Knowledge
 (GSK) optimizer family on five CEC benchmark suites. The CEC benchmark functions
 are standalone C++20 ports (no MATLAB/R/MEX/Python needed to evaluate them); the
-six optimizers are MATLAB implementations faithful to their reference sources;
-and every experiment run is automatically checked against the published
-reference results.
+seven optimizers are MATLAB implementations faithful to their reference sources
+(six MATLAB reference releases, plus DT-GSK ported from its Python reference
+implementation); and every experiment run is automatically checked against the
+published reference results.
 
 This site is generated from the Markdown sources in `docs/` by
 `scripts/build_docs.ps1` (no Python). Browse the rendered site at
@@ -20,7 +21,7 @@ This site is generated from the Markdown sources in `docs/` by
 Not sure where to start? Pick the goal that fits:
 
 - **Just run it.** [Tutorial](getting-started/tutorial.md) -> [User Guide](getting-started/user_guide.md) -> [Runbook](getting-started/runbook.md).
-- **Understand the algorithms.** [Explainer](getting-started/explainer.md) -> [GSK](algorithms/gsk.md) -> the variants ([AGSK](algorithms/agsk.md), [APGSK](algorithms/apgsk.md), [FDB-AGSK](algorithms/fdb-agsk.md), [ATMALS-GSK](algorithms/atmals-gsk.md), [eGSK](algorithms/egsk.md)) -> [Numerical Examples](research/numerical_examples.md).
+- **Understand the algorithms.** [Explainer](getting-started/explainer.md) -> [GSK](algorithms/gsk.md) -> the variants ([AGSK](algorithms/agsk.md), [APGSK](algorithms/apgsk.md), [FDB-AGSK](algorithms/fdb-agsk.md), [ATMALS-GSK](algorithms/atmals-gsk.md), [eGSK](algorithms/egsk.md), [DT-GSK](algorithms/dt-gsk.md)) -> [Numerical Examples](research/numerical_examples.md).
 - **Reproduce or validate results.** [Researcher Handbook](research/researcher_handbook.md) -> [Reproducibility](research/reproducibility.md) -> [Validation Report](research/validation_report.md).
 - **Contribute code.** [Code Reading Guide](development/code_reading_guide.md) -> [Developer Guide](development/developer_guide.md) -> [Extension Guide](development/extension_guide.md) -> [Contributor Guide](development/contributor_guide.md).
 - **Look something up.** [Configuration](getting-started/configuration.md), [MATLAB Optimizer Interface](reference/matlab_interface.md), [Result Schema](reference/result_schema.md), [Glossary](reference/glossary.md), [Diagrams](reference/diagrams.md), [C++ API (Doxygen)](api/index.html).
@@ -61,6 +62,7 @@ Not sure where to start? Pick the goal that fits:
 - [FDB-AGSK](algorithms/fdb-agsk.md)
 - [ATMALS-GSK](algorithms/atmals-gsk.md)
 - [eGSK](algorithms/egsk.md)
+- [DT-GSK](algorithms/dt-gsk.md) (port record and validation: `src/optimizers/dt-gsk/README.md`)
 
 ## Development - `development/`
 

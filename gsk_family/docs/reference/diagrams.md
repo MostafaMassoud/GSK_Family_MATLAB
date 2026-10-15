@@ -55,14 +55,20 @@ flowchart TD
   budget -- "yes" --> ret["Return result struct"]
 ```
 
+This is the flow of the six MATLAB-source optimizers. DT-GSK never calls
+`gsk_set_rng` or uses a runner `X0`; its own loop is drawn under
+[DT-GSK Generation Loop](#dt-gsk-generation-loop).
+
 ## Benchmark Evaluation Pipeline
 
 ```mermaid
 flowchart LR
   pop["Optimizer population NP x D"] --> tin["evaluate handle: transpose to D x NP"]
   tin --> mex["gskcec_eval('eval', handle, X)"]
-  mex --> chk{"rows == problem.dimension()?"}
-  chk -- "no" --> err["gskcec:badInput error"]
+  mex --> xchk{"X real, full (non-sparse) double?"}
+  xchk -- "no" --> err["gskcec:badInput error"]
+  xchk -- "yes" --> chk{"rows == problem.dimension()?"}
+  chk -- "no" --> err
   chk -- "yes" --> loop["For each column k: BenchmarkProblem.evaluate(span)"]
   loop --> row["1 x NP fitness row"]
   row --> tout["transpose back to NP x 1"]
@@ -82,7 +88,7 @@ flowchart TD
   fresh --> cell
   resume --> cell["For each (function, dimension, run) cell"]
   cell --> mk["gskcec_make_problem -> problem struct"]
-  mk --> sd["get_cec_seed + draw X0 (unified)"]
+  mk --> sd["Pick the run seed + draw X0 (unified, not for dt-gsk)"]
   sd --> run["optimizer(problem, options)"]
   run --> pr["Append per_run.csv + seed_schedule.csv"]
   pr --> agg["Refresh summary D<dim>.csv (best..sd)"]
@@ -110,7 +116,11 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  base["base_seed = 20240620"] --> pol{"seed_policy?"}
+  base["base_seed = 20240620"] --> uo{"dt-gsk (unified-only)?"}
+  uo -- "yes, any seed_policy" --> dts["get_cec_seed(base, dim, func, run) + threefry"]
+  dts --> sub["Optimizer derives named Threefry substreams; samples its own NP = 5*D population"]
+  sub --> draws
+  uo -- "no" --> pol{"seed_policy?"}
   pol -- "unified" --> uni["get_cec_seed(base, dim, func, run)"]
   pol -- "reference" --> refp["per-optimizer reference seed rule"]
   pol -- "native / derived" --> der["derive_run_seed (opt+suite hashed)"]
@@ -174,6 +184,33 @@ flowchart TD
   updt --> red["gsk_reduction_survivors (linear pop reduction)"]
 ```
 
+## DT-GSK Generation Loop
+
+The mechanisms switched on by each dimension tier (`D < 20`, `20 <= D < 50`,
+`D >= 50`, `D >= 100`) are listed in `src/optimizers/dt-gsk/README.md` and
+explained in [../algorithms/dt-gsk.md](../algorithms/dt-gsk.md); the order below
+follows `dt_gsk_optimize.m`.
+
+```mermaid
+flowchart TD
+  init["Sample NP = 5*D from the init substream; evaluate"] --> nlpsr["NLPSR: shrink NP toward n_min (SP-NLPSR floor at D >= 100)"]
+  nlpsr --> rank["Rank; GSK junior/senior knowledge sources"]
+  rank --> ace["ACE: draw (KF, KR, Kexp) per individual from the pool"]
+  ace --> link["Linkage groups: random blocks, or learned SGSM blocks (D >= 50)"]
+  link --> trial["Trial vectors: junior/senior donors, blockwise crossover, DE/rand/1 entry (20 <= D < 100)"]
+  trial --> sel["Evaluate + greedy selection"]
+  sel --> learn["SGSM graph update (D >= 50); ACE probability update; ARGP freezes weak entries"]
+  learn --> stuck{"BSE trigger fired?"}
+  stuck -- "yes" --> esc["BSE: Cauchy kicks, then archive-seeded partial restart"]
+  stuck -- "no" --> ls["Endgame coordinate local search on elites (TERRA gate at D >= 100)"]
+  esc --> ls
+  ls --> fp["Final compass polish, once (D >= 50)"]
+  fp --> dsr["Deep-stall full restart when the incumbent is frozen"]
+  dsr --> budget{"nfes < max_nfes?"}
+  budget -- "yes" --> nlpsr
+  budget -- "no" --> ret["Return best ever; error = best - optimum"]
+```
+
 ## Validation Workflow
 
 ```mermaid
@@ -207,13 +244,14 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  build["CMake build (WinLibs GCC, -std=c++20 -static)"] --> ctest["12 ctest suites"]
+  build["CMake build (WinLibs GCC, -std=c++20 -static)"] --> ctest["13 ctest suites"]
   ctest --> cc["core + experiment + reference-results"]
   ctest --> cb["cec2017 / cec2013 / cec2013lsgo / cec2020"]
   ctest --> c11["cec2011 wpa / wpb / wpc + integration"]
   ctest --> bench["gsk_bench smoke CLI"]
+  ctest --> cli["gskcec_cli_exit_codes (stub MATLAB, CLI exit codes)"]
   bench --> mexbuild["scripts/build_mex_bridge.ps1 -> build/mex/gskcec_eval.mexw64"]
-  mexbuild --> smoke["MATLAB: run_matlab_smoke_tests (src/tests/test_*.m)"]
+  mexbuild --> smoke["MATLAB: run_matlab_smoke_tests (13 src/tests/test_*.m, incl. test_dt_gsk_smoke)"]
   smoke --> bridgechk["test_mex_bridge.m: bridge == original-MEX ground truth"]
   bridgechk --> green["All green: ports + optimizers + bridge verified"]
 ```

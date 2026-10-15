@@ -25,11 +25,12 @@ local_check_contract(r1, problem, 'fdb-agsk', opts.seed);
 local_assert(r1.params.fdb_case == 1, 'default fdb_case must be 1');
 local_assert(r1.params.np_init == 100, 'default np_init must be 100');
 
-% reference counter semantics: cap at max_nfes, +1 when a generation
-% crosses the budget mid-population (population reduction makes the
-% per-generation increments uneven)
-local_assert(r1.nfes >= problem.max_nfes && r1.nfes <= problem.max_nfes + 1, ...
-    sprintf('fdb-agsk: nfes accounting off (got %d)', r1.nfes));
+% reference counter semantics: the per-child counter reads max_nfes+1 when
+% a generation crosses the budget mid-population (population reduction
+% makes the per-generation increments uneven); the reported copies
+% (result.nfes, convergence.nfes) are clipped at max_nfes
+local_assert(r1.nfes == problem.max_nfes, ...
+    sprintf('fdb-agsk: reported nfes must be clipped at max_nfes (got %d)', r1.nfes));
 local_assert(strcmp(r1.termination, 'max_evaluations'), ...
     'termination must be max_evaluations (reference never stops early)');
 
@@ -63,8 +64,8 @@ for c = 1:5
     rc = fdb_agsk_optimize(problem_brief, oc);
     local_check_contract(rc, problem_brief, 'fdb-agsk', oc.seed);
     local_assert(rc.params.fdb_case == c, sprintf('case %d: params.fdb_case wrong', c));
-    local_assert(rc.nfes >= problem_brief.max_nfes && rc.nfes <= problem_brief.max_nfes + 1, ...
-        sprintf('case %d: nfes accounting off (got %d)', c, rc.nfes));
+    local_assert(rc.nfes == problem_brief.max_nfes, ...
+        sprintf('case %d: reported nfes must be clipped at max_nfes (got %d)', c, rc.nfes));
     rng(oc.seed, 'twister');
     pop0 = repmat(problem_brief.lb, 100, 1) + rand(100, d) .* repmat(problem_brief.ub - problem_brief.lb, 100, 1);
     med0 = median(problem_brief.evaluate(pop0));
@@ -83,6 +84,21 @@ catch err
         sprintf('unexpected error identifier: %s', err.identifier));
 end
 local_assert(threw, 'fdb_case = 6 must raise an error');
+
+%% min_pop_size >= 11 floor (P = 0.05 senior partition needs NP >= 11)
+r11 = fdb_agsk_optimize(problem_brief, struct('seed', 3, 'min_pop_size', 11));
+local_assert(r11.nfes == problem_brief.max_nfes, 'min_pop_size = 11 must run to budget');
+bad = {struct('seed', 3, 'min_pop_size', 10), struct('seed', 3, 'min_pop_size', 4), ...
+       struct('seed', 3, 'np_init', 10, 'min_pop_size', 10)};
+for k = 1:numel(bad)
+    threw = false;
+    try
+        fdb_agsk_optimize(problem_brief, bad{k});
+    catch err
+        threw = strcmp(err.identifier, 'fdb_agsk_optimize:options');
+    end
+    local_assert(threw, sprintf('invalid population sizes (case %d) must be rejected', k));
+end
 
 fprintf('test_fdb_agsk_smoke: PASS\n');
 end

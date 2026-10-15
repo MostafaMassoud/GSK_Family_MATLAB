@@ -10,6 +10,8 @@ src/cli/         gsk_list, gsk_validate, gsk_run, and gsk_bench (timing harness)
 src/mex_bridge/  optional gskcec_eval MEX bridge (built by
                  scripts/build_mex_bridge.ps1; the library itself is MEX-free)
 tests/unit/      C++ unit tests for the ports and tooling
+tests/cli/       CLI exit-code test (ctest gskcec_cli_exit_codes): fake_matlab.cpp
+                 stub MATLAB + gsk_run_exit_codes.cmake (cmake -P script)
 tests/data/      ground-truth probe points and expected values (generated
                  from the ORIGINAL reference implementations by the MATLAB
                  scripts under scripts/; cec2013_regression.csv is a

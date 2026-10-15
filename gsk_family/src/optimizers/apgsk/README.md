@@ -18,7 +18,10 @@ historical source: apgsk/apgsk/APGSK Code/boundConstraint.m
 
 - Population policy: current interface default `NP = 100`; the APGSK
   reference release's CEC2020-style `NP = 200*D` for `D > 5`, else
-  `NP = 250`, is opt-in via `options.np_init`. `min_pop_size` = 12.
+  `NP = 250`, is opt-in via `options.np_init`. `min_pop_size` = 12; it must be >= 11
+  (the P = 0.05 senior partition needs NP >= 11) and `np_init >=
+  min_pop_size`, otherwise `apgsk_optimize:options` is raised before any
+  RNG draw.
 - Pools (fixed, reference values): `KF_pool = [0.1 1.0 0.5 1.0]`,
   `kf_pool_negative = [-0.15 -0.05 -0.05 -0.15]` (named `KF_poool` (sic)
   in the reference source), `KR_pool = [0.2 0.1 0.9 0.9]`.
@@ -60,7 +63,9 @@ historical source: apgsk/apgsk/APGSK Code/boundConstraint.m
 
 - Seeding policy: `gsk_set_rng(options)` once at entry. Under runner
   `seed_policy='reference'`, APGSK keeps the reference `D*func*run` seed rule
-  and uses the legacy `seed` generator. Direct optimizer calls default to
+  and uses the legacy `seed` generator (a project choice: the archived APGSK
+  driver seeds the same value with `twister`, so reference mode does not
+  replay that driver's random stream). Direct optimizer calls default to
   `twister`, with `threefry`, `twister`, and deterministic legacy `seed`/`state`
   available for checks. Wall-clock seeding is not supported.
 - `KF_poool` renamed `kf_pool_negative` (original name cited in a

@@ -8,18 +8,30 @@ function analyze_results(varargin)
 % Reads the per-dimension summary tables under results_root
 % (<optimizer>/<suite>/summary/<optimizer>_<suite>_D<dim>.csv, or the
 % dimensionless rollup for native-dim suites), aligns each (optimizer, suite,
-% dimension) with the matching imported reference table, and produces:
+% dimension) with the imported reference table of that SAME dimension (no
+% table for that dimension -> blank reference, insufficient_reference), and
+% produces:
 %   <output_dir>/comparison_table.csv   per-function generated vs reference mean
 %   <output_dir>/friedman_ranks.csv     average Friedman rank per optimizer
 %   <output_dir>/wilcoxon_vs_reference.csv  signed-rank p-value per optimizer
 %   <output_dir>/fig_<suite>_D<dim>_boxplot.pdf      error spread per optimizer
 %   <output_dir>/fig_<suite>_D<dim>_convergence.pdf  a convergence curve if present
 %
+% Archived trees below results_root (_archive/<stamp>/ refresh copies and the
+% launchers' _overwrite_archive/<suite>_<stamp>/ trees) are ignored. If the
+% same (optimizer, suite, dimension) is found under more than one layout (e.g.
+% results/<opt>/<suite> from gsk_run and results/_run_all/<opt>/<suite> from
+% the launchers), a warning is printed and each copy is labeled by its path
+% below results_root (e.g. "_run_all/gsk" vs "gsk") in the tables and figures;
+% point results_root at one layout to avoid this.
+%
 % Statistics are implemented WITHOUT the Statistics and Machine Learning
-% Toolbox (no Python anywhere): the Friedman chi-square uses base `gammainc`
-% for its p-value and the Wilcoxon signed-rank uses base `erfc` for the normal
-% approximation. Methods follow Derrac et al. (2011), "A practical tutorial on
-% the use of nonparametric statistical tests..." Swarm and Evol. Comput.
+% Toolbox (no Python anywhere): tie-aware average ranks come from a local
+% helper (rank_with_ties, not tiedrank), the Friedman chi-square uses base
+% `gammainc` for its p-value and the Wilcoxon signed-rank uses base `erfc` for
+% the normal approximation. Methods follow Derrac et al. (2011), "A practical
+% tutorial on the use of nonparametric statistical tests..." Swarm and Evol.
+% Comput.
 %
 % Lower error is better throughout. The script degrades gracefully: whatever
 % optimizers/suites are present in results_root are analyzed; missing data is
@@ -51,6 +63,8 @@ keys = arrayfun(@(r) sprintf('%s|D%d', r.suite, r.dim), runs, 'UniformOutput', f
 comp_fid = fopen(fullfile(a.output_dir, 'comparison_table.csv'), 'w');
 fri_fid  = fopen(fullfile(a.output_dir, 'friedman_ranks.csv'), 'w');
 wil_fid  = fopen(fullfile(a.output_dir, 'wilcoxon_vs_reference.csv'), 'w');
+% Close the three tables on any exit path, including an error mid-analysis.
+csv_closer = onCleanup(@() close_open_fids([comp_fid, fri_fid, wil_fid]));
 fprintf(comp_fid, 'suite,dimension,optimizer,function,generated_mean,reference_mean\n');
 fprintf(fri_fid,  'suite,dimension,optimizer,avg_friedman_rank,n_functions,chi2,df,p_value\n');
 fprintf(wil_fid,  'suite,dimension,optimizer,n_functions,wilcoxon_W,z,p_value,verdict_vs_reference\n');
@@ -75,9 +89,9 @@ for g = 1:numel(ukeys)
     k = numel(group);
     nF = numel(common_funcs);
     M = zeros(nF, k);  % rows=functions, cols=optimizers
-    names = strings(1, k);
+    names = strings(1, k);   % display labels (optimizer, or path for duplicates)
     for i = 1:k
-        names(i) = group(i).optimizer;
+        names(i) = group(i).label;
         for f = 1:nF
             M(f, i) = group(i).mean_for(common_funcs(f));
         end
@@ -86,7 +100,7 @@ for g = 1:numel(ukeys)
     % Per-function generated vs reference, and the Wilcoxon signed-rank of each
     % optimizer's means against the reference means across functions.
     for i = 1:k
-        ref = load_reference_means(a.reference_root, suite, names(i), dim, common_funcs);
+        ref = load_reference_means(a.reference_root, suite, group(i).optimizer, dim, common_funcs);
         gen = M(:, i);
         for f = 1:nF
             fprintf(comp_fid, '%s,%d,%s,%d,%.10e,%s\n', suite, dim, names(i), ...
@@ -129,14 +143,37 @@ fclose(comp_fid); fclose(fri_fid); fclose(wil_fid);
 fprintf('\nanalyze_results: wrote tables and figures to %s\n', a.output_dir);
 end
 
+function close_open_fids(fids)
+% onCleanup target: close whichever output handles are still open (a no-op
+% after the normal fclose at the end of analyze_results).
+for h = fids
+    if h > 2 && ~isempty(fopen(h)); fclose(h); end
+end
+end
+
 % ---- statistics (toolbox-free) ---------------------------------------------
+
+function r = rank_with_ties(x)
+% Average ranks with ties (1 = smallest), NaN -> NaN rank, same shape as x.
+% Base-MATLAB stand-in for the Statistics Toolbox tiedrank on a vector.
+[sx, ix] = sort(x(:));   % ascending; NaN sorts last
+nn = nnz(~isnan(sx));
+r = nan(size(x));
+i = 1;
+while i <= nn
+    j = i;
+    while j < nn && sx(j + 1) == sx(i); j = j + 1; end
+    r(ix(i:j)) = (i + j) / 2;
+    i = j + 1;
+end
+end
 
 function [avg_rank, chi2, df, pv] = friedman_ranks(M)
 % M is nF x k (rows=problems, cols=algorithms); lower is better.
 [nF, k] = size(M);
 R = zeros(nF, k);
 for f = 1:nF
-    R(f, :) = tiedrank(M(f, :));  % 1 = best (smallest error)
+    R(f, :) = rank_with_ties(M(f, :));  % 1 = best (smallest error)
 end
 avg_rank = mean(R, 1);
 chi2 = 12 * nF / (k * (k + 1)) * sum((avg_rank - (k + 1) / 2) .^ 2);
@@ -154,7 +191,7 @@ n = numel(d);
 if n == 0
     W = 0; z = 0; pv = 1; return;
 end
-r = tiedrank(abs(d));
+r = rank_with_ties(abs(d));
 W = sum(r(d > 0));                 % sum of positive ranks
 mu = n * (n + 1) / 4;
 sigma = sqrt(n * (n + 1) * (2 * n + 1) / 24);
@@ -206,7 +243,7 @@ try
         C = group(i).convergence;
         if ~isKey(C, fsel); continue; end
         M = C(fsel);   % columns [Eval, BestError]
-        plot(ax, M(:, 1), max(M(:, 2), realmin), 'DisplayName', char(group(i).optimizer));
+        plot(ax, M(:, 1), max(M(:, 2), realmin), 'DisplayName', char(group(i).label));
         plotted = true;
     end
     if ~plotted; close(f); return; end
@@ -245,13 +282,21 @@ function runs = load_all_summaries(results_root)
 % optimizers share a comparison group; instead the dimensionless rollup
 % <opt>_<suite>.csv (all functions, each once) is loaded under dim = 0 so the
 % whole suite forms a single cross-optimizer group. per_run.csv is skipped.
-runs = struct('optimizer', {}, 'suite', {}, 'dim', {}, 'functions', {}, ...
-              'means', {}, 'mean_for', {}, 'convergence', {});
+% Anything below an _archive or _overwrite_archive folder (relative to
+% results_root) is skipped. label is the optimizer name, or, when the same
+% (optimizer, suite, dim) occurs under several layouts, the path from
+% results_root to the optimizer folder (layout), so the copies stay distinct.
+runs = struct('optimizer', {}, 'label', {}, 'layout', {}, 'suite', {}, 'dim', {}, ...
+              'functions', {}, 'means', {}, 'mean_for', {}, 'convergence', {});
+root_info = dir(results_root);
+if isempty(root_info); root_abs = ''; else; root_abs = root_info(1).folder; end
 listing = dir(fullfile(results_root, '**', 'summary', '*.csv'));
 for i = 1:numel(listing)
     name = listing(i).name;
     if strcmpi(name, 'per_run.csv'); continue; end
     summary_dir = listing(i).folder;
+    rel = path_parts_below(summary_dir, root_abs);
+    if any(strcmpi(rel, '_archive') | strcmpi(rel, '_overwrite_archive')); continue; end
     suite_dir = fileparts(summary_dir);
     opt_dir = fileparts(suite_dir);
     [~, suite] = fileparts(suite_dir);
@@ -276,6 +321,9 @@ for i = 1:numel(listing)
     means = T.(mcol);
 
     r.optimizer = string(optimizer);
+    r.label = string(optimizer);
+    r.layout = string(strjoin(rel(1:max(end - 2, 0)), '/'));   % e.g. "_run_all/gsk"
+    if strlength(r.layout) == 0; r.layout = r.label; end
     r.suite = char(suite);
     r.dim = dim;
     r.functions = funcs(:)';
@@ -288,6 +336,32 @@ for i = 1:numel(listing)
     r.convergence = load_curves(fullfile(opt_dir, char(suite), 'curves'), dim);
     runs(end + 1) = r; %#ok<AGROW>
 end
+
+% The same (optimizer, suite, dim) from several layouts would otherwise enter
+% one Friedman group twice under one name: label each copy by its layout.
+if isempty(runs); return; end
+ids = arrayfun(@(q) sprintf('%s|%s|%d', q.optimizer, q.suite, q.dim), runs, 'UniformOutput', false);
+[~, ~, j] = unique(ids);
+for u = find(accumarray(j(:), 1) > 1)'
+    dup = find(j(:)' == u);
+    for d = dup
+        runs(d).label = runs(d).layout;
+    end
+    fprintf(['analyze_results: WARNING duplicate %s/%s D%d from multiple layouts (%s); ' ...
+             'labeled by path\n'], runs(dup(1)).optimizer, runs(dup(1)).suite, runs(dup(1)).dim, ...
+            strjoin(cellstr([runs(dup).layout]), ', '));
+end
+end
+
+function parts = path_parts_below(folder, root_abs)
+% Path components of folder below root_abs (all of them if it is not below).
+f = strrep(folder, '\', '/');
+r = regexprep(strrep(root_abs, '\', '/'), '/+$', '');
+if ~isempty(r) && strncmpi(f, [r '/'], numel(r) + 1)
+    f = f(numel(r) + 2:end);
+end
+parts = strsplit(f, '/');
+parts = parts(~cellfun('isempty', parts));
 end
 
 function v = lookup_mean(mp, fn)
@@ -321,14 +395,20 @@ end
 
 function ref = load_reference_means(reference_root, suite, optimizer, dim, funcs)
 % Map optimizer name to the reference folder/file token and read its mean
-% column for the requested functions; NaN where unavailable.
+% column for the requested functions; NaN where unavailable. Only the table of
+% the requested dimension is used (dim = 0 -> the dimensionless rollup
+% <opt>_<suite>.csv); a dimension without its own reference table stays NaN
+% rather than borrowing another dimension's table.
 algo = char(optimizer);
 ref = nan(numel(funcs), 1);
 folder = fullfile(reference_root, suite, algo);
 if ~exist(folder, 'dir'); return; end
-cand = dir(fullfile(folder, sprintf('*_D%02d.csv', dim)));
-if isempty(cand); cand = dir(fullfile(folder, sprintf('*_D%d.csv', dim))); end
-if isempty(cand); cand = dir(fullfile(folder, '*.csv')); end   % dimensionless (cec2011)
+if dim == 0
+    cand = dir(fullfile(folder, sprintf('%s_%s.csv', algo, suite)));   % native-dim rollup
+else
+    cand = dir(fullfile(folder, sprintf('*_D%02d.csv', dim)));
+    if isempty(cand); cand = dir(fullfile(folder, sprintf('*_D%d.csv', dim))); end
+end
 if isempty(cand); return; end
 T = read_csv(fullfile(cand(1).folder, cand(1).name));
 % Normalize the function column (handles 1 / F1 / f1) and find a Mean column.

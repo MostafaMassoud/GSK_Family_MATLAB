@@ -136,7 +136,12 @@ apgsk
 atmals-gsk
 egsk
 fdb-agsk
+dt-gsk
 ```
+
+These are the seven GSK-family optimizers; the first six are ports of MATLAB
+reference releases, and `dt-gsk` is a port of the Python DT-GSK reference
+implementation.
 
 You can also summarize the imported published result tables you will later
 compare against:
@@ -226,6 +231,8 @@ Usage:
   gsk_validate --suite cec2013 --against saved_vectors [--root <project_root>]
   gsk_validate --compare <results_root> <cec_reference_results_root> [--out <report.csv>]
   gsk_validate --verify <run_dir> <cec_reference_results_root> [--reduced|--full]
+      (without --reduced/--full the protocol is read from the run's
+       summary/environment.json runs/max_nfes_override; full if absent)
 ```
 
 (`--root` defaults to the current directory; pass it if you run from elsewhere.)
@@ -258,9 +265,10 @@ overwrite: true
 The config keys are a strict flat-YAML subset (unknown keys are rejected with a
 line number). The accepted keys are: `optimizers`, `suite`, `functions`,
 `dimensions`, `runs`, `seed`, `seed_policy`, `rand_generator`,
-`max_evaluations`, `output_root`, `data_root`, `reference_root`, `overwrite`,
-and `parallel` (only `parallel: false` is accepted; `true` is rejected on
-purpose, since this version runs sequentially).
+`max_evaluations`, `output_root`, `reference_root`, `overwrite`, and `parallel`
+(only `parallel: false` is accepted; `true` is rejected on purpose, since this
+version runs sequentially). A `data_root` key is rejected: benchmark data always
+loads from `<root>\benchmarks\cec_suite_cpp\<suite>\input_data`.
 
 ### 4a. One-time MEX-bridge build (needs MATLAB)
 
@@ -308,6 +316,8 @@ The C++ command passes the seed/RNG policy documented in
 default requested `rand_generator='threefry'`, and `use_parallel=false`.
 Reference mode records the effective generator in metadata; AGSK, APGSK,
 FDB-AGSK, eGSK, and ATMALS-GSK use legacy `seed`, while GSK uses `twister`.
+(DT-GSK is the exception: it always runs the unified seed with `threefry`,
+under every policy; see [runbook.md](runbook.md#37-dt-gsk).)
 For new fair cross-family experiments, choose `seed_policy='unified'`; it uses
 one optimizer-independent seed schedule over `(D,function,run)`, shares the
 runner-generated initial population and post-initialization RNG state, and
@@ -390,12 +400,14 @@ results\gsk\cec2017\
 Re-running an `(optimizer, suite)` preserves the existing tree. Completed run
 ids are skipped, missing runs are appended, and fixed-name refreshed artifacts
 are archived under `_archive\<timestamp>\`. The imported reference tables under
-`benchmarks\cec_reference_results` are never written to. Full column definitions
-live in [result_schema.md](../reference/result_schema.md); here is how to *read*
-each file.
-The resume logic is seed-aware: if a previous `per_run.csv` row was produced by
-another seed policy, it remains on disk for audit history but does not satisfy
-the current schedule.
+`benchmarks\cec_reference_results` are never written to (`run_experiment`
+refuses an output folder there). Full column definitions live in
+[result_schema.md](../reference/result_schema.md); here is how to *read* each
+file.
+The resume logic is seed-, budget- and generator-aware: if a previous
+`per_run.csv` row was produced with another seed, budget (`max_nfes`) or
+generator, it remains on disk for audit history but does not satisfy the
+current run, which is redone and appended.
 
 ### summary\gsk_cec2017_D10.csv — statistics table (per dimension)
 
@@ -419,16 +431,25 @@ is `100 × 1 = 100`, so the error is `best_fitness − 100`. Native-dimension su
 Columns:
 
 ```text
-optimizer,suite,function,dimension,run,seed,best_fitness,error,nfes,termination,runtime_seconds
+optimizer,suite,function,dimension,run,seed,best_fitness,error,nfes,termination,runtime_seconds,max_nfes,rand_generator
 ```
 
-- `best_fitness` — the lowest raw score the optimizer found.
+- `best_fitness` — the lowest raw score the optimizer found (stored with
+  `%.17g`, full round-trip precision).
 - `error` — `best_fitness − optimum`, with errors below `1e-8` zeroed exactly as
-  the reference drivers do. (For suites with no published optimum, e.g. CEC2011,
-  `error` is `NaN`.)
+  the reference drivers do. (On CEC2011, which has no published optimum,
+  `error` is `NaN`; on CEC2013LSGO the optimum is `0`, so `error` equals the raw
+  `best_fitness`.)
 - `nfes` — the number of function evaluations actually consumed (here ≈ 2000).
 - `seed` — the deterministic per-run seed.
 - `termination` — for baseline GSK this is always `max_evaluations`.
+- `max_nfes` — the cell's evaluation budget (here 2000, after the override).
+- `rand_generator` — the generator the run actually used (under the reference
+  policy GSK uses `twister`).
+
+A rerun into the same folder reuses a row only when its `seed`, `max_nfes` and
+`rand_generator` all match the new run; otherwise that run is redone and a
+fresh row is appended.
 
 Under unified mode, the same `(dimension,function,run)` key must show the same
 seed for every optimizer. The `seed_schedule.csv` file is the fastest place to
@@ -520,12 +541,16 @@ You can re-run the verdict on any existing run directory without re-running the
 optimizer:
 
 ```powershell
-build\gsk_validate.exe --verify results\gsk\cec2017 benchmarks\cec_reference_results --reduced
+build\gsk_validate.exe --verify results\gsk\cec2017 benchmarks\cec_reference_results
 ```
 
-Use `--full` instead of `--reduced` to apply the strict (full-protocol) context,
-where the gross-deviation check becomes a hard failure. `--verify` writes the
-next available `verification*.json` file and exits nonzero on `DEVIATES`.
+Without `--reduced` / `--full`, `--verify` reads `runs` and `max_nfes_override`
+from the run's `summary\environment.json` (the same rule `gsk_run` uses; the
+full protocol when that file is absent), so this smoke run is again judged as
+reduced budget. Pass `--reduced` or `--full` only to override that; `--full`
+applies the strict context, where the gross-deviation check becomes a hard
+failure. `--verify` writes the next available `verification*.json` file and
+exits nonzero on `DEVIATES`.
 
 ### Opting out of verification
 
@@ -565,13 +590,17 @@ is expected and not an error, for the same reduced-budget reason as above.
 ## 8. What to try next
 
 - **A fuller matrix.** The repository ships ready-made configs:
-  `configs\all_cec2017.yml` (all six optimizers, CEC2017, 51 runs),
-  `configs\all_cec2011.yml` (CEC2011, 25 runs), and
+  `configs\all_cec2017.yml` (all seven optimizers, CEC2017, 51 runs),
+  `configs\all_cec2011.yml` (all seven, CEC2011, 25 runs), and
   `configs\agsk_cec2020.yml` (AGSK on CEC2020, 30 runs). These are full
   reproductions and take much longer to run. Example:
   ```powershell
   build\gsk_run.exe --config configs\agsk_cec2020.yml --root .
   ```
+- **DT-GSK.** The seventh optimizer runs on any of the five suites with
+  `--optimizer dt-gsk` (it has reference tables on all of them).
+  [Runbook section 3.7](runbook.md#37-dt-gsk) covers its seeding exception and
+  the run-by-run comparison with `scripts/compare_reference_runs.m`.
 - **MATLAB-only smoke tests.** To exercise the optimizers and runner without the
   MEX bridge (pure-MATLAB sphere problems), run:
   ```powershell

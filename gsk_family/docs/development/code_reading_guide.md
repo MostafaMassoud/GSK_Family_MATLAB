@@ -12,7 +12,7 @@ code. When you are ready to build or contribute, see the
 
 ## The 60-second mental model
 
-The project answers one question reproducibly: *how well do the six GSK
+The project answers one question reproducibly: *how well do the seven GSK
 optimizers solve the standard CEC benchmark problems, compared to published
 results?* It has two halves that meet at a thin bridge:
 
@@ -36,7 +36,20 @@ results?* It has two halves that meet at a thin bridge:
 **"What does one optimizer look like?"** Open
 `src/optimizers/gsk/gsk_optimize.m`. Its help block cites the exact reference
 file and links the input/output contract (`docs/reference/matlab_interface.md`). Baseline
-GSK is the simplest; the other five are variations next to it.
+GSK is the simplest; the other six are variations next to it.
+
+**"What does a port of a non-MATLAB reference look like?"** Open
+`src/optimizers/dt-gsk/`, ported from the Python DT-GSK reference
+implementation (v2.46, MIT license). Start with `README.md` (dimension tiers,
+seeding exception, validation record) and `docs/algorithms/dt-gsk.md`, then
+`dt_gsk_config.m` (every setting of
+the published `pub` profile, grouped by dimension tier), then
+`dt_gsk_optimize.m` (the whole optimizer, eGSK-style: one file with local
+helper functions) and `dt_gsk_graph.m` (the interaction graph used from
+`D = 50`). Unlike the other six it does not use the shared `src/common` RNG and
+fair-start helpers: it builds named Threefry substreams from `options.seed`
+and samples its own `NP = 5*D` population; the runner's special handling is
+`is_unified_only` in `src/runners/run_experiment.m`.
 
 **"What does one benchmark problem look like?"** Open
 `benchmarks/cec_suite_cpp/cec2017/src/cec2017_problem.cpp`. The header cites the
@@ -90,4 +103,6 @@ test changes, then run them with `ctest --test-dir build --output-on-failure`.
   direct `run_experiment(...)` calls default to unified fair-start mode.
   Unified seeds come from `get_cec_seed(base_seed, dim, func, run)` and exclude
   optimizer name, optimizer index, population size, suite name, and budget.
-  Every actual seed is recorded; details are in `docs/reference/seed_policy.md`.
+  DT-GSK is unified-only (that seed and `threefry` under every policy) and
+  self-initializes instead of taking the runner's `X0`. Every actual seed is
+  recorded; details are in `docs/reference/seed_policy.md`.

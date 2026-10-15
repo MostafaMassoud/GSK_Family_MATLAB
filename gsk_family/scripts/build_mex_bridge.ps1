@@ -8,6 +8,7 @@
 #
 # Defaults: MatlabRoot is derived from 'matlab' on PATH or the GSKCEC_MATLAB
 # environment variable; Gxx from g++ on PATH. Output: build\mex\gskcec_eval.mexw64
+# (fully statically linked: it needs no MinGW runtime DLL at load time).
 
 param(
     [string]$MatlabRoot = "",
@@ -84,7 +85,8 @@ foreach ($s in $srcPaths) { if (-not (Test-Path $s)) { throw "Missing source: $s
 
 # Optimization: -O3 -march=native -funroll-loops -ffp-contract=off (the CMake
 # GSKCEC_NATIVE flag set) -- ~1.15-1.36x faster than -O2, ctest-validated
-# (12/12) and within the project's 1e-12 faithful-port tolerance.
+# (12/12 suites at the time; the later 13th only checks CLI exit codes) and
+# within the project's 1e-12 faithful-port tolerance.
 # Reproducibility note: ANY rebuild with a current toolchain differs from the
 # original committed-results binary by <=~4.3e-15 -- a libm/compiler-version
 # artifact, NOT these flags (a plain -O2 rebuild shows the identical delta).
@@ -92,13 +94,19 @@ foreach ($s in $srcPaths) { if (-not (Test-Path $s)) { throw "Missing source: $s
 # For a strict -O2 build instead, replace the "-O3", "-march=native",
 # "-funroll-loops", "-ffp-contract=off" entries below with a single "-O2"
 # (the rest of the argument list is unchanged).
+# Linking: "-static" links the whole MinGW runtime (libgcc, libstdc++ AND
+# libwinpthread, which a posix-thread-model toolchain otherwise imports as
+# libwinpthread-1.dll) into the bridge, like the CMake targets, so it needs no
+# MinGW runtime DLL on PATH at load time; MATLAB does not ship those DLLs.
+# The MATLAB import libraries are passed by full path because under -static
+# ld no longer resolves -lmx/-lmex/-lmat to the libmx.lib-style .lib files.
 $gxxArgs = @(
     "-std=c++20", "-O3", "-march=native", "-funroll-loops", "-ffp-contract=off", "-shared",
-    "-static-libgcc", "-static-libstdc++",
+    "-static",
     "-I", (Join-Path $projectRoot "benchmarks\cec_suite_cpp\cec_tools\include"),
     "-I", $externInc
 ) + $srcPaths + @(
-    "-L", $externLib, "-lmx", "-lmex", "-lmat",
+    (Join-Path $externLib "libmx.lib"), (Join-Path $externLib "libmex.lib"), (Join-Path $externLib "libmat.lib"),
     "-o", $tmpFile
 )
 Remove-Item -LiteralPath $tmpFile -Force -ErrorAction SilentlyContinue
@@ -114,6 +122,6 @@ if ($LASTEXITCODE -ne 0) {
 try {
     Move-Item -LiteralPath $tmpFile -Destination $outFile -Force
 } catch {
-    throw "Built $tmpFile but could not replace $outFile (is it loaded in a MATLAB session? run 'clear mex' or close MATLAB, then retry): $($_.Exception.Message)"
+    throw "Built $tmpFile but could not replace $outFile (is it loaded in a MATLAB session? run gskcec_eval('clear'); clear mex -- live handles keep the bridge locked -- or close MATLAB, then retry): $($_.Exception.Message)"
 }
 Write-Host "gskcec_eval.mexw64 built successfully."

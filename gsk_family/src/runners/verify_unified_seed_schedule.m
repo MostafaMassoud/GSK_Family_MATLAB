@@ -2,8 +2,8 @@ function verify_unified_seed_schedule(results_root, optimizers, suite)
 %VERIFY_UNIFIED_SEED_SCHEDULE Confirm matching seeds across optimizers.
 %
 % Reads results/_run_all/<optimizer>/<suite>/summary/seed_schedule.csv and
-% verifies that every successful optimizer used the same seed for each
-% (Dim,Function,Run) key.
+% verifies that the optimizers used the same seed for every (Dim,Function,Run)
+% key that two or more of their schedules contain.
 %
 % This is a post-run safety net for the root run_all_cec*.m launchers. The
 % seed formula is already optimizer-independent, but this check proves the
@@ -11,30 +11,68 @@ function verify_unified_seed_schedule(results_root, optimizers, suite)
 % such as adding an optimizer index, using a per-optimizer base seed, or running
 % one optimizer under reference/native mode while the rest run unified.
 %
+% Only a seed mismatch is an error. A key missing from some optimizers is a
+% warning (verify_unified_seed_schedule:missingKeys), not policy drift:
+% run_experiment records a failed (function, dimension) cell as a SKIP with no
+% schedule row (e.g. eGSK without the Optimization Toolbox), and with
+% overwrite=false a tree may hold rows from an earlier functions/runs config.
+% Keys are compared against the union of the schedules read so far, so a cell
+% missing from the first optimizer is still compared between the others.
+%
 % Result directories are append-only. When a run is repeated after a policy
 % change, seed_schedule.csv may contain older historical rows for the same
-% (Dim,Function,Run). The reader below keeps the latest row per key, matching
-% run_experiment's seed-aware resume behavior: old rows remain auditable, while
-% the current schedule is what gets compared.
+% (Dim,Function,Run). The reader below keeps the latest row per key; this is
+% the active schedule because run_experiment appends the active seed again
+% whenever it reuses a run whose latest row came from another configuration.
+% Old rows remain auditable, while the current schedule is what gets compared.
 
 optimizers = cellstr(optimizers);
 if numel(optimizers) < 2
     return;
 end
 
-ref_opt = optimizers{1};
-ref_rows = read_seed_schedule(fullfile(results_root, ref_opt, suite, 'summary', 'seed_schedule.csv'));
-for i = 2:numel(optimizers)
-    opt = optimizers{i};
-    rows = read_seed_schedule(fullfile(results_root, opt, suite, 'summary', 'seed_schedule.csv'));
-    assert(isequal(ref_rows(:, 1:3), rows(:, 1:3)), 'verify_unified_seed_schedule:keyMismatch', ...
-        'seed schedule keys differ between %s and %s', ref_opt, opt);
-    assert(isequal(ref_rows(:, 4), rows(:, 4)), 'verify_unified_seed_schedule:seedMismatch', ...
-        'unified seed mismatch between %s and %s', ref_opt, opt);
+schedules = cell(1, numel(optimizers));
+for i = 1:numel(optimizers)
+    schedules{i} = read_seed_schedule(fullfile(results_root, optimizers{i}, suite, 'summary', 'seed_schedule.csv'));
 end
 
-fprintf('verify_unified_seed_schedule: PASS (%d optimizers, %d scheduled run rows)\n', ...
-        numel(optimizers), size(ref_rows, 1));
+all_keys = schedules{1}(:, 1:3);
+all_seeds = schedules{1}(:, 4);
+owner = repmat(optimizers(1), size(all_keys, 1), 1);
+n_compared = 0;
+for i = 2:numel(optimizers)
+    opt = optimizers{i};
+    rows = schedules{i};
+    [~, ia, ib] = intersect(all_keys, rows(:, 1:3), 'rows');
+    bad = find(all_seeds(ia) ~= rows(ib, 4), 1);
+    if ~isempty(bad)
+        k = all_keys(ia(bad), :);
+        error('verify_unified_seed_schedule:seedMismatch', ...
+            'unified seed mismatch between %s and %s at D%d F%d run %d (%s vs %s)', ...
+            owner{ia(bad)}, opt, k(1), k(2), k(3), ...
+            seed_text(all_seeds(ia(bad))), seed_text(rows(ib(bad), 4)));
+    end
+    n_compared = n_compared + numel(ia);
+    [~, inew] = setdiff(rows(:, 1:3), all_keys, 'rows');
+    all_keys = [all_keys; rows(inew, 1:3)]; %#ok<AGROW>
+    all_seeds = [all_seeds; rows(inew, 4)]; %#ok<AGROW>
+    owner = [owner; repmat({opt}, numel(inew), 1)]; %#ok<AGROW>
+end
+
+n_keys = size(all_keys, 1);
+for i = 1:numel(optimizers)
+    [~, imiss] = setdiff(all_keys, schedules{i}(:, 1:3), 'rows');
+    if isempty(imiss); continue; end
+    k = all_keys(imiss(1), :);
+    warning('verify_unified_seed_schedule:missingKeys', ...
+        ['%s has no seed_schedule row for %d of %d (Dim,Function,Run) key(s) ' ...
+         '(first: D%d F%d run %d); those keys were not compared for it ' ...
+         '(failed/skipped cells or a different functions/runs config)'], ...
+        optimizers{i}, numel(imiss), n_keys, k(1), k(2), k(3));
+end
+
+fprintf(['verify_unified_seed_schedule: PASS (%d optimizers, %d scheduled key(s), ' ...
+         '%d cross-optimizer seed comparison(s))\n'], numel(optimizers), n_keys, n_compared);
 end
 
 function rows = read_seed_schedule(path)
@@ -55,4 +93,8 @@ else
     rows = rows(sort(last_idx), :);
     rows = sortrows(rows, [1 2 3]);
 end
+end
+
+function s = seed_text(seed)
+s = sprintf('%.0f', seed);
 end

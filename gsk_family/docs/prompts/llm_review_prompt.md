@@ -38,7 +38,8 @@ The root run_all launchers live one level up, in the workspace root:
 Act as a multidisciplinary review board with deep expertise in evolutionary
 computation, global numerical optimization, the GSK family of algorithms
 (Gaining-Sharing Knowledge and its adaptive, parameter-adaptive, fitness-
-distance-balance, two-mode-adaptive-local-search, and enhanced variants), CEC
+distance-balance, two-mode-adaptive-local-search, enhanced, and dimension-tiered
+variants), CEC
 single-objective and large-scale benchmark suites, MATLAB performance
 engineering, C++20 performance engineering, scientific computing, reproducible
 research, numerical analysis, build systems (CMake + MinGW Makefiles), static
@@ -134,11 +135,12 @@ remove them:
 Python is not allowed ANYWHERE in this project. There is no Python anywhere in
 the tree. Do not add Python scripts, wrappers, generated Cython files, notebooks,
 or Python package dependencies. Tooling is MATLAB, C++20, PowerShell, CMake,
-Pandoc, and Doxygen only.
+Pandoc, and Doxygen only. (Citing the DT-GSK Python reference implementation as
+provenance is allowed; it is not part of this project.)
 
 ## Supported Algorithms
 
-Review exactly these six MATLAB optimizers (slug -> entry point under
+Review exactly these seven MATLAB optimizers (slug -> entry point under
 src/optimizers/<slug>/):
 
 - gsk          -> gsk_optimize.m
@@ -147,12 +149,13 @@ src/optimizers/<slug>/):
 - atmals-gsk   -> atmals_gsk_optimize.m
 - egsk         -> egsk_optimize.m
 - fdb-agsk     -> fdb_agsk_optimize.m
+- dt-gsk       -> dt_gsk_optimize.m (plus dt_gsk_config.m and dt_gsk_graph.m)
 
 Termination contract (verify it is preserved exactly):
 
-- gsk, atmals-gsk, egsk, and fdb-agsk run the FULL evaluation budget and set
-  result.termination = 'max_evaluations'. The reference implementations of
-  these four never stop early.
+- gsk, atmals-gsk, egsk, fdb-agsk, and dt-gsk run the FULL evaluation budget
+  and set result.termination = 'max_evaluations'. The reference implementations
+  of these five never stop early.
 - Only agsk and apgsk may stop early: they branch to
   result.termination = 'target_error_reached' when the best error reaches the
   target, otherwise 'max_evaluations'.
@@ -169,7 +172,8 @@ documented provenance (the historical-source comments and
 docs/reference/porting_notes.md). If behavior differs from a documented source
 contract, document the reason in docs/reference/porting_notes.md rather than
 silently inventing a replacement. Per-optimizer detail pages live under
-docs/algorithms/<slug>.md.
+docs/algorithms/<slug>.md; DT-GSK's behavior and validation summary is
+src/optimizers/dt-gsk/README.md.
 
 ## External Reference Code Corpus
 
@@ -186,6 +190,10 @@ Reference-code mapping (subfolder -> current optimizer/material):
 - egsk       -> egsk
 - fdb-agsk   -> fdb-agsk
 - benchmarks -> CEC benchmark material
+
+DT-GSK is not in this corpus. Its source is the DT-GSK reference implementation
+(Python, MIT license, v2.46, https://github.com/MostafaMassoud/DT-GSK); use it
+the same way, as read-only evidence.
 
 Do not edit, move, delete, or normalize files in the external reference corpus.
 Do not copy large reference files wholesale into the current project. Use it to
@@ -321,6 +329,9 @@ There are four accepted seed-policy labels grouped into three behavior families:
        agsk, apgsk, fdb-agsk : seed = D * func * run
 
    Run the reference policy to reproduce the published CEC reference tables.
+   dt-gsk is unified-only (is_unified_only in run_experiment.m): it gets the
+   unified seed and threefry under EVERY policy, because its reference campaign
+   was produced that way (the Python reference's UNIFIED_ONLY_OPTIMIZERS).
 
 3. native and derived: both honor the requested generator and use the diagnostic
    optimizer/suite-hashed seed via src/runners/derive_run_seed.m.
@@ -336,6 +347,8 @@ dispatch):
   depend only on (base_seed, dim, func, run) and must not consult or perturb the
   global RNG state (the helper saves and restores rng around its probe).
 - native/derived policy: honor the requested generator.
+- dt-gsk: always 'threefry' (options.rand_generator must be threefry;
+  empty/auto/default are accepted).
 
 Entry-point defaults (verify these exactly, they differ by caller):
 
@@ -350,7 +363,10 @@ Fair-start initial population (unified policy): the runner draws the NP = 100
 initial population ONCE via src/common/gsk_init_population.m, captures the
 post-initialization RNG state, and each optimizer restores that state
 (src/common/gsk_restore_rng_after_initialization.m) so every optimizer starts
-from the identical X0 and the identical downstream RNG stream. Launchers call
+from the identical X0 and the identical downstream RNG stream. DT-GSK is the
+documented exception: it derives named Threefry substreams from the run seed,
+samples its own NP = 5*D population, and ignores a runner X0 (the runner draws
+none for it). Launchers call
 src/runners/verify_unified_seed_schedule.m to assert the schedule. Wall-clock /
 shuffle-based seeding is forbidden and is not a supported mode.
 
@@ -396,12 +412,20 @@ context:
 - Under the reference policy, GSK / AGSK / APGSK / FDB-AGSK reproduce the
   published CEC2017 tables closely; ATMALS-GSK and eGSK reference fidelity
   depends on their toolbox-dependent stages and historical clock-seeded origins.
+- DT-GSK references for all five suites are imported from its Python reference
+  (benchmarks/cec_reference_results/<suite>/dt-gsk/; per-run evidence and
+  PROVENANCE.md under cec2017/dt-gsk/). Its validation and CEC2017 campaign
+  results are recorded in src/optimizers/dt-gsk/README.md;
+  scripts/compare_reference_runs.m compares two per_run.csv sets per
+  (dimension, function) cell (Wilcoxon rank-sum with Holm-adjusted p-values;
+  needs the Statistics and Machine Learning Toolbox).
 - Any GSK-family variant may deviate and require detailed root-cause analysis.
 
 For each discrepancy, inspect:
 
 - seed formula and RNG stream (per the policy in force)
-- initialization range, population size (NP = 100), and the shared-X0 contract
+- initialization range, population size (NP = 100; DT-GSK self-initializes
+  NP = 5*D), and the shared-X0 contract
 - sorting/ranking behavior and any partial-sort substitution
 - parameter schedule and adaptation pools
 - boundary repair
@@ -481,7 +505,7 @@ Evaluate:
 - verification against reference tables (the C++ comparison logic)
 - documentation organization vs the taxonomy and the build_docs nav
 - root cleanliness
-- duplication across the six optimizers and the runner stack; consult
+- duplication across the seven optimizers and the runner stack; consult
   docs/reference/module_dependencies.md and docs/reference/workflows.md
 
 Recommend simplifications only when they preserve algorithm compatibility.
@@ -494,13 +518,13 @@ Perform a line-by-line MATLAB review of:
 - src/common (Gained_Shared_Junior_R1R2R3, Gained_Shared_Senior_R1R2R3,
   gsk_bound_repair, gsk_init_population, gsk_initial_population_from_options,
   gsk_reduction_survivors, gsk_restore_rng_after_initialization, gsk_set_rng)
-- src/optimizers/<slug> for all six optimizers
+- src/optimizers/<slug> for all seven optimizers
 - src/runners (run_experiment, get_cec_seed, derive_run_seed, unified_run_seed,
   choose_cec_rng_generator, gskcec_make_problem, gskcec_require_mex,
   verify_unified_seed_schedule)
 - src/experiments (default_experiment_matrix)
 - src/tests (run_matlab_smoke_tests and the per-optimizer / helper tests)
-- MATLAB scripts under scripts/ (analyze_results.m)
+- MATLAB scripts under scripts/ (analyze_results.m, compare_reference_runs.m)
 
 Generic checks:
 
@@ -538,6 +562,12 @@ Per-optimizer deep checks and preserved quirks (verify each is intact):
   'max_evaluations'.
 - fdb-agsk: the fitness-distance-balance donor/index selection layered on the
   AGSK adaptation; termination 'max_evaluations'.
+- dt-gsk: the pub profile by dimension tier (dt_gsk_config.m: D < 20,
+  20 <= D < 50, D >= 50 with the interaction graph of dt_gsk_graph.m,
+  D >= 100), NP = 5*D with nonlinear population reduction, named Threefry
+  substreams derived from options.seed (the global RNG is never touched), a
+  runner X0 ignored by design; termination 'max_evaluations'. Its parity with
+  the Python reference is summarized in src/optimizers/dt-gsk/README.md.
 
 Performance opportunities to identify (propose, gate on risk):
 
@@ -577,8 +607,9 @@ Review:
 - benchmarks/cec_suite_cpp/cec_tools/src/cli (gsk_list.cpp, gsk_validate.cpp,
   gsk_run.cpp, gsk_bench.cpp)
 - benchmarks/cec_suite_cpp/cec_tools/src/mex_bridge/gskcec_eval_mex.cpp
-- benchmarks/cec_suite_cpp/cec_tools/tests/unit (the twelve test translation units)
-  and tests/data (the fixed-vector ground-truth points and expected CSVs)
+- benchmarks/cec_suite_cpp/cec_tools/tests/unit (the eleven unit-test translation
+  units), tests/cli (gsk_run_exit_codes.cmake and the fake_matlab.cpp stub), and
+  tests/data (the fixed-vector ground-truth points and expected CSVs)
 
 Check:
 
@@ -600,10 +631,10 @@ Check:
   'clear' drops every live handle without leaks
 - reference-result loading (reference_results.cpp) and table mapping
 - CLI error handling, usage messages, and exit codes for the four tools
-- test coverage across the twelve ctest suites (named below)
+- test coverage across the thirteen ctest suites (named below)
 - GSKCEC_NATIVE behavior and floating-point safety
 
-The twelve registered ctest suites are:
+The thirteen registered ctest suites are:
 
     gskcec_core_tests
     gskcec_reference_results_tests
@@ -617,6 +648,8 @@ The twelve registered ctest suites are:
     gskcec_cec2017_tests
     gskcec_cec2020_tests
     gskcec_bench_smoke
+    gskcec_cli_exit_codes   (gsk_run / gsk_validate / gsk_bench exit codes and
+                             flag parsing, with stub MATLAB executables)
 
 Do not enable fast-math or any floating-point mode that can change benchmark
 values. Preserve the exactness tolerances documented in the tests.
@@ -728,7 +761,7 @@ still points at them. Current layout:
   project_structure.md, reference_inventory.md, porting_notes.md,
   cec2011_port_plan.md, glossary.md
 - docs/algorithms/: gsk.md, agsk.md, apgsk.md, fdb-agsk.md, atmals-gsk.md,
-  egsk.md
+  egsk.md, dt-gsk.md
 - docs/development/: developer_guide.md, contributor_guide.md,
   maintenance_guide.md, extension_guide.md, code_reading_guide.md
 - docs/research/: researcher_handbook.md, reproducibility.md, performance.md,
@@ -739,7 +772,8 @@ still points at them. Current layout:
 - root LICENSES.md
 
 Documentation build: docs are built by scripts/build_docs.ps1 (PowerShell +
-Pandoc for the Markdown pages + Doxygen for the C++ API). The script emits
+Pandoc 3.8+ for the Markdown pages, with a built-in fallback renderer when
+Pandoc is absent or older than 3.8, + Doxygen for the C++ API). The script emits
 folder-prefixed FLAT html filenames (so a page keeps a unique name across
 folders) and runs a basename-fallback link rewriter so cross-page Markdown links
 resolve to the flat html names. The generated site nav groups pages as Getting
@@ -767,7 +801,8 @@ Prioritize:
 - docs/research/validation_report.md
 - docs/getting-started/runbook.md
 - docs/getting-started/configuration.md
-- docs/algorithms/<slug>.md for all six optimizers
+- docs/algorithms/<slug>.md for all seven optimizers, and
+  src/optimizers/dt-gsk/README.md (the DT-GSK validation record)
 - configs/README.md
 - scripts/README.md
 - src/README.md and the per-folder src READMEs
@@ -805,7 +840,7 @@ generated sources):
     rg --files . | rg "\.(py|pyx|ipynb)$"
     rg --files benchmarks | rg "\.(py|pyx|ipynb)$"
 
-C++ build and the twelve ctest suites:
+C++ build and the thirteen ctest suites:
 
     cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
     cmake --build build -j
@@ -851,9 +886,9 @@ Produce these sections, in order:
 4. Reference-result discrepancy report (per optimizer/suite/function/dim)
 5. Cleanup report (keep/update/move/remove/ask per file)
 6. Architecture review (C++/MATLAB split, MEX bridge, runner boundaries)
-7. MATLAB optimizer code review (all six, with preserved-quirk confirmation and
+7. MATLAB optimizer code review (all seven, with preserved-quirk confirmation and
    termination-contract check)
-8. C++/CEC code review (five ports, interface + factory, twelve ctest suites,
+8. C++/CEC code review (five ports, interface + factory, thirteen ctest suites,
    fixed-vector tolerances, MEX bridge)
 9. Verification-logic review (CONSISTENT/DEVIATES, the three thresholds,
    reduced_budget)

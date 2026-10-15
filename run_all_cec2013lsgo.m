@@ -12,13 +12,17 @@
 % and NO known optimum -- statistics are over raw objective values. The budget
 % is 3,000,000 evaluations per problem, so this is VERY long (3e6 x 15 x runs
 % at ~1000-D). Keep dimensions = [0] (0 = each problem's own dimension). The
-% published references are DECC-G / MOS (not a GSK member), so the GSK
-% comparison table is skipped -- results are still written.
+% published references are DECC-G / MOS (not GSK members) plus the imported
+% DT-GSK tables (one per native dimension, D1000/D905). The in-run comparison
+% table looks for a single native-dims table, so it is skipped here -- results
+% are still written. DT-GSK runs the unified seed + threefry under every
+% seed_policy and samples its own NP = 5*D initial population (it ignores the
+% runner X0).
 % =========================================================================
 
 %% ------------------------------ CONFIG ----------------------------------
 optimizers  = {'gsk'};
-% optimizers = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk'};
+% optimizers = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk', 'dt-gsk'};
 
 functions   = 1:15;        % CEC2013 LSGO has 15 problems
 dimensions  = 0;           % 0 = each problem's native (large-scale) dimension

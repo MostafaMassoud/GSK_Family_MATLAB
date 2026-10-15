@@ -33,9 +33,12 @@ at runtime). GSK-family optimizers remain MATLAB.
   Other reference target-error rules zero errors below 1e-8 exactly where the
   reference drivers do (see `docs/reference/porting_notes.md` per optimizer).
 - Suites without published optima (cec2011, cec2013lsgo*): statistics are
-  computed over raw objectives; `error` columns are NaN. (*LSGO optima
-  are 0 by construction; the imported DECC-G/MOS tables report raw
-  objective values, so raw objectives are used for comparability.)
+  computed over raw objectives. On cec2011 (`optimum()` is NaN) the per-run
+  `error` column is NaN. (*LSGO optima are 0 by construction and the port's
+  `optimum()` returns `0`, so its per-run `error` column holds
+  `best_fitness - 0`, i.e. the raw objective, with no zero cutoff; the imported
+  DECC-G/MOS tables report raw objective values, so raw objectives are used
+  for comparability.)
 - Generated results never compare raw fitness against error columns;
   the comparison tool matches function labels case-insensitively
   (`1` == `F1` == `f1`).
@@ -102,10 +105,28 @@ at runtime). GSK-family optimizers remain MATLAB.
   sub-cases) maps to the GSK 1..22 numbering as documented in
   `docs/reference/cec2011_port_plan.md`.
 
+## Budgets and population sizes across optimizers
+
+Budgets and target errors are suite properties (`gskcec_make_problem.m`), so
+every optimizer, DT-GSK included, runs against the same `max_nfes` for a given
+`(suite, function, dimension)` cell. What differs is how an optimizer spends
+it: AGSK and APGSK stop early on the `1e-8` target; the others, DT-GSK
+included, always use the full budget. The initial population is algorithm
+behavior: `NP = 100` is the interface default of the six runner-`X0`
+optimizers, while DT-GSK starts from `NP = 5*D` (for example 50 at CEC2017
+D=10, 500 at D=100, 5000 at CEC2013LSGO D=1000) and reduces it nonlinearly
+toward its tier's `n_min` during the run.
+
 ## Default experiment matrix
 
-See `src/experiments/default_experiment_matrix.m`: all six optimizers on
-cec2017 and cec2011; agsk additionally on cec2020. cec2013 and
+See `src/experiments/default_experiment_matrix.m`: all seven optimizers
+(including dt-gsk) on cec2017 and cec2011; agsk additionally on cec2020.
+DT-GSK's imported reference tables also cover cec2013, cec2013lsgo, and
+cec2020, which it runs on request. That function is a
+reference statement with no callers; the executable form of the default matrix
+is `configs/all_cec2017.yml`, `configs/all_cec2011.yml` and
+`configs/agsk_cec2020.yml` (run via `gsk_run` or `scripts/run_all.ps1 -Full`),
+and the root `run_all_cec*.m` launchers carry their own CONFIG lists. cec2013 and
 cec2013lsgo are validation/extension suites, runnable on request.
 Optimizer/suite pairings the reference sources never ran (e.g. fdb-agsk
 on CEC suites) are framework-level extensions, not reproductions.
@@ -136,6 +157,13 @@ max_nfes = 10000 * D = 300000
 With `NP = 100`, initialization consumes 100 evaluations. In baseline GSK,
 `G_Max = fix(300000 / 100) = 3000`; the reference still derives the generation
 schedule from the full budget, not from the post-initialization remainder.
+
+DT-GSK on the same cell gets the same `max_nfes = 300000` but starts from
+`NP = 5 * 30 = 150` (150 initialization evaluations, the `20 <= D < 50` tier).
+Its population shrinks toward `n_min = 12` along the NLPSR schedule
+`NP = NP_init + (n_min - NP_init) * frac^(1 - frac)`, where `frac` is the
+fraction of the budget already spent, and the run ends at exactly
+`nfes = 300000`.
 
 **CEC2011 raw objective convention.** CEC2011 has no published optimum vector in
 this project. If problem 5 returns `best_fitness = -23.0`, the summary mean is

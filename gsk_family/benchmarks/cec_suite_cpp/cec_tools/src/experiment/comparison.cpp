@@ -6,7 +6,11 @@
 #include <cctype>
 #include <cmath>
 #include <fstream>
+#include <iomanip>
+#include <iterator>
 #include <map>
+#include <regex>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -38,15 +42,13 @@ Real parse_real(const std::filesystem::path& file, std::size_t line_no, const st
     }
 }
 
-/// Optimizer name -> reference algorithm folder/file token.
-std::string reference_algorithm_name(const std::string& optimizer) {
-    if (optimizer == "atmals-gsk") {
-        return "atmals-gsk";
-    }
-    if (optimizer == "fdb-agsk") {
-        return "fdb-agsk";
-    }
-    return optimizer;
+// Formats a numeric value for a human-readable failure reason. %.10g keeps
+// small references (1e-7) and the -1e-6 floor legible, where std::to_string's
+// fixed six decimals would print them as 0.000000 / -0.000001.
+std::string format_reason_value(Real v) {
+    std::ostringstream os;
+    os << std::setprecision(10) << v;
+    return os.str();
 }
 
 struct ReferenceKey {
@@ -95,8 +97,13 @@ std::string lower(std::string s) {
 }
 
 // A per-dimension summary file is <optimizer>_<suite>_D<dim>.csv inside a
-// folder named "summary" within results/<optimizer>/<suite>/. Returns false
-// for the dimensionless rollup, per_run.csv, environment.json, etc.
+// folder named "summary" (normally results/<optimizer>/<suite>/summary).
+// Optimizer and suite are taken from the file stem that run_experiment.m
+// writes, not from the enclosing folder names, so a run written to any
+// output_dir (e.g. results/demo) is still judged under its real suite and
+// optimizer. Optimizer slugs are hyphenated and suite names carry no '_', so
+// the first '_' separates the two. Returns false for the dimensionless
+// rollup, per_run.csv, environment.json, etc.
 bool parse_summary_path(const std::filesystem::path& path, std::string& optimizer,
                         std::string& suite, int& dimension) {
     if (path.extension() != ".csv") {
@@ -119,11 +126,13 @@ bool parse_summary_path(const std::filesystem::path& path, std::string& optimize
     } catch (const std::exception&) {
         return false;
     }
-    // .../<optimizer>/<suite>/summary/<file>
-    const auto suite_dir = path.parent_path().parent_path();
-    const auto optimizer_dir = suite_dir.parent_path();
-    suite = suite_dir.filename().string();
-    optimizer = optimizer_dir.filename().string();
+    // <optimizer>_<suite>_D<dim>
+    const auto upos = stem.find('_');
+    if (upos == std::string::npos || upos >= dpos) {
+        return false;
+    }
+    optimizer = stem.substr(0, upos);
+    suite = stem.substr(upos + 1, dpos - upos - 1);
     return !suite.empty() && !optimizer.empty();
 }
 
@@ -134,7 +143,21 @@ std::vector<SummaryRow> load_summaries(const std::filesystem::path& results_root
         throw std::runtime_error("Results root does not exist: " + results_root.string());
     }
     std::vector<SummaryRow> rows;
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(results_root)) {
+    // Explicit iterator so the walk can be pruned: the runner's archive
+    // folders (_overwrite_archive/ from overwrite=true, _archive/ from
+    // per-file refreshes) hold superseded history, not live results. Only
+    // folders below results_root are pruned, so pointing the loader directly
+    // at an archived tree still works.
+    for (auto it = std::filesystem::recursive_directory_iterator(results_root);
+         it != std::filesystem::recursive_directory_iterator(); ++it) {
+        const auto& entry = *it;
+        if (entry.is_directory()) {
+            const auto name = entry.path().filename();
+            if (name == "_overwrite_archive" || name == "_archive") {
+                it.disable_recursion_pending();
+            }
+            continue;
+        }
         if (!entry.is_regular_file()) {
             continue;
         }
@@ -215,9 +238,12 @@ ComparisonReport compare_with_references(const std::vector<SummaryRow>& generate
         entry.dimension = g.dimension;
         entry.generated_mean = g.mean;
 
+        // The summary file stem carries run_experiment's canonical slug
+        // (atmals-gsk, fdb-agsk, ...), which is exactly the reference folder
+        // name, so no alias mapping is needed.
         const ReferenceFile* ref = nullptr;
         for (const int dim : {g.dimension, 0}) {
-            const auto it = by_key.find(ReferenceKey{g.suite, reference_algorithm_name(g.optimizer), dim});
+            const auto it = by_key.find(ReferenceKey{g.suite, g.optimizer, dim});
             if (it != by_key.end()) {
                 ref = it->second;
                 break;
@@ -289,6 +315,44 @@ bool suite_has_known_optimum(const std::string& suite) {
     return suite == "cec2017" || suite == "cec2020" || suite == "cec2013";
 }
 
+bool is_reduced_protocol(long long runs, long long max_nfes_override) {
+    return max_nfes_override != 0 || runs < 25;
+}
+
+std::optional<bool> reduced_protocol_from_environment(const std::filesystem::path& environment_json) {
+    std::ifstream in(environment_json);
+    if (!in) {
+        return std::nullopt;
+    }
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    // No JSON parser in the tooling: pull the two top-level numbers out
+    // directly. MATLAB jsonencode may write large integers in E notation
+    // (1e6 -> 1.0E+6), so accept a general number token.
+    const auto number_field = [&text](const char* key) -> std::optional<long long> {
+        const std::regex re(std::string("\"") + key +
+                            "\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)");
+        std::smatch m;
+        if (!std::regex_search(text, m, re)) {
+            return std::nullopt;
+        }
+        try {
+            const double value = std::stod(m[1].str());
+            if (!(std::abs(value) < 9.0e18)) {
+                return std::nullopt;
+            }
+            return static_cast<long long>(value);
+        } catch (const std::exception&) {
+            return std::nullopt;
+        }
+    };
+    const auto runs = number_field("runs");
+    const auto max_nfes_override = number_field("max_nfes_override");
+    if (!runs || !max_nfes_override) {
+        return std::nullopt;
+    }
+    return is_reduced_protocol(*runs, *max_nfes_override);
+}
+
 RunVerification classify_run(const std::vector<SummaryRow>& generated,
                              const std::filesystem::path& reference_root,
                              bool reduced_budget,
@@ -296,19 +360,30 @@ RunVerification classify_run(const std::vector<SummaryRow>& generated,
     RunVerification v;
     v.reduced_budget = reduced_budget;
     v.thresholds = thresholds;
-    if (!generated.empty()) {
-        v.optimizer = generated.front().optimizer;
-        v.suite = generated.front().suite;
-    }
+    // Normally one optimizer/suite; a directory holding several is reported
+    // as a comma-joined list (each row is still judged under its own suite).
+    const auto join_distinct = [&generated](std::string SummaryRow::*field) {
+        std::string out;
+        std::set<std::string> seen;
+        for (const auto& row : generated) {
+            if (seen.insert(row.*field).second) {
+                out += (out.empty() ? "" : ",") + row.*field;
+            }
+        }
+        return out;
+    };
+    v.optimizer = join_distinct(&SummaryRow::optimizer);
+    v.suite = join_distinct(&SummaryRow::suite);
 
     // Reuse the existing reference alignment for win/tie/loss and ref means.
+    // compare_with_references emits exactly one entry per generated row, in
+    // order, so report.entries[i] is row i's own (optimizer, suite, function,
+    // dimension) alignment.
     const ComparisonReport report = compare_with_references(generated, reference_root);
     v.wins = report.wins;
     v.ties = report.ties;
     v.losses = report.losses;
     v.missing_reference = report.missing_reference;
-
-    const bool known_optimum = suite_has_known_optimum(v.suite);
 
     for (std::size_t i = 0; i < generated.size(); ++i) {
         const SummaryRow& row = generated[i];
@@ -328,37 +403,32 @@ RunVerification classify_run(const std::vector<SummaryRow>& generated,
         }
 
         // (2) Sign: a best error below the floor means the optimizer beat the
-        // known optimum, which a correct implementation cannot do.
-        if (known_optimum && row.best < thresholds.negative_error_floor) {
+        // known optimum, which a correct implementation cannot do. Judged
+        // under this row's own suite.
+        if (suite_has_known_optimum(row.suite) && row.best < thresholds.negative_error_floor) {
             check.sign_ok = false;
-            check.failures.push_back("best error " + std::to_string(row.best) +
-                                     " below floor " + std::to_string(thresholds.negative_error_floor) +
+            check.failures.push_back("best error " + format_reason_value(row.best) +
+                                     " below floor " + format_reason_value(thresholds.negative_error_floor) +
                                      " (beats the known optimum)");
         }
 
         // (3) Gross deviation vs a non-trivial reference mean. A hard failure
         // only at full protocol; under a reduced budget a large gap is the
         // expected consequence of fewer evaluations, so it is informational.
-        const ComparisonEntry* entry = nullptr;
-        for (const auto& e : report.entries) {
-            if (e.function_id == row.function_id && e.dimension == row.dimension) {
-                entry = &e;
-                break;
-            }
-        }
+        const ComparisonEntry* entry = i < report.entries.size() ? &report.entries[i] : nullptr;
         if (entry != nullptr && entry->reference_mean.has_value()) {
             const Real ref_mean = *entry->reference_mean;
             if (std::abs(ref_mean) > thresholds.reference_trivial_floor &&
                 row.mean > thresholds.gross_factor * std::abs(ref_mean)) {
                 if (reduced_budget) {
-                    check.failures.push_back("mean " + std::to_string(row.mean) + " >> reference " +
-                                             std::to_string(ref_mean) +
+                    check.failures.push_back("mean " + format_reason_value(row.mean) + " >> reference " +
+                                             format_reason_value(ref_mean) +
                                              " (informational: reduced budget)");
                 } else {
                     check.magnitude_ok = false;
-                    check.failures.push_back("mean " + std::to_string(row.mean) + " exceeds " +
-                                             std::to_string(thresholds.gross_factor) +
-                                             "x reference " + std::to_string(ref_mean));
+                    check.failures.push_back("mean " + format_reason_value(row.mean) + " exceeds " +
+                                             format_reason_value(thresholds.gross_factor) +
+                                             "x reference " + format_reason_value(ref_mean));
                 }
             }
         }

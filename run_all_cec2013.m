@@ -10,13 +10,16 @@
 %      saved to results/_run_all/<opt>/cec2013/summary/<opt>_D<d>_log_*.txt.
 %
 % CEC2013 notes: 28 functions (none excluded), known optima (statistics over
-% error). A published GSK reference exists for D10/D30/D50, so the comparison
-% table works for gsk. Edit the CONFIG block as needed.
+% error). A published GSK reference and the imported DT-GSK reference exist
+% for D10/D30/D50, so the comparison table works for gsk and dt-gsk. DT-GSK
+% runs the unified seed + threefry under every seed_policy and samples its
+% own NP = 5*D initial population (it ignores the runner X0). Edit the CONFIG
+% block as needed.
 % =========================================================================
 
 %% ------------------------------ CONFIG ----------------------------------
 optimizers  = {'gsk'};
-% optimizers = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk'};
+% optimizers = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk', 'dt-gsk'};
 
 functions   = 1:28;          % CEC2013 has 28 functions (none excluded)
 dimensions  = [10 30 50];    % CEC2013 standard dims (reference has D10/D30/D50)

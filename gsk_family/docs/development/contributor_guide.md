@@ -11,7 +11,8 @@
 
 The overriding rule: contributions must preserve reference-compatible behavior
 and the reference evidence trail. "Reference" here means the upstream MATLAB or
-CEC implementation each component ports; "evidence trail" means the imported
+CEC implementation each component ports (for DT-GSK, the Python DT-GSK
+reference implementation v2.46); "evidence trail" means the imported
 reference-result tables under `benchmarks/cec_reference_results` that generated
 output is checked against. Preserved quirks are deliberate - read
 [`porting_notes.md`](../reference/porting_notes.md) before changing port

@@ -4,7 +4,10 @@ function test_mex_bridge()
 % Cross-checks the bridge against the MEX-derived ground truth in
 % benchmarks/cec_suite_cpp/cec_tools/tests/data/ (the same values the C++ unit tests
 % use), proving the bridge wiring: D x NP orientation, the 'info' struct,
-% batch evaluation, and handle lifecycle.
+% batch evaluation, handle lifecycle (live handles keep the MEX locked so
+% 'clear' cannot recycle their ids), input validation (sparse X and
+% non-integer / non-finite integer arguments raise gskcec:badInput), and the
+% gskcec_require_mex load probe.
 %
 % Skips with a clear message (not a failure) when the bridge has not been
 % built, so the smoke suite still runs without the optional MEX component.
@@ -49,7 +52,37 @@ for p = 1:5
     assert(rel <= 1e-10, 'f1 D10 p%d: bridge %.17g vs expected %.17g (rel %g)', ...
            p, f(p), exp_f, rel);
 end
+
+% Input validation: sparse X would expose only its nonzero buffer, and
+% integer arguments must not be silently truncated (1.7 -> 1, h+0.5 -> h).
+expect_bad_input(@() gskcec_eval('eval', h, sparse(X)), 'sparse X');
+expect_bad_input(@() gskcec_eval('eval', h, sparse(10, 2)), 'all-zero sparse X');
+expect_bad_input(@() gskcec_eval('new', 'cec2017', 1.7, 10, data_root), 'non-integer function_id');
+expect_bad_input(@() gskcec_eval('new', 'cec2017', 1, 10.9, data_root), 'non-integer dimension');
+expect_bad_input(@() gskcec_eval('new', 'cec2017', NaN, 10, data_root), 'NaN function_id');
+expect_bad_input(@() gskcec_eval('new', 'cec2017', 1, Inf, data_root), 'Inf dimension');
+expect_bad_input(@() gskcec_eval('new', 'cec2017', 1, 2^40, data_root), 'out-of-int-range dimension');
+expect_bad_input(@() gskcec_eval('eval', h + 0.5, X), 'non-integer eval handle');
+expect_bad_input(@() gskcec_eval('info', NaN), 'NaN info handle');
+expect_bad_input(@() gskcec_eval('free', h + 0.5), 'non-integer free handle');
+assert(isequal(gskcec_eval('eval', h, X), f), 'rejected calls must leave handle h intact');
 gskcec_eval('free', h);
+
+% Handle lifecycle: a live handle locks the MEX, so 'clear' cannot unload it
+% and hand the same id to a new problem; freeing the last handle unlocks it.
+gskcec_eval('clear');
+assert(~mislocked('gskcec_eval'), 'bridge must be unlocked with no live handle');
+h_live = gskcec_eval('new', 'cec2017', 1, 10, data_root);
+assert(mislocked('gskcec_eval'), 'a live handle must lock the bridge');
+clear('gskcec_eval');
+h_other = gskcec_eval('new', 'cec2017', 5, 10, data_root);
+assert(h_other ~= h_live, 'clear must not recycle a live handle id');
+assert(isequal(gskcec_eval('eval', h_live, X), f), ...
+       'a live handle must still evaluate its own problem after clear');
+gskcec_eval('free', h_live);
+assert(mislocked('gskcec_eval'), 'bridge stays locked while any handle is live');
+gskcec_eval('free', h_other);
+assert(~mislocked('gskcec_eval'), 'freeing the last handle must unlock the bridge');
 
 % A second suite + handle lifecycle: cec2020 public f5 (internal 4), D=10.
 h2 = gskcec_eval('new', 'cec2020', 5, 10, ...
@@ -70,5 +103,24 @@ end
 assert(threw, 'invalid function id must raise');
 
 gskcec_eval('clear');
+assert(~mislocked('gskcec_eval'), '''clear'' must unlock the bridge');
+
+% The startup gate must accept a bridge that loads (it forces a real load).
+addpath(fullfile(project_root, 'src', 'runners'));
+gskcec_require_mex(project_root, 'test_mex_bridge');
+assert(~mislocked('gskcec_eval'), 'the gskcec_require_mex probe must not create a handle');
+
 fprintf('test_mex_bridge: PASS (cec2017 f1 D10 max rel %.3g vs MEX ground truth)\n', max_rel);
+end
+
+function expect_bad_input(fn, label)
+%EXPECT_BAD_INPUT Assert that fn raises the bridge's gskcec:badInput error.
+try
+    fn();
+catch err
+    assert(strcmp(err.identifier, 'gskcec:badInput'), ...
+           '%s: expected gskcec:badInput, got %s (%s)', label, err.identifier, err.message);
+    return;
+end
+error('test_mex_bridge:noError', '%s: expected gskcec:badInput, but the call succeeded', label);
 end

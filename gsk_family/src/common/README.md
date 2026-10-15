@@ -20,7 +20,9 @@ The two fair-start helpers are intentionally small. They let every optimizer
 keep its reference initialization line while allowing `run_experiment` to own
 the unified-mode `X0` and post-`X0` RNG state. That keeps the seed/fairness
 policy in the runner instead of scattering conditional logic throughout the
-algorithm bodies.
+algorithm bodies. DT-GSK uses none of the helpers in this folder: it draws
+every random number from its own Threefry substreams and samples its own
+`NP = 5*D` population, so the runner passes it no `X0`.
 
 ## Worked helper examples
 

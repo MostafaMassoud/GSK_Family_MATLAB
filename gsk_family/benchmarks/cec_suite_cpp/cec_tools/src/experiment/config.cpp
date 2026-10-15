@@ -1,5 +1,6 @@
 #include "gskcec/experiment/config.hpp"
 
+#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -75,14 +76,45 @@ std::vector<int> parse_int_list_or_all(const std::filesystem::path& path, std::s
     if (trim(value) == "all") {
         return {};
     }
+    const auto tokens = split_list(path, line_no, value);
+    if (tokens.empty()) {
+        // An empty list would otherwise be indistinguishable from `all`.
+        fail(path, line_no, "empty list; use 'all' for the suite defaults");
+    }
     std::vector<int> out;
-    for (const auto& token : split_list(path, line_no, value)) {
+    for (const auto& token : tokens) {
         out.push_back(parse_int(path, line_no, token));
     }
     return out;
 }
 
 } // namespace
+
+Seed parse_seed_value(const std::string& token) {
+    // 2^53: every accepted value survives exactly as a MATLAB double, and the
+    // uint64 sums in get_cec_seed.m cannot saturate.
+    constexpr unsigned long long kMaxSeed = 9007199254740992ULL;
+    const auto bad = [&token]() {
+        return std::invalid_argument("must be an integer in [0, 2^53 = 9007199254740992], got '" +
+                                     token + "'");
+    };
+    // A leading digit rules out '-' (stoull would wrap it to 2^64-k), '+'
+    // and leading whitespace.
+    if (token.empty() || std::isdigit(static_cast<unsigned char>(token.front())) == 0) {
+        throw bad();
+    }
+    std::size_t consumed = 0;
+    unsigned long long v = 0;
+    try {
+        v = std::stoull(token, &consumed);
+    } catch (const std::exception&) {
+        throw bad();
+    }
+    if (consumed != token.size() || v > kMaxSeed) {
+        throw bad();
+    }
+    return static_cast<Seed>(v);
+}
 
 bool is_valid_seed_policy(const std::string& value) {
     return value == "reference" || value == "native" ||
@@ -106,6 +138,12 @@ ExperimentConfig load_experiment_config(const std::filesystem::path& path) {
     bool saw_suite = false;
     while (std::getline(in, raw)) {
         ++line_no;
+        if (line_no == 1 && raw.compare(0, 3, "\xEF\xBB\xBF") == 0) {
+            // Tolerate a leading UTF-8 BOM (Windows PowerShell 5.1
+            // Set-Content/Out-File -Encoding utf8, some editors). A BOM
+            // anywhere else is still an error.
+            raw.erase(0, 3);
+        }
         const auto hash = raw.find('#');
         std::string line = trim(hash == std::string::npos ? raw : raw.substr(0, hash));
         if (line.empty()) {
@@ -139,7 +177,11 @@ ExperimentConfig load_experiment_config(const std::filesystem::path& path) {
                 fail(path, line_no, "runs must be >= 1");
             }
         } else if (key == "seed") {
-            cfg.seed = static_cast<Seed>(parse_ll(path, line_no, value));
+            try {
+                cfg.seed = parse_seed_value(value);
+            } catch (const std::exception& ex) {
+                fail(path, line_no, std::string("seed ") + ex.what());
+            }
         } else if (key == "seed_policy") {
             if (!is_valid_seed_policy(value)) {
                 fail(path, line_no, "seed_policy must be reference, native, unified, or derived");
@@ -158,7 +200,12 @@ ExperimentConfig load_experiment_config(const std::filesystem::path& path) {
         } else if (key == "output_root") {
             cfg.output_root = value;
         } else if (key == "data_root") {
-            cfg.data_root = value;
+            // Rejected explicitly rather than silently ignored: the MATLAB
+            // runner has no data_root input, so the value could never take
+            // effect.
+            fail(path, line_no,
+                 "data_root is not supported: benchmark data always loads from "
+                 "<project_root>/benchmarks/cec_suite_cpp/<suite>/input_data; remove this key");
         } else if (key == "reference_root") {
             cfg.reference_root = value;
         } else if (key == "overwrite") {

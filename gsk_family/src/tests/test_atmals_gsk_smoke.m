@@ -3,7 +3,10 @@ function test_atmals_gsk_smoke()
 %sphere problem, exercising both reference protocols.
 %
 % Checks the docs/reference/matlab_interface.md result contract, optimization
-% progress, reference budget-crossing accounting, convergence-array sanity,
+% progress, reference budget-crossing accounting (non-divisible and
+% below-NP budgets under both protocols; reported nfes clipped at max_nfes),
+% fair-start X0 reuse with the post-X0 RNG restore, the cec2011 D == 1
+% senior-only branch, pool-override validation, convergence-array sanity,
 % and seed determinism. Raises error() on any failure.
 
 here = fileparts(mfilename('fullpath'));
@@ -82,6 +85,126 @@ r2b = atmals_gsk_optimize(problem11, opts11);
 local_assert(r2b.best_fitness == r2.best_fitness && isequal(r2b.best_x, r2.best_x), ...
     'cec2011 same seed: result differs');
 
+%% reference budget crossing: max_nfes not divisible by np = 100
+% The crossing generation is fully evaluated, but the per-child counter only
+% counts (and only lets update the best-so-far) the first max_nfes
+% evaluations; the reference counter then reads max_nfes+1 and the reported
+% copies (result.nfes, convergence.nfes) are clipped at max_nfes. Every
+% evaluation is logged, so the expected best is exact and RNG-independent.
+for proto = {'cec2017', 'cec2011'}
+    pX = local_sphere_problem(d, 1050, 0, 1e-8);
+    pX.evaluate = @(pop) local_logged_sphere(pop);
+    local_logged_sphere([], 'reset');
+    rX = atmals_gsk_optimize(pX, struct('seed', 20197, 'protocol', proto{1}));
+    logged = local_logged_sphere([], 'get');
+    local_check_contract(rX, pX, 'atmals-gsk', 20197);
+    local_assert(rX.nfes == pX.max_nfes, ...
+        sprintf('%s crossing: reported nfes must be clipped at max_nfes (got %d)', proto{1}, rX.nfes));
+    local_assert(isequal(rX.convergence.nfes, [100:100:1000, 1050]'), ...
+        sprintf('%s crossing: expected 10 full records plus one clipped crossing record', proto{1}));
+    local_assert(numel(logged) == 1100, ...
+        sprintf('%s crossing: the crossing generation must be evaluated in full', proto{1}));
+    local_assert(rX.best_fitness == min(logged(1:pX.max_nfes)), ...
+        sprintf('%s crossing: best-so-far must only count the first max_nfes evaluations', proto{1}));
+    local_assert(min(logged(1:pX.max_nfes)) ~= min(logged), ...
+        sprintf('%s crossing: fixture must have its overall best among the uncounted children', proto{1}));
+end
+
+% budget below one population: only the initial scan runs, and it counts
+% (and lets update the best-so-far) just the first max_nfes individuals
+pS = local_sphere_problem(d, 50, 0, 1e-8);
+pS.evaluate = @(pop) local_logged_sphere(pop);
+local_logged_sphere([], 'reset');
+rS = atmals_gsk_optimize(pS, struct('seed', 20175));
+logged = local_logged_sphere([], 'get');
+local_assert(rS.nfes == 50 && isequal(rS.convergence.nfes, 50), ...
+    sprintf('below-NP budget: reported nfes must be clipped at max_nfes (got %d)', rS.nfes));
+local_assert(numel(logged) == np && rS.best_fitness == min(logged(1:50)) && ...
+    min(logged(1:50)) ~= min(logged), ...
+    'below-NP budget: best-so-far must only count the first max_nfes initial evaluations');
+
+%% fair-start X0 reuse (unified protocol): runner-drawn X0 + post-X0 RNG state
+pF = local_sphere_problem(d, 2000, 0, 1e-8);
+rng(20176, 'twister');
+X0 = gsk_init_population(np, pF.lb, pF.ub);
+st = rng;
+oF = struct('seed', 1, 'initial_population', X0, 'rng_state_after_initialization', st);
+rF = atmals_gsk_optimize(pF, oF);
+local_check_contract(rF, pF, 'atmals-gsk', 1);
+local_assert(rF.convergence.best_fitness(1) == min(pF.evaluate(X0)), ...
+    'fair start: the initial record must come from the supplied X0');
+% X0 plus the restored state replaces the optimizer's own seeded draw
+% exactly: the run equals a plain seeded run whose own first draw is that X0
+rSeed = atmals_gsk_optimize(pF, struct('seed', 20176));
+local_assert(isequal(rF.best_x, rSeed.best_x) && ...
+    isequal(rF.convergence.best_fitness, rSeed.convergence.best_fitness), ...
+    'fair start: X0 + post-X0 RNG state must reproduce the seeded run that drew X0');
+% once the state is restored the optimizer seed no longer matters
+oF2 = oF;
+oF2.seed = 2;
+rF2 = atmals_gsk_optimize(pF, oF2);
+local_assert(isequal(rF2.best_x, rF.best_x) && ...
+    isequal(rF2.convergence.best_fitness, rF.convergence.best_fitness), ...
+    'fair start: the restored post-X0 state must override the optimizer seed stream');
+% guard: X0 without a captured state keeps the optimizer's own stream
+rG = atmals_gsk_optimize(pF, struct('seed', 1, 'initial_population', X0));
+local_assert(rG.convergence.best_fitness(1) == rF.convergence.best_fitness(1) && ...
+    ~isequal(rG.convergence.best_fitness, rF.convergence.best_fitness), ...
+    'fair start: X0 without an RNG state must use X0 but not jump streams');
+
+%% protocol 'cec2011', D == 1: dedicated senior-only branch
+p1 = local_sphere_problem(1, 3000, NaN, NaN);
+o1 = struct('seed', 20177, 'protocol', 'cec2011');
+r1d = atmals_gsk_optimize(p1, o1);
+local_check_contract(r1d, p1, 'atmals-gsk', o1.seed);
+local_assert(r1d.nfes == p1.max_nfes && numel(r1d.convergence.nfes) == p1.max_nfes / np, ...
+    sprintf('cec2011 D==1: nfes/records off (nfes=%d, records=%d)', r1d.nfes, numel(r1d.convergence.nfes)));
+rng(o1.seed, 'twister');
+pop0 = repmat(p1.lb, np, 1) + rand(np, 1) .* repmat(p1.ub - p1.lb, np, 1);
+local_assert(r1d.best_fitness < 1e-2 * median(p1.evaluate(pop0)), ...
+    sprintf('cec2011 D==1: insufficient progress (best=%g)', r1d.best_fitness));
+r1e = atmals_gsk_optimize(p1, o1);
+local_assert(r1e.best_fitness == r1d.best_fitness && isequal(r1e.best_x, r1d.best_x) && ...
+    isequal(r1e.convergence.best_fitness, r1d.convergence.best_fitness), ...
+    'cec2011 D==1 same seed: result differs');
+% The branch hard-codes KF = 0.5 / KR = 0.9 and has no junior phase, so the
+% adaptive KF/KR/K selections (one roulette draw each, whatever the pool)
+% never reach it: overriding those pools must leave the trajectory intact ...
+pools_kfk = {'kf_pool', [0.3 0.5 0.7], 'kr_pool', [0.9 0.95], 'k_pool', [10 20]};
+o1p = o1;
+o17 = struct('seed', o1.seed);
+o17p = o17;
+for i = 1:2:numel(pools_kfk)
+    o1p.(pools_kfk{i}) = pools_kfk{i + 1};
+    o17p.(pools_kfk{i}) = pools_kfk{i + 1};
+end
+r1p = atmals_gsk_optimize(p1, o1p);
+local_assert(isequal(r1p.best_x, r1d.best_x) && ...
+    isequal(r1p.convergence.best_fitness, r1d.convergence.best_fitness), ...
+    'cec2011 D==1: the senior-only branch must ignore the adaptive KF/KR/K');
+% ... while the general GSK branch (cec2017 protocol, same D == 1) uses them
+r17a = atmals_gsk_optimize(p1, o17);
+r17b = atmals_gsk_optimize(p1, o17p);
+local_assert(~isequal(r17a.convergence.best_fitness, r17b.convergence.best_fitness), ...
+    'control: the general branch must react to the KF/KR/K pools');
+
+%% overridden pools must contain the hard-coded initial picks
+bad_pools = {'kf_pool', [0.3 0.4 0.6 0.7]; 'kr_pool', [0.85 0.95 1]; 'k_pool', 1:5; ...
+    'p_pool', [0.05 0.15]; 'pls_pool', [1.5 2]};
+for i = 1:size(bad_pools, 1)
+    threw = false;
+    try
+        atmals_gsk_optimize(pF, struct('seed', 3, bad_pools{i, 1}, bad_pools{i, 2}));
+    catch err
+        threw = strcmp(err.identifier, 'atmals_gsk:options') && contains(err.message, bad_pools{i, 1});
+    end
+    local_assert(threw, sprintf('%s lacking its initial pick must raise atmals_gsk:options', bad_pools{i, 1}));
+end
+% an override that contains the initial pick still runs
+rP = atmals_gsk_optimize(pF, struct('seed', 3, 'kf_pool', [0.3 0.5 0.7]));
+local_check_contract(rP, pF, 'atmals-gsk', 3);
+local_assert(isequal(rP.params.kf_pool, [0.3 0.5 0.7]), 'kf_pool override not honored');
+
 %% invalid protocol must raise
 threw = false;
 try
@@ -107,6 +230,23 @@ problem.optimum = optimum;
 problem.evaluate = @(pop) sum(pop .^ 2, 2);
 problem.max_nfes = max_nfes;
 problem.target_error = target_error;
+end
+
+
+function f = local_logged_sphere(pop, cmd)
+%LOCAL_LOGGED_SPHERE Sphere objective that logs every evaluated fitness in
+% call order. local_logged_sphere([], 'reset') clears the log and
+% local_logged_sphere([], 'get') returns it.
+persistent log_f
+if nargin > 1
+    if strcmp(cmd, 'reset')
+        log_f = zeros(0, 1);
+    end
+    f = log_f;
+    return;
+end
+f = sum(pop .^ 2, 2);
+log_f = [log_f; f];
 end
 
 

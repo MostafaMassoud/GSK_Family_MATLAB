@@ -16,7 +16,11 @@
 
 There is nothing to "install" in a package-manager sense - this project is not a
 library. Instead you need three host tools on `PATH`, then a one-time build of
-the C++ tree and the MEX bridge.
+the C++ tree and the MEX bridge. (If you do want to consume the C++ benchmark
+library from another CMake project, `cmake --install build --prefix <P>`
+installs it with a package config, after which downstream
+`find_package(gskcec 1.0 REQUIRED)` plus
+`target_link_libraries(<target> gskcec::gskcec)` works.)
 
 Required toolchain (the versions this project is developed with):
 
@@ -34,9 +38,10 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-A green `ctest` (12 suites) is the baseline: every suite compares a port against
-committed ground-truth data, so if it fails on a fresh checkout, fix the
-toolchain before making changes. If `cmake`/`g++` are not on `PATH`, pass their
+A green `ctest` (13 suites) is the baseline: the port suites compare against
+committed ground-truth data and `gskcec_cli_exit_codes` checks the CLI exit
+codes, so if it fails on a fresh checkout, fix the toolchain before making
+changes. If `cmake`/`g++` are not on `PATH`, pass their
 full paths (see `build.txt`).
 
 CEC MATLAB experiments evaluate the ported benchmarks through a project-local
@@ -46,9 +51,11 @@ MEX bridge. Build it once (needs MATLAB plus the WinLibs toolchain):
 powershell -File scripts\build_mex_bridge.ps1
 ```
 
-This produces `build/mex/gskcec_eval.mexw64`. The root `run_all_cec*.m`
-launchers and `run_experiment` check for this file before starting, so a missing
-bridge fails fast instead of writing an all-skipped result folder.
+This produces `build/mex/gskcec_eval.mexw64`, linked fully static (no MinGW
+runtime DLL is needed at load time). The root `run_all_cec*.m` launchers and
+`run_experiment` check that this file exists and actually loads (a forced load
+probe; `gskcec:mexNotLoadable` otherwise) before starting, so a missing or
+unloadable bridge fails fast instead of writing an all-skipped result folder.
 
 Finally, confirm the MATLAB side runs without the bridge (pure-MATLAB sphere
 problems, tiny budgets):
@@ -105,8 +112,8 @@ gsk_family/
   src/                       MATLAB GSK-family code
     common/                  shared helpers (gsk_set_rng.m, gsk_init_population.m,
                              donor selection, bound repair, reduction survivors)
-    optimizers/<slug>/       the six optimizers (gsk, agsk, apgsk,
-                             atmals-gsk, egsk, fdb-agsk)
+    optimizers/<slug>/       the seven optimizers (gsk, agsk, apgsk,
+                             atmals-gsk, egsk, fdb-agsk, dt-gsk)
     runners/                 run_experiment.m, get_cec_seed.m,
                              gskcec_make_problem.m, seed helpers
     experiments/             default experiment matrix definitions
@@ -156,9 +163,14 @@ blocks plus [`matlab_interface.md`](../reference/matlab_interface.md).
 There are two test surfaces, one per language. Pick the cheapest that covers
 your change, then run both before you push.
 
-**C++ ports and tooling (`ctest`).** The 12 suites under
+**C++ ports and tooling (`ctest`).** The 13 suites under
 `benchmarks/cec_suite_cpp/cec_tools/tests/` compare each port against fixed-vector
-ground truth in `tests/data/` and exercise the experiment/comparison logic:
+ground truth in `tests/data/` and exercise the experiment/comparison logic. The
+13th, `gskcec_cli_exit_codes` (`tests/cli/`), is a `cmake -P` script
+(`gsk_run_exit_codes.cmake`) that drives `gsk_run`, `gsk_validate`, and
+`gsk_bench` against stub MATLAB executables built from `fake_matlab.cpp` and
+checks their exit codes and argument parsing; the cases that launch MATLAB run
+on Windows only:
 
 ```powershell
 cmake --build build -j
@@ -171,7 +183,9 @@ iterate on one area, build and run a single target, e.g.
 `ctest --test-dir build -R gskcec_experiment_tests --output-on-failure`.
 
 **MATLAB optimizers and runners (smoke tests).**
-`src/tests/run_matlab_smoke_tests.m` discovers every `test_*.m`, runs them on
+`src/tests/run_matlab_smoke_tests.m` discovers every `test_*.m` (13 today: one
+per optimizer, including `test_dt_gsk_smoke.m`, plus the common helpers, seed
+policy, runner, resume, fair-start and MEX-bridge tests), runs them on
 pure-MATLAB sphere problems at tiny budgets (no MEX bridge required), and exits
 nonzero under `matlab -batch` on any failure:
 

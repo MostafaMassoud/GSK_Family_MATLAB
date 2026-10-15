@@ -134,7 +134,7 @@ Toolchain policy:
 2. SUPPORTED ALGORITHMS AND SUITES
 ===============================================================================
 
-Review exactly these six optimizer IDs and entry points:
+Review exactly these seven optimizer IDs and entry points:
 
 - `gsk` -> `src/optimizers/gsk/gsk_optimize.m`
 - `agsk` -> `src/optimizers/agsk/agsk_optimize.m`
@@ -142,6 +142,9 @@ Review exactly these six optimizer IDs and entry points:
 - `fdb-agsk` -> `src/optimizers/fdb-agsk/fdb_agsk_optimize.m`
 - `atmals-gsk` -> `src/optimizers/atmals-gsk/atmals_gsk_optimize.m`
 - `egsk` -> `src/optimizers/egsk/egsk_optimize.m`
+- `dt-gsk` -> `src/optimizers/dt-gsk/dt_gsk_optimize.m` (plus
+  `dt_gsk_config.m` and `dt_gsk_graph.m`; behavior and validation are
+  summarized in `src/optimizers/dt-gsk/README.md`)
 
 Use hyphenated IDs in user-facing optimizer slugs and result folders. Use
 underscore names only where MATLAB function/file names require them.
@@ -179,11 +182,16 @@ Seed policies:
 
   It is optimizer-independent. In unified mode the runner generates the initial
   population once, passes `X0` to every optimizer, and restores the post-X0 RNG
-  state before the first algorithmic random draw.
+  state before the first algorithmic random draw. Documented exception: DT-GSK
+  samples its own NP = 5*D population from named Threefry substreams, so the
+  runner draws no `X0` for it.
 
 - `reference` formulas:
   - `gsk`, `egsk`, `atmals-gsk`: `base_seed + 9973*func + run - 1`
   - `agsk`, `apgsk`, `fdb-agsk`: `D*func*run`
+  - `dt-gsk` is unified-only (`is_unified_only` in `run_experiment.m`): it is
+    scheduled with the unified seed and `threefry` under every `seed_policy`,
+    mirroring the Python reference's `UNIFIED_ONLY_OPTIMIZERS`.
 - Under reference mode, AGSK/APGSK/FDB-AGSK/eGSK/ATMALS-GSK use legacy `seed`;
   GSK uses `twister`. Under unified mode the effective generator is
   threefry when available, otherwise twister.
@@ -264,10 +272,11 @@ Phase 2 - MATLAB runner and experiment protocol:
 
 Phase 3 - Optimizer implementation review:
 
-- Inspect all six optimizer entry points and shared operators.
+- Inspect all seven optimizer entry points and shared operators.
 - Confirm evaluation-budget accounting, stopping criteria, boundary handling,
   donor/index selection, local search, fmincon guard in eGSK, ATMALS local
-  search behavior, APGSK/AGSK adaptation, FDB logic, and output structs.
+  search behavior, APGSK/AGSK adaptation, FDB logic, DT-GSK dimension tiers
+  and Threefry substreams, and output structs.
 - Classify differences from reference code as intentional policy, harmless
   refactor, documentation mismatch, likely bug, or requires-user-approval.
 

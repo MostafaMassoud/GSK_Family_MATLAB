@@ -60,8 +60,10 @@ Repository and build:
 
 Algorithms:
 
-- `gsk`, `agsk`, `apgsk`, `fdb-agsk`, `atmals-gsk`, `egsk`.
-- Display names: GSK, AGSK, APGSK, FDB-AGSK, ATMALS-GSK, eGSK.
+- `gsk`, `agsk`, `apgsk`, `fdb-agsk`, `atmals-gsk`, `egsk`, `dt-gsk` (seven).
+- Display names: GSK, AGSK, APGSK, FDB-AGSK, ATMALS-GSK, eGSK, DT-GSK
+  (Dimension-Tiered GSK; its behavior and validation are summarized in
+  `src/optimizers/dt-gsk/README.md`).
 - Hyphenated slugs are user-facing identifiers. Underscore names are MATLAB
   function/file names where required.
 
@@ -84,10 +86,13 @@ Reproducibility:
   seed = mod(base_seed + 1000003*dim + 1000033*func + 1000037*run, 2147483646) + 1
 
 - Unified mode is optimizer-independent and draws one fair-start `X0` in the
-  runner for all algorithms.
+  runner for every algorithm except DT-GSK, which samples its own NP = 5*D
+  population (documented fair-start exception).
 - Reference mode uses:
   - `base_seed + 9973*func + run - 1` for GSK, eGSK, ATMALS-GSK.
   - `D*func*run` for AGSK, APGSK, FDB-AGSK.
+  - the unified seed + `threefry` for DT-GSK, which is unified-only under
+    every seed policy.
 - `write_graphs=false` by default: numeric curves and generation logs are still
   written; PNG convergence graphs are opt-in.
 - `overwrite=false` resumes/appends; `overwrite=true` moves the old active tree
@@ -169,9 +174,10 @@ Add or improve worked examples for:
 7. FDB-AGSK fitness-distance balance ranking.
 8. ATMALS-GSK two-mode adaptive local search.
 9. eGSK parameter/control logic and fmincon-dependent refinement.
-10. Bounds repair and why it preserves feasibility.
-11. CEC checkpoint logs and convergence curves.
-12. Summary statistics, including the standard-deviation convention actually
+10. DT-GSK dimension tiers (which mechanisms switch on at D >= 20, 50, 100).
+11. Bounds repair and why it preserves feasibility.
+12. CEC checkpoint logs and convergence curves.
+13. Summary statistics, including the standard-deviation convention actually
     used by the code.
 
 Each example must show inputs, formula, intermediate values, and final output.

@@ -126,12 +126,23 @@ runs out. The best setting ever seen is the answer.
 
 A fourth control, **NP**, is simply the population size (default `100`).
 
-That is baseline GSK. The other five optimizers in this toolkit are published
+That is baseline GSK. The other six optimizers in this toolkit are published
 variations on the same skeleton — for example, they make `KF`/`KR` *adapt*
 automatically as the run proceeds, or shrink the population over time, or add a
 final polishing step. The [glossary](../reference/glossary.md) names each one;
 the differences are recorded faithfully in
 [porting_notes.md](../reference/porting_notes.md).
+
+The newest member, **DT-GSK** (Dimension-Tiered GSK), changes its recipe with
+the size of the problem. On small machines (fewer than 20 knobs) it runs a
+light setup; from 20, 50 and 100 knobs upward it switches on more machinery —
+for example learning which knobs tend to improve together, a careful final
+polishing pass, and budget-aware restarts for the largest problems. It starts
+from `5 × D` candidates and always spends the whole budget. Unlike the others,
+it was ported from its authors' Python reference implementation rather than a
+MATLAB release, and was checked against that code (details on the
+[DT-GSK page](../algorithms/dt-gsk.md) and in
+`src/optimizers/dt-gsk/README.md`).
 
 ### Figure 1 — one GSK generation (schematic)
 
@@ -211,9 +222,10 @@ self-contained** one. Concretely:
    functions, the same constants, even the same documented *quirks* — odd-looking
    reference behaviors are preserved on purpose, named at the spot, and never
    silently "fixed." (See [porting_notes.md](../reference/porting_notes.md).)
-2. **Six GSK-family optimizers in MATLAB**, each a faithful port of a published
-   reference, each citing the exact source file it came from:
-   `gsk`, `agsk`, `apgsk`, `atmals-gsk`, `egsk`, `fdb-agsk`.
+2. **Seven GSK-family optimizers in MATLAB**, each a faithful port of a
+   published reference, each citing the exact source it came from:
+   `gsk`, `agsk`, `apgsk`, `atmals-gsk`, `egsk`, `fdb-agsk` (MATLAB reference
+   releases) and `dt-gsk` (the Python DT-GSK reference implementation).
 3. **Automatic verification against published results.** Every experiment run is
    *automatically* compared to the same optimizer's published reference table,
    and a verdict — **CONSISTENT** or **DEVIATES** — is written next to the
@@ -241,10 +253,15 @@ The first asks "did we re-implement the test machine perfectly?" The second asks
 
 ### Figure 2 — what runs on what (the optimizer × suite matrix)
 
-`Y` = part of the default reproduction matrix; `(ext)` = available but a
-framework-level extension the original papers did not run (every optimizer can
-be pointed at every suite). See `src/experiments/default_experiment_matrix.m`
-and [benchmark_protocol.md](../reference/benchmark_protocol.md).
+`Y` = part of the default reproduction matrix; `(ref)` = run on request, and
+the reference source ran it, so its table is imported; `(ext)` = available but
+a framework-level extension the original papers did not run (every optimizer
+can be pointed at every suite). The executable matrix is
+`configs/all_cec2017.yml`,
+`configs/all_cec2011.yml` and `configs/agsk_cec2020.yml` (run via `gsk_run` or
+`scripts/run_all.ps1 -Full`); `src/experiments/default_experiment_matrix.m` is
+only the reference statement of the same table (no runner calls it). See also
+[benchmark_protocol.md](../reference/benchmark_protocol.md).
 
 | Optimizer | CEC2011 | CEC2013 | CEC2013LSGO | CEC2017 | CEC2020 |
 |---|:---:|:---:|:---:|:---:|:---:|
@@ -254,11 +271,15 @@ and [benchmark_protocol.md](../reference/benchmark_protocol.md).
 | **atmals-gsk** | Y | (ext) | (ext) | Y | (ext) |
 | **egsk** | Y | (ext) | (ext) | Y | (ext) |
 | **fdb-agsk** | Y | (ext) | (ext) | Y | (ext) |
+| **dt-gsk** | Y | (ref) | (ref) | Y | (ref) |
 
-Reading: all six optimizers form the default matrix on **CEC2017** and
-**CEC2011**; **AGSK** additionally runs the **CEC2020** reproduction. CEC2013 and
-CEC2013LSGO are validation/extension suites you can run on request. Any pairing
-the reference sources never ran is labeled an extension, not a reproduction.
+Reading: all seven optimizers form the default matrix on **CEC2017** and
+**CEC2011**; **AGSK** additionally runs the **CEC2020** reproduction. CEC2013
+and CEC2013LSGO are validation/extension suites you can run on request.
+**DT-GSK**'s reference campaigns covered all five suites, so each of its runs,
+in or outside the default matrix, has an imported table to compare against.
+Any pairing the reference sources never ran is labeled an extension, not a
+reproduction.
 
 ### Figure 3 — how the two halves meet
 

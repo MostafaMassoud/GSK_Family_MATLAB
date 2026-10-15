@@ -64,11 +64,23 @@ There are four policies. The default depends on the entry point:
 | Seed policy | Use it to | Result | Default for |
 |---|---|---|---|
 | `unified` | Compare optimizers fairly. | Same seed for every optimizer at the same `(dim, func, run)`; fair-start population and post-init RNG state shared across the family. | `run_experiment` and `run_all_cec*.m` launchers |
-| `reference` | Reproduce published CEC tables. | Per-optimizer seeding plus per-optimizer generator that matches the historical driver family. | `gsk_run` CLI, `configs/*.yml`, `scripts/run_all.ps1` |
+| `reference` | Reproduce published CEC tables. | Per-optimizer seeding plus a per-optimizer generator fixed as a project choice (GSK `twister`; the others the legacy `seed` stream; this does not replay the archived AGSK/APGSK `twister` drivers). | `gsk_run` CLI, `configs/*.yml`, `scripts/run_all.ps1` |
 | `native` / `derived` | Diagnostic hashed schedules. | Decorrelated per-run seeds that also fold in optimizer and suite names; not a fair cross-optimizer schedule. | direct `run_experiment(...)` opt-in only |
 
-`native` and `derived` are aliases of the same hashed rule. The seed helpers
-live in:
+`native` and `derived` are aliases of the same hashed rule.
+
+**DT-GSK is unified-only.** Its reference campaigns were produced on the unified
+schedule, so `run_experiment` (`is_unified_only`) gives DT-GSK the unified seed
+and `threefry` under every policy above, mirroring the Python reference's
+`UNIFIED_ONLY_OPTIMIZERS`. DT-GSK derives named Threefry substreams from the
+run seed and samples its own `NP = 5*D` initial population; the runner draws
+no `X0` for it, a supplied `options.initial_population` is ignored, and the run
+metadata records
+`initial_population_policy = optimizer self-initializes NP = 5*D ...` and
+`profile: "pub"` (`run_config.json`). This is the one documented fair-start
+exception: DT-GSK shares the family's seeds, not its initial population.
+
+The seed helpers live in:
 
 ```text
 src/runners/get_cec_seed.m        % unified formula
@@ -84,16 +96,18 @@ seed = mod(base_seed + 1000003*dim + 1000033*func + 1000037*run, 2147483646) + 1
 ```
 
 For `(base_seed=20240620, dim=30, func=7, run=12)` this is exactly `69241386`,
-the same value for GSK, AGSK, APGSK, ATMALS-GSK, eGSK, and FDB-AGSK. See
+the same value for GSK, AGSK, APGSK, ATMALS-GSK, eGSK, FDB-AGSK, and DT-GSK. See
 [Numerical Examples](numerical_examples.md#unified-seed-and-fair-start) for the
 hand-checkable derivation, and [Seed Policy](../reference/seed_policy.md) for the
 reference formulas (`gsk`/`egsk`/`atmals-gsk` = `base_seed + 9973*func + (run-1)`;
 `agsk`/`apgsk`/`fdb-agsk` = `D*func*run`) and the generator mapping.
 
-Every seed is recorded in `summary/seed_schedule.csv`, `summary/per_run.csv`,
+Every per-run seed is recorded in `summary/seed_schedule.csv`,
+`summary/per_run.csv`, and the `Seed` column of `gen_logs/`;
 `summary/run_config.json`, `summary/phase0_protocol.json`, and
-`summary/environment.json`. Wall-clock seeding is not a supported mode anywhere
-in the project.
+`summary/environment.json` record `base_seed`, the policy, the seed scheme, and
+the seed formula (not per-cell seeds). Wall-clock seeding is not a supported
+mode anywhere in the project.
 
 ## Deterministic Settings
 
@@ -110,9 +124,11 @@ could change.
 - Use an explicit `max_evaluations` (`max_nfes`) for reduced experiments.
 - Use `overwrite: true` only when you intend to regenerate evidence from a clean
   active tree; the previous tree is archived under `_overwrite_archive/`.
-  Otherwise the runner resumes and appends.
+  Otherwise the runner resumes and appends, reusing only `per_run.csv` rows whose
+  stored seed, budget (`max_nfes`) and generator match the active run.
 - Keep generated output outside `benchmarks/cec_reference_results/` so runs never
-  overwrite the imported reference tables.
+  overwrite the imported reference tables (`run_experiment` refuses such an
+  `output_dir` with `run_experiment:outputUnsafe`).
 - Keep `use_parallel = false` for the reproducibility baseline. Serial is the
   default in `run_experiment`, and `gsk_run` plus `scripts/run_all.ps1` pass
   serial explicitly.
@@ -131,15 +147,15 @@ a small run works, then commit to the full campaign, then validate and archive.
    scripts\build_mex_bridge.ps1
    ```
 
-2. **Run `ctest`** to confirm the 12 C++ suites pass (the ports are checked
-   exactly against fixed-vector ground truth).
+2. **Run `ctest`** to confirm the 13 C++ suites pass (the ports are checked
+   exactly against fixed-vector ground truth; the 13th checks CLI exit codes).
 
    ```powershell
    ctest --test-dir build --output-on-failure
    ```
 
-3. **Run the MATLAB smoke tests** so the optimizers, runner, and bridge
-   cross-check are green before you generate evidence.
+3. **Run the MATLAB smoke tests** (13 tests) so the optimizers, runner, and
+   bridge cross-check are green before you generate evidence.
 
    ```powershell
    matlab -batch "run('gsk_family/src/tests/run_matlab_smoke_tests.m')"
@@ -156,7 +172,7 @@ a small run works, then commit to the full campaign, then validate and archive.
    launchers default to `unified` + `threefry`:
 
    ```matlab
-   run_all_cec2017     % all six optimizers, fair cross-family schedule
+   run_all_cec2017     % the optimizers in its CONFIG block, fair cross-family schedule
    ```
 
 6. **Validate generated summaries against the imported reference tables** when
@@ -164,6 +180,16 @@ a small run works, then commit to the full campaign, then validate and archive.
 
    ```powershell
    gsk_validate --compare results\_run_all\gsk\cec2017 benchmarks\cec_reference_results
+   ```
+
+   Where the reference ships per-run evidence (today the DT-GSK CEC2017
+   `evidence/per_run.csv`), also compare run by run in MATLAB, from the project
+   root with `scripts` on the path (Statistics and Machine Learning Toolbox; see
+   [Runbook 3.7](../getting-started/runbook.md#37-dt-gsk)):
+
+   ```matlab
+   compare_reference_runs('results/_run_all/dt-gsk/cec2017', ...
+       'benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv')
    ```
 
 7. **Archive** the launcher call or config, `environment.json`, `per_run.csv`,
@@ -185,7 +211,8 @@ The project separates two senses of "correct", and they have different
 guarantees:
 
 - **CEC benchmark ports are checked exactly.** The C++20 ports are validated
-  against fixed-vector ground truth: `ctest` runs 12 suites; CEC2017 matches at
+  against fixed-vector ground truth: `ctest` runs 13 suites (the 13th,
+  `gskcec_cli_exit_codes`, checks CLI exit codes); CEC2017 matches at
   rel-tol `1e-10` with maximum observed deviation about `4.8e-15`, CEC2013 saved
   vectors at `1e-12`, and CEC2020 at maximum deviation about `2.8e-16`. Within
   the supported protocol these ports are effectively bit-exact reproductions.
@@ -208,6 +235,20 @@ Two toolbox-bound caveats:
   scheduled seed with the effective reference RNG, so those runs are repeatable
   even though the original releases were not.
 
+One cross-implementation caveat:
+
+- **DT-GSK** is a port of a Python reference, and its imported tables were
+  produced by that Python code. MATLAB's Threefry stream and the Python replica
+  produce the same 64-bit words but convert them to doubles slightly
+  differently (at most `2^-53` per uniform draw; integer, permutation and mask
+  draws coincide), so a live MATLAB run is not bit-identical to the Python run
+  with the same seed. A line-by-line port was verified against the unmodified
+  Python code on identical random numbers in all four dimension tiers, and the
+  compact shipped version reproduces that port bit for bit; agreement with the
+  imported campaigns is therefore judged statistically. The validation record
+  and the CEC2017 campaign results are recorded in
+  [src/optimizers/dt-gsk/README.md](../../src/optimizers/dt-gsk/README.md).
+
 ### Serial and parallel parity
 
 Serial and parallel (`parfor`) runs are bit-identical. The reason is structural,
@@ -220,9 +261,17 @@ not luck:
 - In `unified` mode the runner draws `X0` once with that seed, captures the
   post-initialization RNG state, and every optimizer restores it before its first
   algorithmic random decision. The draw order is fixed regardless of backend.
+  DT-GSK instead builds its own Threefry substreams from the run seed and never
+  touches the global RNG, which is backend-independent as well.
 
 So the only thing parallelism changes is task completion order, and the runner
-restores input order before writing any CSV. Setting `use_parallel = true` is
+restores input order before writing any CSV. `src/tests/test_seed_policy.m`
+checks this end to end when the Parallel Computing Toolbox is available: on its
+own 2-worker process pool it runs `run_experiment` serially and with
+`use_parallel=true` and requires byte-identical `seed_schedule.csv`, summary,
+`CheckpointErrors` and median curve, plus equal `per_run.csv` rows apart from
+the `runtime_seconds` column (it prints a skip message without the toolbox).
+Setting `use_parallel = true` is
 safe for results but should be smoke-tested first so every worker can see
 `src/runners/run_experiment.m`, `src/common`, the optimizer folders, and the MEX
 bridge.

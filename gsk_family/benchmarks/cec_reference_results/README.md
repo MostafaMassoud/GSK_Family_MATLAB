@@ -3,7 +3,8 @@
 **This folder vs the other two:** `cec_reference_results` holds **imported,
 read-only reference evidence** - published aggregate result tables plus curated
 reference-side `curves/`, `curves/graphs/`, and `gen_logs/` convergence assets.
-The aggregate tables are the numbers from prior papers that
+The aggregate tables are the numbers from prior papers (for DT-GSK, runs of its
+reference implementation; see below) that
 `gsk_run`/`gsk_validate` compare fresh runs against; the convergence assets are
 preserved for future graph generation and trajectory audits. This folder
 contains data only, never code, and is never written to by a normal run.
@@ -25,18 +26,44 @@ benchmarks/cec_reference_results/
     curves/                                           curated median-run convergence traces
       graphs/                                         curated rendered convergence PNGs
     gen_logs/                                         curated checkpoint-error logs
+  cec2011/dt-gsk/                                     dt-gsk_cec2011.csv + dt-gsk_cec2011_D<dim>.csv (25 runs)
   cec2017/{gsk,agsk,apgsk,fdb-agsk,egsk,atmals-gsk}/
     *_cec2017_D{10,30,50,100}.csv                     aggregate tables; F2 excluded
     curves/                                           curated median-run convergence traces
       graphs/                                         curated rendered convergence PNGs
     gen_logs/                                         curated checkpoint-error logs
-  cec2013/gsk/                                        gsk_cec2013_D{10,30,50}.csv
+  cec2017/dt-gsk/
+    dt-gsk_cec2017_D{10,30,50,100}.csv                aggregate tables; F2 excluded (51 runs)
+    PROVENANCE.md                                     source repository, tag, producing commits, protocol
+    evidence/                                         per-run evidence of the reference campaign:
+                                                      per_run.csv, seed_schedule.csv, environment.json,
+                                                      run_config.json, phase0_protocol.json, verification.json
+  cec2013/{gsk,dt-gsk}/                               *_cec2013_D{10,30,50}.csv (dt-gsk: 51 runs)
   cec2013lsgo/{decc-g,mos}/                           *_cec2013lsgo.csv
+  cec2013lsgo/dt-gsk/                                 dt-gsk_cec2013lsgo_D{1000,905}.csv (25 runs)
   cec2020/agsk/                                       agsk_cec2020_D{05,10,15,20}.csv
+  cec2020/dt-gsk/                                     dt-gsk_cec2020_D{5,10,15,20}.csv (30 runs)
 ```
 
 The folder name under each suite is the reference algorithm name; optimizer
-ids use the same hyphenated slugs (`atmals-gsk`, `fdb-agsk`).
+ids use the same hyphenated slugs (`atmals-gsk`, `fdb-agsk`, `dt-gsk`). The
+reference loader reads only the tables directly under `<suite>/<optimizer>/`;
+`curves/`, `gen_logs/` and `evidence/` subfolders and `PROVENANCE.md` are
+skipped (`gsk_list --references` loads 165 files / 1411 rows).
+
+## DT-GSK reference evidence
+
+The `dt-gsk` folders were imported from the DT-GSK reference implementation
+(Python, MIT license) v2.46, <https://github.com/MostafaMassoud/DT-GSK>. They
+are runs of that implementation (unified seed `get_cec_seed(20240620, dim,
+func, run)`, Threefry substreams, `pub` profile, full budgets), not tables from
+a paper or from this toolkit, so agreement with them is cross-implementation
+evidence. `cec2017/dt-gsk/PROVENANCE.md` records the source tag, the producing
+commit and run date per suite, and what was not imported (the curated curves
+and gen-logs stay in the source repository). The CEC2017 per-run files in
+`evidence/` are the input for run-level checks with
+`scripts/compare_reference_runs.m`; the port's validation and campaign results
+are recorded in `src/optimizers/dt-gsk/README.md`.
 
 ## Column schema
 

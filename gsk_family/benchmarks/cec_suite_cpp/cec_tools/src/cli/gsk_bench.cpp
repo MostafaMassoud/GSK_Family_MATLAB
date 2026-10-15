@@ -79,7 +79,16 @@ int main(int argc, char** argv) {
             if (a == "--root") {
                 project_root = next("--root");
             } else if (a == "--iterations") {
-                iterations = std::stoll(next("--iterations"));
+                const std::string value = next("--iterations");
+                std::size_t consumed = 0;
+                try {
+                    iterations = std::stoll(value, &consumed);
+                } catch (const std::exception&) {
+                    consumed = 0;
+                }
+                if (value.empty() || consumed != value.size() || iterations <= 0) {
+                    throw std::runtime_error("--iterations must be a positive integer, got '" + value + "'");
+                }
             } else if (a == "--csv") {
                 csv_path = next("--csv");
             } else if (a == "--cell") {
@@ -108,6 +117,10 @@ int main(int argc, char** argv) {
     std::ofstream csv;
     if (!csv_path.empty()) {
         csv.open(csv_path);
+        if (!csv) {
+            std::cerr << "gsk_bench: cannot open CSV output '" << csv_path.string() << "'\n";
+            return 1;
+        }
         csv << "suite,function,dimension,iterations,seconds,ns_per_eval,evals_per_sec\n";
     }
 
@@ -150,6 +163,10 @@ int main(int argc, char** argv) {
     // Touch the checksum so the compiler must keep every evaluation.
     if (checksum == 1.2345e-300) {
         std::cerr << "(unreachable)\n";
+    }
+    if (!csv_path.empty() && !csv.flush()) {
+        std::cerr << "gsk_bench: failed writing CSV output '" << csv_path.string() << "'\n";
+        return 1;
     }
     return failures == 0 ? 0 : 2;
 }

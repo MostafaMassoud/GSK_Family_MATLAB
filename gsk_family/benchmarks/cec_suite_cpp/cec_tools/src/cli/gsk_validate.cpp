@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -26,7 +27,9 @@ void print_usage() {
               << "  gsk_validate --suite <name> --smoke [--root <project_root>]\n"
               << "  gsk_validate --suite cec2013 --against saved_vectors [--root <project_root>]\n"
               << "  gsk_validate --compare <results_root> <cec_reference_results_root> [--out <report.csv>]\n"
-              << "  gsk_validate --verify <run_dir> <cec_reference_results_root> [--reduced|--full]\n";
+              << "  gsk_validate --verify <run_dir> <cec_reference_results_root> [--reduced|--full]\n"
+              << "      (without --reduced/--full the protocol is read from the run's\n"
+              << "       summary/environment.json runs/max_nfes_override; full if absent)\n";
 }
 
 fs::path noncolliding_path(const fs::path& path) {
@@ -47,13 +50,30 @@ fs::path noncolliding_path(const fs::path& path) {
 // Runs the post-run verdict (Mandate 1.1c): is this run consistent with the
 // same optimizer's published reference table? Writes a non-colliding
 // verification*.json file and prints CONSISTENT/DEVIATES. Returns the process
-// exit code.
-int run_verify(const fs::path& run_dir, const fs::path& reference_root, bool reduced) {
+// exit code. Without an explicit --reduced/--full the protocol comes from the
+// run's own environment.json, with the same rule gsk_run applies, so a
+// standalone re-check agrees with gsk_run's automatic verdict.
+int run_verify(const fs::path& run_dir, const fs::path& reference_root,
+               std::optional<bool> reduced_flag) {
     const auto summaries = gskcec::load_summaries(run_dir);
     if (summaries.empty()) {
         std::cerr << "gsk_validate: no summary tables (summary/<opt>_<suite>_D<dim>.csv) found under "
                   << run_dir.string() << "\n";
         return 2;
+    }
+    bool reduced = false;
+    std::string protocol_source = "--reduced/--full flag";
+    if (reduced_flag) {
+        reduced = *reduced_flag;
+    } else {
+        protocol_source = "default (no readable environment.json; pass --reduced or --full)";
+        for (const auto& env : {run_dir / "summary" / "environment.json", run_dir / "environment.json"}) {
+            if (const auto from_env = gskcec::reduced_protocol_from_environment(env)) {
+                reduced = *from_env;
+                protocol_source = env.generic_string();
+                break;
+            }
+        }
     }
     const auto verification = gskcec::classify_run(summaries, reference_root, reduced);
     // Match gsk_run: keep the verdict next to the summaries when a summary/
@@ -66,6 +86,7 @@ int run_verify(const fs::path& run_dir, const fs::path& reference_root, bool red
     std::cout << "Verification: " << verification.optimizer << " on " << verification.suite
               << " -> " << verification.verdict
               << (verification.reduced_budget ? " (reduced budget)" : " (full protocol)") << "\n";
+    std::cout << "  protocol from: " << protocol_source << "\n";
     std::cout << "  functions checked=" << verification.functions_checked
               << " hard_failures=" << verification.hard_failures
               << " win/tie/loss=" << verification.wins << "/" << verification.ties << "/"
@@ -217,8 +238,9 @@ int main(int argc, char** argv) {
     }
 
     // Boolean flags (no value): --reduced / --full select the verification
-    // protocol context. Default is --full (strict).
-    bool reduced = false;
+    // protocol context. Without either, --verify reads it from the run's
+    // environment.json (strict full protocol when that is absent).
+    std::optional<bool> reduced;
     for (std::size_t i = 0; i < args.size();) {
         if (args[i] == "--reduced") {
             reduced = true;
@@ -244,6 +266,11 @@ int main(int argc, char** argv) {
         } else {
             ++i;
         }
+    }
+    // The flags above may have consumed every argument (e.g. `gsk_validate --full`).
+    if (args.empty()) {
+        print_usage();
+        return 1;
     }
 
     try {

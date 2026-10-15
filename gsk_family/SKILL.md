@@ -5,7 +5,7 @@ contains `src/`, `benchmarks/`, `docs/`, `scripts/`, `CMakeLists.txt`, and this
 `SKILL.md`.
 
 This is a hybrid **MATLAB + C++20** research toolkit for the Gaining-Sharing
-Knowledge (GSK) optimizer family on five CEC benchmark suites. The six optimizers
+Knowledge (GSK) optimizer family on five CEC benchmark suites. The seven optimizers
 are MATLAB (`src/`); the CEC benchmark problems and all tooling are standalone
 C++20 (`benchmarks/`); the two halves meet at exactly one seam, the
 `gskcec_eval` MEX bridge. Every experiment run is automatically checked against
@@ -25,8 +25,9 @@ preserved verbatim; the only sanctioned modernization is deterministic seeding.
    `optimum()`, `dimension()`; built by `gskcec::make_problem(suite, function,
    dimension, data_root)`. Data loads from explicit paths at construction (no
    CWD dependence); a single instance is **not thread-safe** (one per thread).
-3. **MATLAB optimizer layer** (`src/optimizers`, `src/common`): the six
-   algorithms plus shared donor/selection/RNG helpers.
+3. **MATLAB optimizer layer** (`src/optimizers`, `src/common`): the seven
+   algorithms plus shared donor/selection/RNG helpers (DT-GSK is
+   self-contained and uses none of them).
 4. **Experiment layer**: the C++ config parser, the MATLAB runner
    `src/runners/run_experiment.m`, and the **optional** `gskcec_eval` MEX bridge
    (`benchmarks/cec_suite_cpp/cec_tools/src/mex_bridge`).
@@ -38,13 +39,14 @@ The two boundaries are absolute and must never be crossed:
 - The **C++ side never implements a GSK optimizer**.
 - The **MATLAB side never parses a config** (one strict C++ parser owns that).
 
-The bridge is enforced: each launcher calls `gskcec_require_mex(...)`, which
-errors early with the exact build command if `build/mex/gskcec_eval.<mexext>`
-is missing. The MEX `eval` command takes a **column-major D x NP** matrix (one
+The bridge is enforced: each launcher (and `run_experiment` for CEC suites)
+calls `gskcec_require_mex(...)`, which errors early with the exact build command
+if `build/mex/gskcec_eval.<mexext>` is missing or cannot be loaded
+(`gskcec:mexNotLoadable`; it forces a real load). The MEX `eval` command takes a **column-major D x NP** matrix (one
 candidate per column) and returns a `1 x NP` fitness row; the MATLAB optimizers
 evaluate the same ported C++ code the C++ tests validate.
 
-## The six optimizers
+## The seven optimizers
 
 Public slugs are hyphenated; MATLAB entry-point function/file names use
 underscores. Folders sit under `src/optimizers/<slug>/`.
@@ -57,12 +59,17 @@ underscores. Folders sit under `src/optimizers/<slug>/`.
 | `atmals-gsk` | `atmals_gsk_optimize.m` | five-parameter roulette adaptation + local search | no |
 | `egsk` | `egsk_optimize.m` | separate KF1/KF2, late-stage adaptation, fmincon/SQP refinement | no |
 | `fdb-agsk` | `fdb_agsk_optimize.m` | fitness-distance-balance donor selection (5 cases) | no |
+| `dt-gsk` | `dt_gsk_optimize.m` | dimension-tiered GSK: NP = 5*D with nonlinear reduction; four tiers (D < 20, 20 <= D < 50, D >= 50, D >= 100) switch on adaptive parameter selection, linkage crossover, escapes/restarts, local search, and from D = 50 an interaction graph plus final polish | no |
 
 Two termination contracts coexist: only AGSK and APGSK stop early on the
-`1e-8` target; the other four run the full budget and zero the error only at the
+`1e-8` target; the other five run the full budget and zero the error only at the
 end. eGSK in reference mode **requires** the Optimization Toolbox (`fmincon`)
 and errors `egsk:fminconUnavailable` if absent (`options.use_fmincon=false` is
-the only non-reference diagnostic opt-out).
+the only non-reference diagnostic opt-out). DT-GSK is three code files
+(`dt_gsk_optimize.m`, `dt_gsk_config.m` = the `pub` profile by tier,
+`dt_gsk_graph.m` = the D >= 50 interaction graph); its `README.md` is the
+authoritative behavior and validation record (a MATLAB port of the MIT-licensed
+Python reference v2.46).
 
 ## The five benchmark suites
 
@@ -78,8 +85,9 @@ The two CEC2013 suites (`cec2013`, `cec2013lsgo`) are **separate and never
 merged**. Known-optimum suites apply the standard `1e-8` zero cutoff to errors.
 **Reporting exception:** ATMALS-GSK on CEC2017 reports `abs(best_fitness -
 optimum)` with the `1e-8` cutoff; every other case reports the signed
-`best_fitness - optimum`. Default experiment matrix: all six optimizers on
-cec2017 and cec2011, with AGSK additionally on cec2020.
+`best_fitness - optimum`. Default experiment matrix: all seven optimizers on
+cec2017 and cec2011, with AGSK additionally on cec2020 (DT-GSK also has imported
+references for cec2013, cec2013lsgo and cec2020).
 
 ## Seed and RNG contract
 
@@ -98,26 +106,46 @@ cec2017 and cec2011, with AGSK additionally on cec2020.
     `base_seed + 9973*func + (run-1)`; `agsk`/`apgsk`/`fdb-agsk` use `D*func*run`.
   - **native/derived** (`src/runners/derive_run_seed.m`): a diagnostic hash that
     also folds in optimizer + suite identity (not a fair-start policy).
+- **Unified-only exception (`dt-gsk`)**: `run_experiment` (`is_unified_only`)
+  schedules DT-GSK with `get_cec_seed(base_seed, dim, func, run)` and
+  `threefry` under **every** `seed_policy` (`reference`/`unified`/`native`/
+  `derived`), mirroring the Python reference's `UNIFIED_ONLY_OPTIMIZERS`: its
+  reference campaign was produced that way. DT-GSK derives named Threefry
+  substreams from the run seed, never touches the global RNG, and requires
+  `options.rand_generator` = `threefry` (empty/`auto`/`default` accepted).
 - Generator (`effective_rand_generator`): under `reference`,
   `agsk`/`apgsk`/`fdb-agsk`/`egsk`/`atmals-gsk` use the legacy `seed` stream
-  (`mcg16807`) and `gsk` (plus any other) uses `twister`; under `unified` the
-  whole family uses `threefry` when supported, else `twister`; under
-  `native/derived` the requested generator is honored. `gsk_set_rng.m` configures
-  the generator via `RandStream` so `rand`, `randi`, **and** `randperm` are all
-  deterministic.
+  (`mcg16807`) and `gsk` uses `twister`; under `unified` the whole family uses
+  `threefry` when supported, else `twister`; under `native/derived` the
+  requested generator is honored; `dt-gsk` is always `threefry`. `gsk_set_rng.m`
+  configures the generator via `RandStream` so `rand`, `randi`, **and**
+  `randperm` are all deterministic. The reference generator is a fixed project
+  choice, not a replay of every historical driver (the archived AGSK/APGSK
+  drivers seed with `twister`).
 - **Defaults differ by entry point** (intentional): `run_experiment(...)` and
   the root `run_all_cec*.m` launchers default to `unified` + `threefry`; the
   `gsk_run` CLI, the shipped `configs/*.yml`, and `scripts/run_all.ps1` default
-  to `reference` + `threefry`.
+  to `reference` + `threefry` (`run_all.ps1` defers to each config's
+  `seed_policy` / `rand_generator` unless `-SeedPolicy` / `-RandGenerator` is
+  passed). `run_experiment` rejects any other `seed_policy`
+  (case-insensitive match) and `rand_generator` `auto`/`default` under
+  `native`/`derived` with `run_experiment:args`.
 - **Fair-start X0** (unified only): the runner draws the `NP=100` population once
   (`src/common/gsk_init_population.m` = a single `rand(np,dim)` draw), captures
   the post-initialization RNG state, passes both into the optimizer
   (`options.initial_population`, `options.rng_state_after_initialization`), and
   each optimizer restores that state so the first random decision is identical
-  across all six optimizers for the same `(dim,func,run)`. The launchers verify
-  this with `verify_unified_seed_schedule`.
-- **Wall-clock seeding is forbidden project-wide**; every seed is recorded in
-  `seed_schedule.csv`, `per_run.csv`, and `environment.json`.
+  across the six original optimizers for the same `(dim,func,run)`. DT-GSK is
+  the documented fair-start exception: it samples its own `NP = 5*D` population
+  and ignores a runner X0, so the runner draws none for it (the metadata
+  `initial_population_policy` reads "optimizer self-initializes NP = 5*D ..."
+  and `run_config.json` records `profile: pub`). The launchers verify the seed
+  schedule with `verify_unified_seed_schedule` (seeds compared on keys present
+  in two or more schedules; missing keys only warn).
+- **Wall-clock seeding is forbidden project-wide**; every per-run seed is
+  recorded in `seed_schedule.csv`, `per_run.csv`, and the `gen_logs/` `Seed`
+  column, and `environment.json` / `run_config.json` record `base_seed`, the
+  scheme, and the seed formula.
 
 ## Results and verification
 
@@ -126,9 +154,12 @@ Outputs land under `results/<optimizer>/<suite>/` (launchers write under
 `Function,Best,Median,Mean,Worst,SD` tables, `per_run.csv`, `environment.json`,
 `seed_schedule.csv`, `verification.json`), `curves/` (+ `graphs/*.png`),
 `gen_logs/`. Reruns are append/resume: completed run ids are skipped only when
-their stored seed still matches the active policy; refreshed fixed-name files are
-archived under `_archive/<timestamp>/`; imported reference tables under
-`benchmarks/cec_reference_results` are never written to.
+their stored seed, budget (`max_nfes`) and effective generator still match the
+active run (other rows are re-run and appended; stale rows stay as history);
+refreshed fixed-name files are archived under `_archive/<timestamp>/`; imported
+reference tables under `benchmarks/cec_reference_results` are never written to
+(`run_experiment` refuses any `output_dir` inside that tree with
+`run_experiment:outputUnsafe`).
 
 Each `gsk_run` auto-writes `verification.json` with verdict `CONSISTENT` or
 `DEVIATES` (gsk_run exits nonzero on `DEVIATES`; `--no-verify` opts out). The
@@ -152,8 +183,9 @@ here.
   source of truth.
 - **Never weaken a test tolerance** to make a change pass; ctest compares against
   committed ground-truth data.
-- Public slugs are hyphenated (`atmals-gsk`, `fdb-agsk`); MATLAB function/file
-  names use underscores (`atmals_gsk_optimize.m`). Keep both correct.
+- Public slugs are hyphenated (`atmals-gsk`, `fdb-agsk`, `dt-gsk`); MATLAB
+  function/file names use underscores (`atmals_gsk_optimize.m`,
+  `dt_gsk_optimize.m`). Keep both correct.
 - The two CEC2013 suites stay separate and are never merged.
 - Wall-clock seeding stays forbidden; the seed contract above is fixed.
 
@@ -161,7 +193,10 @@ here.
 
 - Imported CEC reference evidence: `benchmarks/cec_reference_results` (read-only
   aggregate tables plus curated `curves/`, `curves/graphs/`, and `gen_logs/`
-  assets; never write normal run results there).
+  assets, and for `cec2017/dt-gsk/` a per-run `evidence/` subfolder and
+  `PROVENANCE.md`; never write normal run results there). The reference loader
+  reads only tables directly under `<suite>/<optimizer>/`
+  (`gsk_list --references` loads 165 files / 1411 rows).
 - CEC C++ ports and CEC input data: `benchmarks/cec_suite_cpp/<suite>/{src,input_data}`.
 - CEC support headers, library, CLIs, MEX bridge, C++ tests:
   `benchmarks/cec_suite_cpp/cec_tools`.
@@ -183,15 +218,24 @@ under `src` or GSK code under `benchmarks`.
   via the `gskcec_eval` MEX bridge; the `sphere` test suite is pure MATLAB).
 - Experiment driver: `gsk_run` CLI -> `src/runners/run_experiment.m`; or the
   root `run_all_cec*.m` launchers; or a direct `run_experiment(...)` call.
+- Optimizers: `src/optimizers/<slug>/<slug_with_underscores>_optimize.m`; DT-GSK
+  is `src/optimizers/dt-gsk/dt_gsk_optimize.m` (+ `dt_gsk_config.m`,
+  `dt_gsk_graph.m`; validation record in its `README.md`).
+- Run-level comparison of two `per_run.csv` sets (e.g. a MATLAB DT-GSK campaign
+  vs `benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv`):
+  `scripts/compare_reference_runs.m` (needs the Statistics and Machine Learning
+  Toolbox).
 - Seeding: `src/runners/get_cec_seed.m` (unified),
   `src/runners/derive_run_seed.m` (native/derived),
   `src/common/gsk_set_rng.m` (generator); fair-start helpers
   `src/common/gsk_init_population.m`,
   `src/common/gsk_initial_population_from_options.m`,
   `src/common/gsk_restore_rng_after_initialization.m`.
-- Four CLIs in `build/`: `gsk_list`, `gsk_validate`, `gsk_run`, `gsk_bench`.
+- Four CLIs in `build/`: `gsk_list`, `gsk_validate`, `gsk_run`, `gsk_bench`
+  (`gsk_run` and `gsk_list --optimizers` know all seven slugs).
 - MEX bridge build: `powershell -File scripts\build_mex_bridge.ps1` ->
-  `build/mex/gskcec_eval.mexw64`.
+  `build/mex/gskcec_eval.mexw64` (linked fully static: no MinGW runtime DLL is
+  needed at load time).
 - Expected-value test data: committed under
   `benchmarks/cec_suite_cpp/cec_tools/tests/data`. The external regeneration archive
   is not bundled, so do not add scripts that depend on a missing local reference
@@ -199,8 +243,9 @@ under `src` or GSK code under `benchmarks`.
 
 ## Documentation
 
-The docs site is generated by `scripts/build_docs.ps1` (PowerShell + Pandoc,
-with a built-in fallback renderer, plus Doxygen for the C++ API - **no Python**)
+The docs site is generated by `scripts/build_docs.ps1` (PowerShell + Pandoc 3.8+,
+with a built-in fallback renderer used when Pandoc is absent or older, plus
+Doxygen for the C++ API - **no Python**)
 into `docs/html/`. `docs/index.html` is a redirect into that site. Source
 Markdown under `docs/` is the source of truth, organized to mirror the sibling
 Python project (`00-GSK_Family_Python/docs`):
@@ -213,7 +258,8 @@ docs/
                     result_schema, seed_policy, benchmark_protocol, benchmark_mapping,
                     diagrams, project_structure, reference_inventory, porting_notes,
                     cec2011_port_plan, glossary
-  algorithms/       gsk, agsk, apgsk, fdb-agsk, atmals-gsk, egsk  (10-section skeleton)
+  algorithms/       gsk, agsk, apgsk, fdb-agsk, atmals-gsk, egsk, dt-gsk  (10-section skeleton;
+                    the DT-GSK validation record is src/optimizers/dt-gsk/README.md)
   development/      developer_guide, contributor_guide, maintenance_guide,
                     extension_guide, code_reading_guide
   research/         researcher_handbook, reproducibility, performance,
@@ -255,7 +301,7 @@ separate root `LICENSE` file.
 rg --files . | rg '\.(py|pyx)$|cec2013\.cpp$'
 rg --files benchmarks\cec_suite_cpp | rg '\.(m|R|c|py|pyx)$|cec2013\.cpp$'
 
-# C++ build and tests (12 ctest suites):
+# C++ build and tests (13 ctest suites, incl. the gskcec_cli_exit_codes CLI test):
 cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ctest --test-dir build --output-on-failure
@@ -263,7 +309,7 @@ ctest --test-dir build --output-on-failure
 # MEX bridge (required before any MATLAB CEC experiment):
 powershell -File scripts\build_mex_bridge.ps1
 
-# MATLAB smoke tests (no MEX bridge needed):
+# MATLAB smoke tests (13 tests, incl. test_dt_gsk_smoke; no MEX bridge needed):
 matlab -batch "cd('src/tests'); run_matlab_smoke_tests"
 
 # Documentation site:

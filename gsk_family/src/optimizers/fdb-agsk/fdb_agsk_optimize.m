@@ -99,6 +99,16 @@ KR_pool = [0.2 0.1 0.9 0.9];
 max_pop_size = pop_size;
 min_pop_size = 12;
 if isfield(options, 'min_pop_size') && ~isempty(options.min_pop_size); min_pop_size = options.min_pop_size; end
+% The P = 0.05 senior partition needs non-empty best/worst blocks
+% (round(0.05*NP) >= 1 and NP - round(0.95*NP) >= 1), i.e. NP >= 11 for
+% every population size the reduction can reach. Checked before any RNG draw.
+if ~(isscalar(max_pop_size) && isscalar(min_pop_size) && ...
+        min_pop_size >= 11 && max_pop_size >= min_pop_size)
+    error('fdb_agsk_optimize:options', ...
+        ['min_pop_size must be >= 11 (the P = 0.05 senior partition needs ' ...
+         'NP >= 11) and np_init >= min_pop_size; got np_init=%s, min_pop_size=%s'], ...
+        mat2str(max_pop_size), mat2str(min_pop_size));
+end
 
 %% CREATE INITIAL POPULATION
 % Reference/reproduction runs do not pass X0, so this remains the original
@@ -133,12 +143,16 @@ Kind = rand(pop_size, 1);
 K(Kind < 0.5, :) = rand(sum(Kind < 0.5), 1);
 K(Kind >= 0.5, :) = ceil(20 * rand(sum(Kind >= 0.5), 1));
 
-% Per-generation convergence recording (interface requirement)
+% Per-generation convergence recording (interface requirement). The
+% reference per-child counter reads max_nfes+1 when a generation crosses the
+% budget; only the RECORDED copies are clipped at max_nfes (bookkeeping only:
+% the loop counter that drives the KW phase, junior schedule and resize plan
+% is untouched).
 max_records = ceil(max_nfes / max(min_pop_size, 1)) + 2;
 conv_nfes = zeros(max_records, 1);
 conv_fit = zeros(max_records, 1);
 n_rec = 1;
-conv_nfes(n_rec) = nfes;
+conv_nfes(n_rec) = min(nfes, max_nfes);
 conv_fit(n_rec) = bsf_fit_var;
 
 g = 0; %#ok<NASGU>
@@ -298,7 +312,7 @@ while nfes < max_nfes
     end
 
     n_rec = n_rec + 1;
-    conv_nfes(n_rec) = nfes;
+    conv_nfes(n_rec) = min(nfes, max_nfes); % recorded copy clipped (see above)
     conv_fit(n_rec) = bsf_fit_var;
 end
 
@@ -330,7 +344,7 @@ result.seed = actual_seed;
 result.best_x = bsf_solution;
 result.best_fitness = bsf_fit_var;
 result.error = err;
-result.nfes = nfes;
+result.nfes = min(nfes, max_nfes); % counted evaluations; reference counter may read max_nfes+1
 result.termination = 'max_evaluations'; % the reference never stops early
 result.convergence = struct('nfes', conv_nfes(1:n_rec), 'best_fitness', conv_fit(1:n_rec));
 result.runtime_seconds = toc(start_time);

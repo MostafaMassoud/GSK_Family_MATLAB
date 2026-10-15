@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (arg == "--optimizers") {
-            std::cout << "gsk\nagsk\napgsk\natmals-gsk\negsk\nfdb-agsk\n";
+            std::cout << "gsk\nagsk\napgsk\natmals-gsk\negsk\nfdb-agsk\ndt-gsk\n";
             return 0;
         }
         if (arg == "--references") {

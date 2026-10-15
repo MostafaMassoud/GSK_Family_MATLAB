@@ -2,7 +2,7 @@
 
 > **What this is:** the complete copy-paste runbook - build the tooling and run
 > **every** optimizer (`gsk`, `agsk`, `apgsk`, `atmals-gsk`, `egsk`,
-> `fdb-agsk`) on every supported CEC suite, from both the MATLAB IDE and a
+> `fdb-agsk`, `dt-gsk`) on every supported CEC suite, from both the MATLAB IDE and a
 > Windows terminal, then verify and compare against the published reference
 > tables. **For:** anyone running real experiments who wants exact, per-algorithm
 > commands. **Prerequisites:** the build and MEX bridge (sections 2.4-2.5),
@@ -12,7 +12,7 @@
 
 A complete, copy-paste runbook for the `gsk_family` project: how to build the
 tooling and run **every** optimizer (`gsk`, `agsk`, `apgsk`, `atmals-gsk`,
-`egsk`, `fdb-agsk`) on every supported CEC suite, from both the MATLAB IDE and a
+`egsk`, `fdb-agsk`, `dt-gsk`) on every supported CEC suite, from both the MATLAB IDE and a
 Windows terminal, then verify and compare the results against the published
 reference tables. Every command below was checked against the actual sources
 (`benchmarks/cec_suite_cpp/cec_tools/src/cli/*.cpp`, `src/runners/run_experiment.m`,
@@ -46,6 +46,7 @@ reference tables. Every command below was checked against the actual sources
   - [3.4 atmals-gsk](#34-atmals-gsk)
   - [3.5 egsk](#35-egsk)
   - [3.6 fdb-agsk](#36-fdb-agsk)
+  - [3.7 dt-gsk](#37-dt-gsk)
 - [4. Reproduce the default matrix](#4-reproduce-the-default-matrix)
 - [5. Troubleshooting appendix](#5-troubleshooting-appendix)
 - [6. Quick command reference](#6-quick-command-reference)
@@ -56,7 +57,7 @@ reference tables. Every command below was checked against the actual sources
 
 This project has two halves. The **CEC benchmark suites** (CEC2011, CEC2013,
 CEC2013LSGO, CEC2017, CEC2020) are standalone C++20 ports under `benchmarks/`;
-the **six GSK-family optimizers** are MATLAB under `src/optimizers/`. A small
+the **seven GSK-family optimizers** are MATLAB under `src/optimizers/`. A small
 C++ orchestrator (`gsk_run`) drives MATLAB's `run_experiment.m`, which evaluates
 the C++ benchmarks through the `gskcec_eval` MEX bridge, writes results in the
 CEC-competition layout, and auto-verifies each run against the published
@@ -73,7 +74,7 @@ additionally prints the verification verdict.
 
 ## 2. Common setup
 
-Everything in this section is shared by all six algorithms. Each algorithm
+Everything in this section is shared by all seven algorithms. Each algorithm
 section below refers back here for the shared steps and only adds its own
 options, suites, and quirks.
 
@@ -123,7 +124,7 @@ These already exist in the repository; confirm they are present before running:
 <root>\benchmarks\cec_reference_results\         imported reference tables + curated curves/logs (read-only)
 <root>\configs\*.yml                      ready-made experiment configs
 <root>\src\runners\run_experiment.m       the MATLAB experiment driver
-<root>\src\optimizers\<name>\<name>_optimize.m   the six optimizers
+<root>\src\optimizers\<name>\<name>_optimize.m   the seven optimizers
 <root>\scripts\build_mex_bridge.ps1       MEX bridge builder
 ```
 
@@ -142,7 +143,7 @@ reference tables and curated benchmark-side convergence assets under
 
 - **MATLAB R2025b** is the project version. The optimizers and runner are plain
   MATLAB; no toolbox is strictly required to run `gsk`, `agsk`, `apgsk`,
-  `atmals-gsk`, or `fdb-agsk`.
+  `atmals-gsk`, `fdb-agsk`, or `dt-gsk`.
 - **eGSK** uses the **Optimization Toolbox** (`fmincon`, SQP) for its IP local
   refinement. Reference-mode eGSK requires `fmincon`; if it is absent, the
   default call raises `egsk:fminconUnavailable`. `options.use_fmincon=false`
@@ -152,8 +153,12 @@ reference tables and curated benchmark-side convergence assets under
   port replaces it with a local, mathematically identical helper
   (`atmals_gaussmf.m`), so **no toolbox is needed**.
 - The statistics/figures script `scripts/analyze_results.m` is **toolbox-free**
-  (Friedman via base `gammainc`, Wilcoxon via base `erfc`; figures via
-  `boxchart`/`exportgraphics`).
+  (Friedman via base `gammainc`, Wilcoxon via base `erfc`, tie ranks via a
+  local helper; figures via `boxchart`/`exportgraphics`).
+- The per-run campaign comparison `scripts/compare_reference_runs.m` (see
+  [3.7](#37-dt-gsk)) **needs the Statistics and Machine Learning Toolbox**
+  (`ranksum`, `signrank`); without it, it stops with
+  `compare_reference_runs:toolbox`.
 
 ### 2.4 Build the C++ CLIs (cmake / ctest)
 
@@ -214,8 +219,9 @@ build\gsk_list.exe --references benchmarks\cec_reference_results
 ```
 
 `--benchmarks` lists the five suites with their functions/dimensions;
-`--optimizers` prints `gsk agsk apgsk atmals-gsk egsk fdb-agsk`; `--references`
-prints one line per imported reference file plus `files=` / `rows=` totals.
+`--optimizers` prints `gsk agsk apgsk atmals-gsk egsk fdb-agsk dt-gsk`;
+`--references` prints one line per imported reference file plus `files=` /
+`rows=` totals (currently `files=165`, `rows=1411`).
 
 You can also smoke-test that each benchmark suite constructs and evaluates to
 finite numbers (still no MATLAB, no optimizer):
@@ -243,8 +249,15 @@ the benchmark sources directly:
 powershell -File scripts\build_mex_bridge.ps1
 ```
 
-This produces `build\mex\gskcec_eval.mexw64`. If MATLAB or g++ are not
-auto-detected, pass them explicitly:
+This produces `build\mex\gskcec_eval.mexw64`. The bridge is linked fully static
+(`-static`, with the MATLAB import libraries `libmx.lib` / `libmex.lib` /
+`libmat.lib` passed by full path), so it needs no MinGW runtime DLL
+(`libwinpthread-1.dll`, `libstdc++`, `libgcc`) on PATH at load time. If the
+script reports that it built the file but could not replace the existing one,
+the bridge is still loaded in a MATLAB session (live problem handles keep it
+locked): run `gskcec_eval('clear'); clear mex` in that session, or close MATLAB,
+then rerun the script. If MATLAB or g++ are not auto-detected, pass them
+explicitly:
 
 ```powershell
 powershell -File scripts\build_mex_bridge.ps1 `
@@ -290,15 +303,15 @@ CLI flags, or the MATLAB runner.
 
 | Quantity | Config key (`configs/*.yml`) | `gsk_run` flag | `run_experiment(...)` arg | Notes |
 |---|---|---|---|---|
-| Optimizer(s) | `optimizers: [gsk, ...]` | `--optimizer <name>` (one) | `'optimizer','gsk'` (one) | names: `gsk agsk apgsk atmals-gsk egsk fdb-agsk` |
+| Optimizer(s) | `optimizers: [gsk, ...]` | `--optimizer <name>` (one) | `'optimizer','gsk'` (one) | names: `gsk agsk apgsk atmals-gsk egsk fdb-agsk dt-gsk` |
 | Suite | `suite: cec2017` | `--suite cec2017` | `'suite','cec2017'` | see [2.8](#28-suites-dimensions--default-budgets-reference) |
 | Functions | `functions: [1, 3, ...]` or `all` | `--function N` (repeat) | `'functions',[1 3 ...]` | |
 | Dimensions | `dimensions: [10, 30]` or `all` | `--dimension D` (repeat) | `'dimensions',[10 30]` | native-dim suites: use `0` |
-| **Iterations (budget)** | `max_evaluations: M` (`0`=default) | `--max-evaluations M` | `'max_nfes',M` (`0`=default) | this is `max_nfes`, the evaluation budget |
-| Runs | `runs: 51` | `--runs R` | `'runs',R` | |
-| Base seed | `seed: 20240620` | `--seed S` | `'base_seed',S` | per-run seeds also depend on seed policy |
-| Seed policy | `seed_policy: reference` | `--seed-policy reference` | `'seed_policy','reference'` | `gsk_run` default is `reference`; direct `run_experiment` default is `unified` |
-| RNG family | `rand_generator: threefry` | `--rand-generator threefry` | `'rand_generator','threefry'` | overridden under `reference`: AGSK/APGSK/FDB-AGSK/eGSK/ATMALS-GSK use legacy `seed`; GSK uses `twister`. Under `unified`, MATLAB uses `threefry` when supported and falls back to `twister` |
+| **Iterations (budget)** | `max_evaluations: M` (`0`=default) | `--max-evaluations M` | `'max_nfes',M` (`0`=default) | this is `max_nfes`, the evaluation budget; `M >= 0` |
+| Runs | `runs: 51` | `--runs R` | `'runs',R` | whole integer `>= 1` |
+| Base seed | `seed: 20240620` | `--seed S` | `'base_seed',S` | integer in `[0, 2^53]` (negative or non-integer values are rejected); per-run seeds also depend on seed policy |
+| Seed policy | `seed_policy: reference` | `--seed-policy reference` | `'seed_policy','reference'` | `gsk_run` default is `reference`; direct `run_experiment` default is `unified`; DT-GSK always gets the unified schedule ([3.7](#37-dt-gsk)) |
+| RNG family | `rand_generator: threefry` | `--rand-generator threefry` | `'rand_generator','threefry'` | overridden under `reference`: AGSK/APGSK/FDB-AGSK/eGSK/ATMALS-GSK use legacy `seed`; GSK uses `twister`. Under `unified`, MATLAB uses `threefry` when supported and falls back to `twister`. DT-GSK always uses `threefry` |
 
 `gsk_run` and shipped `configs/*.yml` use `seed_policy='reference'` for
 published-table reproduction. The root `run_all_cec*.m` launchers use
@@ -313,6 +326,9 @@ cell, uses `threefry` when supported and otherwise `twister`, and verifies compl
 to `seed_policy='unified'` unless you pass a policy explicitly. Root
 `run_all_cec*.m` launchers do not expose `base_seed`; they use
 `run_experiment.m`'s centralized default `20240620`.
+DT-GSK is the one exception to both policies: it is *unified-only*, so it gets
+the unified seed and `threefry` under every `seed_policy`, and it draws its own
+initial population instead of the runner's `X0` (see [3.7](#37-dt-gsk)).
 Deterministic seeds are written to `summary/seed_schedule.csv`; the full policy
 is in [seed_policy.md](../reference/seed_policy.md).
 
@@ -352,6 +368,7 @@ snippet". Interface-default populations:
 | `atmals-gsk` | `np = 100` | `options.np` |
 | `egsk` | `np = 100` | `options.np` |
 | `fdb-agsk` | `np_init = 100` (`40*D` reference sphere harness opt-in) | `options.np_init` |
+| `dt-gsk` | `NP = 5*D` initial, reduced nonlinearly to 12 (25 for `D >= 50`) | not settable: fixed by the `pub` profile in `dt_gsk_config.m` |
 
 **"Iterations".** GSK-family optimizers are population algorithms; the run
 length is an **evaluation budget** `max_nfes`, not an iteration count. The
@@ -367,7 +384,7 @@ or set it explicitly to shorten/override a run.
 | `cec2020` | 1..10 | 5, 10, 15, 20 | D5 50 000, D10 1 000 000, D15 3 000 000, D20 10 000 000 | known; stats over error, target 1e-8 |
 | `cec2013` | 1..28 | 2,5,10,20,30,40,50,60,70,80,90,100 | `10000 * D` | known; stats over error, target 1e-8 |
 | `cec2011` | 1..22 | **native per problem → use dimension `0`** | 150 000 | **no published optima**; stats over raw objective, `error`=NaN |
-| `cec2013lsgo` | 1..15 | **native (1000 / 905) → use dimension `0`** | 3 000 000 | optima 0 by construction but tables are raw objectives; `error`=NaN |
+| `cec2013lsgo` | 1..15 | **native (1000 / 905) → use dimension `0`** | 3 000 000 | optima 0 by construction but tables are raw objectives; `error` = `best_fitness - 0` (the raw objective, no zero cutoff) |
 
 Notes that bite in practice:
 
@@ -379,17 +396,28 @@ Notes that bite in practice:
   D=15; those cells are reported as explicit `SKIP` lines (in `gsk_run`/MATLAB
   output and recorded in `environment.json` → `skipped_cells`), never silently
   dropped.
-- **Default experiment matrix**: all six optimizers on `cec2017` and `cec2011`;
-  `agsk` additionally on `cec2020`. `cec2013` and `cec2013lsgo` are
+- **Default experiment matrix**: all seven optimizers on `cec2017` and
+  `cec2011`; `agsk` additionally on `cec2020` (the shipped
+  `configs\all_cec2017.yml` / `all_cec2011.yml` / `agsk_cec2020.yml`).
+  `dt-gsk` on `cec2013`, `cec2013lsgo` and `cec2020` runs on request, against
+  its imported tables ([3.7](#37-dt-gsk)). `cec2013` and `cec2013lsgo` are
   validation/extension suites, runnable on request. Optimizer/suite pairings the
-  reference sources never ran (e.g. `fdb-agsk` on CEC suites) are framework-level
-  extensions, not reproductions.
-- **Reference tables exist only for** what was actually published:
-  `cec2017` has all six optimizers; `cec2011` has only `gsk` and `atmals-gsk`;
-  `cec2020` has only `agsk`. When no reference table exists for an
-  (optimizer, suite[, dim]) the verification verdict is still `CONSISTENT`
-  (nothing to contradict), win/tie/loss are 0, and `missing_reference` counts
-  the unmatched functions. See [2.9](#29-where-results-land) and each
+  original reference sources never ran (e.g. `fdb-agsk`, whose reference ran a
+  sphere harness, on the CEC suites) are framework-level extensions, not
+  reproductions, even where an imported table exists to compare against.
+- **Reference tables shipped** under `benchmarks\cec_reference_results`:
+  `cec2017` has all seven optimizers at D10/30/50/100; `cec2011` has all seven
+  (the native-dimension rollup `<opt>_cec2011.csv` plus per-dimension tables);
+  `cec2013` has `gsk` and `dt-gsk` at D10/30/50; `cec2020` has `agsk` and
+  `dt-gsk` at D5/10/15/20; `cec2013lsgo` has `dt-gsk` (D1000 and D905) besides
+  the DECC-G and MOS baselines. `dt-gsk` is therefore the only optimizer with a
+  table on every suite. When no reference table exists for an (optimizer,
+  suite[, dim]) (any optimizer except `dt-gsk` on `cec2013lsgo`, optimizers
+  other than `gsk`/`dt-gsk` on `cec2013` or at dimensions other than 10/30/50
+  there, every optimizer except `agsk` and `dt-gsk` on `cec2020`), win/tie/loss
+  are 0, `missing_reference` counts the unmatched functions, and the
+  gross-deviation check cannot fire; the finiteness and (on known-optimum
+  suites) sign checks still apply. See [2.9](#29-where-results-land) and each
   algorithm's "compare" subsection.
 
 ### 2.9 Where results land
@@ -419,10 +447,12 @@ Column meanings (full schema: [result_schema.md](../reference/result_schema.md))
   otherwise (`statistics_basis` in `environment.json` records which). `SD` is
   the sample standard deviation. Numbers use `%.10E`.
 - `summary/per_run.csv` —
-  `optimizer,suite,function,dimension,run,seed,best_fitness,error,nfes,termination,runtime_seconds`.
-  `error = best_fitness - optimum` with target-error zeroing, or `NaN` for
-  suites without optima. ATMALS-GSK on CEC2017 reports
-  `abs(best_fitness - optimum)` error with the standard `1e-8` zero cutoff.
+  `optimizer,suite,function,dimension,run,seed,best_fitness,error,nfes,termination,runtime_seconds,max_nfes,rand_generator`.
+  `error = best_fitness - optimum` with target-error zeroing; `NaN` on
+  `cec2011` (no optima) and the raw objective on `cec2013lsgo` (optimum `0`).
+  ATMALS-GSK on CEC2017 reports `abs(best_fitness - optimum)` error with the
+  standard `1e-8` zero cutoff. `max_nfes` is the cell's effective budget and
+  `rand_generator` the effective generator; `best_fitness`/`error` use `%.17g`.
 - `curves/Figure_F*_D*_Run#*.csv` — `Eval,BestError,Log10Error` for the run
   nearest the median final value (`Log10Error` blank when `BestError <= 0`).
 - `gen_logs/CheckpointErrors_*.csv` — `Run,Seed,E<c1>,E<c2>,...` at the standard
@@ -432,20 +462,27 @@ Column meanings (full schema: [result_schema.md](../reference/result_schema.md))
 
 **Reruns, resume/add, and overwrite behavior.** Re-running an `(optimizer, suite)`
 with overwrite disabled preserves the existing result tree. `run_experiment`
-resumes from `summary/per_run.csv`, skips completed run ids, appends missing
-runs, and archives fixed-name refreshed artifacts under `_archive/<timestamp>/`.
+resumes from `summary/per_run.csv`, skips completed run ids whose stored seed,
+budget and generator match the active run, appends missing runs, and archives
+fixed-name refreshed artifacts under `_archive/<timestamp>/`.
 Use `--overwrite`, `overwrite: true`, or `'overwrite',true` when you want a clean
 replacement run: the previous active result tree is moved to
 `_overwrite_archive/<suite>_<timestamp>/` under the same parent before the new
 `summary/`, `curves/`, and `gen_logs/` folders are created.
-Resume is seed-aware: a previous `per_run.csv` row is reused only when its
-stored seed matches the active seed policy for that `(dimension,function,run)`.
-Old rows from another policy remain available for audit history, but the
-current campaign appends fresh rows for the current schedule.
+Resume is seed-, budget- and generator-aware: a previous `per_run.csv` row is
+reused only when its stored seed, `max_nfes` and `rand_generator` all match the
+active run for that `(dimension,function,run)`. Changing the seed policy,
+`--max-evaluations`, or the generator therefore re-runs those run ids and
+appends fresh rows; the old rows remain in the file as audit history, and the
+summary uses only the active rows. An `output_dir` inside
+`benchmarks\cec_reference_results` is refused on every run
+(`run_experiment:outputUnsafe`).
 
 **Output root override.** Default is `<root>\results`. Change it with
-`--output <dir>` (CLI) or `output_root:` (config) or `'output_dir',<dir>`
-(runner; this is the full per-(opt,suite) directory in the runner's case).
+`--output <dir>` (CLI; relative to the working directory) or `output_root:`
+(config; a relative value resolves under `--root`) or `'output_dir',<dir>`
+(runner; this is the full per-(opt,suite) directory in the runner's case, and a
+relative value resolves against the current MATLAB folder).
 
 ---
 
@@ -457,8 +494,8 @@ outputs, suites, common errors, and how to compare against the references.
 Shared steps (build, MEX bridge, MATLAB location, output layout) are in
 [section 2](#2-common-setup).
 
-All six share these run-path templates; only the optimizer name, options, suites
-and quirks differ.
+All seven share these run-path templates; only the optimizer name, options,
+suites and quirks differ.
 
 - **(A) MATLAB IDE — high level.** `cd` into `src/runners`, call
   `run_experiment(...)`. Uses interface-default population and the documented
@@ -564,8 +601,11 @@ worse than the full published table. `gsk_run` exits nonzero only on `DEVIATES`.
 - **Suites.** Reproduce on **CEC2017** (`--dimension 10|30|50|100`), **CEC2011**
   (`--dimension 0`), and optionally **CEC2013** (`--dimension 2|...|100`),
   **CEC2013LSGO** (`--dimension 0`), **CEC2020** (`--dimension 5|10|15|20`).
-  Reference tables for verification exist for `gsk` on `cec2017` and `cec2011`
-  only (others ⇒ `missing_reference`, verdict still `CONSISTENT`).
+  Reference tables for verification exist for `gsk` on `cec2017`
+  (D10/30/50/100), `cec2011` (native), and `cec2013` at D10/30/50 only. Other
+  `gsk` selections (CEC2013 at D2/5/20/40/60-100, CEC2013LSGO, CEC2020) match no
+  table: they count as `missing_reference`, and the gross-deviation check cannot
+  fire for them (the finiteness and sign checks still apply).
 - **Common errors.** See [5](#5-troubleshooting-appendix): MEX bridge missing,
   MATLAB not found, or unsupported benchmark/function/dimension selections.
 - **Compare to references.** Side-by-side numbers vs the published `gsk` tables:
@@ -574,16 +614,23 @@ worse than the full published table. `gsk_run` exits nonzero only on `DEVIATES`.
   build\gsk_validate.exe --compare results benchmarks\cec_reference_results --out results\comparison.csv
   ```
 
+  The `--compare` walk skips `_overwrite_archive\` and `_archive\` folders below
+  the results root, so archived copies are not counted as live rows.
+
   Re-check a single run directory's verdict without re-running the optimizer:
 
   ```powershell
-  build\gsk_validate.exe --verify results\gsk\cec2017 benchmarks\cec_reference_results --reduced
+  build\gsk_validate.exe --verify results\gsk\cec2017 benchmarks\cec_reference_results
   ```
 
   Read it: lower mean is better; a `tie` is within relative `1e-8`; `win`/`loss`
-  are vs the published mean. `--reduced` applies the reduced-budget context;
-  `--full` makes the gross-deviation check a hard failure. (`--verify` writes
-  the next available `verification*.json` file and exits nonzero on `DEVIATES`.)
+  are vs the published mean. Without a flag, `--verify` reads the protocol
+  (`runs`, `max_nfes_override`) from the run's `summary\environment.json`, using
+  the same rule as `gsk_run`, and falls back to the full protocol when that file
+  is absent; it prints `protocol from: <source>`. `--reduced` / `--full` only
+  override it (`--full` makes the gross-deviation check a hard failure).
+  (`--verify` writes the next available `verification*.json` file and exits
+  nonzero on `DEVIATES`.)
 
 ### 3.2 agsk
 
@@ -646,8 +693,8 @@ build\gsk_run.exe --optimizer agsk --suite cec2017 --dimension 30 --function 1 -
 ```
 
 Auto-verification: `agsk on cec2020` is verified against the published `agsk`
-table (the only CEC2020 reference present). On CEC2017, `agsk` has a reference
-table too.
+table (the only other CEC2020 reference is `dt-gsk`'s). On CEC2017, `agsk` has
+a reference table too.
 
 #### Outputs, suites, errors, comparison
 
@@ -655,7 +702,7 @@ table too.
   `SKIP` lines (F1/F8 at D5/D15) recorded in `environment.json`.
 - **Suites.** **CEC2017**, **CEC2011** (`--dimension 0`), **CEC2020**
   (`--dimension 5|10|15|20`), optionally CEC2013 / CEC2013LSGO. Verification
-  references exist for `agsk` on `cec2017` and `cec2020` (not `cec2011`).
+  references exist for `agsk` on `cec2017`, `cec2011`, and `cec2020`.
 - **Compare.** Same `--compare` / `--verify` commands as 3.1, pointed at
   `results\agsk\...`. Because AGSK's reduced runs can reach the target early,
   expect `termination=target_error_reached` rows in `per_run.csv` on easy
@@ -711,9 +758,9 @@ build\gsk_run.exe --optimizer apgsk --suite cec2011 --dimension 0 --runs 3 --see
 
 - **Outputs.** As in 3.1 under `results\apgsk\<suite>\`.
 - **Suites.** **CEC2017**, **CEC2011** (`--dimension 0`), optionally CEC2013 /
-  CEC2013LSGO / CEC2020. Verification references for `apgsk` exist for `cec2017`
-  only; on `cec2011` the four non-(gsk/atmals) optimizers get
-  `missing_reference` (verdict still `CONSISTENT`).
+  CEC2013LSGO / CEC2020. Verification references for `apgsk` exist for
+  `cec2017` and `cec2011`; CEC2013, CEC2013LSGO, and CEC2020 runs get
+  `missing_reference` (no gross-deviation check).
 - **Compare.** Same `--compare` / `--verify` as 3.1, pointed at
   `results\apgsk\...`.
 
@@ -778,10 +825,11 @@ build\gsk_run.exe --config configs\all_cec2011.yml --root .
 - **Suites.** **CEC2017** (protocol `cec2017`), **CEC2011**
   (protocol `cec2011`, `--dimension 0`), optionally CEC2013 / CEC2020 /
   CEC2013LSGO. Verification references for `atmals-gsk` exist for **both**
-  `cec2017` and `cec2011` (mapped to the `atmals-gsk` reference folder).
+  `cec2017` and `cec2011` (the `atmals-gsk` reference folder).
 - **Compare.** `--compare` / `--verify` as 3.1, pointed at
-  `results\atmals-gsk\...`. The comparison maps `atmals-gsk → atmals-gsk`
-  automatically.
+  `results\atmals-gsk\...`. The summary file names carry the hyphenated slug
+  `atmals-gsk`, which is exactly the reference folder name, so no mapping is
+  needed.
 
 ### 3.5 egsk
 
@@ -843,8 +891,8 @@ therefore requires `fmincon`.)
 - **Outputs.** As in 3.1 under `results\egsk\<suite>\`. Watch
   `environment.json` → `optimizer_notes` for whether IP ran.
 - **Suites.** **CEC2017**, **CEC2011** (`--dimension 0`), optionally CEC2013 /
-  CEC2020 / CEC2013LSGO. Verification reference for `egsk` exists for `cec2017`
-  only.
+  CEC2020 / CEC2013LSGO. Verification references for `egsk` exist for `cec2017`
+  and `cec2011`.
 - **Compare.** `--compare` / `--verify` as 3.1, pointed at `results\egsk\...`.
 
 ### 3.6 fdb-agsk
@@ -864,8 +912,11 @@ default 1), `np_init` (default 100; `40*D` reference sphere harness opt-in),
 >
 > **Framework extension.** The reference ran FDB-AGSK on a sphere harness only;
 > running it on the CEC suites is a framework-level extension, **not** a
-> reference-validated reproduction, and there is **no** FDB-AGSK reference table
-> (so verification is always `missing_reference` ⇒ `CONSISTENT`, 0/0/0).
+> reference-validated reproduction. Reference tables for FDB-AGSK do ship under
+> `benchmarks\cec_reference_results\cec2017\fdb-agsk\` (D10/30/50/100) and
+> `cec2011\fdb-agsk\`, so `--compare` / `--verify` produce real win/tie/loss
+> verdicts against them (cite their provenance as described in
+> `benchmarks/cec_reference_results/README.md`).
 
 **Prerequisites.** Build (2.4) + MEX bridge (2.5) + MATLAB. No toolbox.
 
@@ -906,29 +957,165 @@ lower-level path to select cases 2..5.)
 - **Outputs.** As in 3.1 under `results\fdb-agsk\<suite>\`.
 - **Suites.** **CEC2017**, **CEC2011** (`--dimension 0`), optionally CEC2013 /
   CEC2020 / CEC2013LSGO — all framework extensions.
-- **Compare.** `--compare` runs but every FDB-AGSK function is `no_reference`
-  (no published table); `--verify` returns `CONSISTENT` with win/tie/loss 0/0/0
-  and `missing_reference` = number of functions. The comparison maps
-  `fdb-agsk → fdb-agsk` for the reference folder automatically.
+- **Compare.** `--compare` / `--verify` as 3.1, pointed at
+  `results\fdb-agsk\...`; CEC2017 and CEC2011 cells are compared against the
+  shipped `fdb-agsk` tables (real win/tie/loss, and at full protocol the
+  gross-deviation check can return `DEVIATES`); CEC2013, CEC2013LSGO, and
+  CEC2020 cells count as `missing_reference`. The summary file names carry the
+  hyphenated slug `fdb-agsk`, which is the reference folder name.
+
+### 3.7 dt-gsk
+
+Dimension-Tiered GSK: the GSK junior/senior operators plus adaptive
+configuration selection, nonlinear population reduction, linkage-aware
+crossover, budget-safe escapes and restarts, and deterministic local
+refinement, each switched on by the dimension tier. Entry point
+`src/optimizers/dt-gsk/dt_gsk_optimize.m`; the folder holds three code files
+(`dt_gsk_optimize.m`, the `pub` profile `dt_gsk_config.m`, and the interaction
+graph `dt_gsk_graph.m` used from `D = 50`). It is a port of the DT-GSK reference
+implementation (Python, MIT license) v2.46, not of a MATLAB release; its
+[README](../../src/optimizers/dt-gsk/README.md) is the authoritative summary of
+behavior and validation, and [dt-gsk.md](../algorithms/dt-gsk.md) is the
+algorithm page.
+
+Options: `seed` (required) and `rand_generator`, which must be `threefry`
+(empty/`auto`/`default` are accepted; anything else raises
+`dt_gsk_optimize:options`). Nothing else is configurable: every setting comes
+from the `pub` profile for the problem's tier (`D < 20`, `20 <= D < 50`,
+`D >= 50`, `D >= 100`; the tier table is in the README). The initial population
+is `NP = 5*D`. `termination` is always `'max_evaluations'` and `nfes` ends
+exactly at `max_nfes`; `error = best_fitness - optimum`, zeroed below the
+target, `NaN` without a known optimum.
+
+> **Unified-only seeding (fair-start exception).** `run_experiment` schedules
+> DT-GSK with `get_cec_seed(base_seed, dim, func, run)` and `threefry` under
+> **every** `seed_policy` (`reference`, `unified`, `native`, `derived`),
+> mirroring the Python reference's `UNIFIED_ONLY_OPTIMIZERS`: that is how its
+> reference campaigns were produced. `gsk_run`'s default
+> `--seed-policy reference` therefore reproduces the reference seeds, and
+> `--rand-generator` has no effect on DT-GSK. DT-GSK derives named Threefry
+> substreams from the run seed and samples its own initial population: the
+> runner draws no `X0` for it, and a supplied `options.initial_population` is
+> ignored. `environment.json`, `run_config.json` and `phase0_protocol.json`
+> record `initial_population_policy` as `optimizer self-initializes NP = 5*D
+> ...`, and `run_config.json` records `profile: "pub"`.
+
+**Prerequisites.** Build (2.4) + MEX bridge (2.5) + MATLAB. No toolbox for the
+optimizer; the per-run comparison below needs the Statistics and Machine
+Learning Toolbox.
+
+#### (A) MATLAB IDE
+
+High-level (CEC2017 F1 & F3 at D10, 3 runs):
+
+```matlab
+cd('<repo>/gsk_family/src/runners')
+run_experiment('optimizer','dt-gsk', 'suite','cec2017', ...
+    'functions',[1 3], 'dimensions',[10], 'runs',3, 'base_seed',20240620, 'max_nfes',0, ...
+    'project_root','<repo>/gsk_family', ...
+    'output_dir','<repo>/gsk_family/results/dt-gsk/cec2017', 'overwrite',true)
+```
+
+Lower-level (one run with the runner's seed; only `seed` and `rand_generator`
+are read from `options`):
+
+```matlab
+root = '<repo>/gsk_family';
+addpath(genpath(fullfile(root,'src'))); addpath(fullfile(root,'build','mex'));
+problem = gskcec_make_problem('cec2017', 1, 30, root, 0);      % D=30: tier 20 <= D < 50
+options = struct('seed', get_cec_seed(20240620, 30, 1, 1), 'rand_generator', 'threefry');
+result  = dt_gsk_optimize(problem, options);                   % result.params.profile = 'pub'
+gskcec_eval('free', problem.mex_handle);
+```
+
+#### (B) Terminal
+
+```powershell
+# One small cell
+build\gsk_run.exe --optimizer dt-gsk --suite cec2017 --dimension 10 --function 1 --runs 3 --seed 20240620 --overwrite
+
+# The full CEC2017 protocol of the imported reference: D10/30/50/100, F2 excluded, 51 runs
+build\gsk_run.exe --optimizer dt-gsk --suite cec2017 --runs 51 --seed 20240620
+```
+
+`dt-gsk` is also part of `configs\all_cec2017.yml` and `all_cec2011.yml`
+(section 4); a config of your own with `optimizers: [dt-gsk]` works the same
+way. The runner drops CEC2017 F2, so the full run covers the same 29 functions
+x 4 dimensions x 51 runs as the reference evidence.
+
+#### Outputs, suites, errors, comparison
+
+- **Outputs.** As in 3.1 under `results\dt-gsk\<suite>\` (launchers:
+  `results\_run_all\dt-gsk\<suite>\`). `per_run.csv` rows always show
+  `termination=max_evaluations` and `rand_generator=threefry`;
+  `environment.json` → `optimizer_notes` carries `self-init (fair-start
+  exception)` for the runs executed in that session.
+- **Suites.** All five. DT-GSK is the only optimizer with imported reference
+  tables on every suite: `cec2017` (D10/30/50/100, 51 runs), `cec2013`
+  (D10/30/50, 51 runs), `cec2020` (D5/10/15/20, 30 runs), `cec2011` (native
+  dims plus rollup, 25 runs) and `cec2013lsgo` (D1000/D905, 25 runs), imported
+  from the Python reference (provenance:
+  `benchmarks\cec_reference_results\cec2017\dt-gsk\PROVENANCE.md`). They are
+  cross-implementation evidence, produced by the Python code, not by this
+  toolkit.
+- **Common errors.** `dt_gsk_optimize:options` for a non-Threefry
+  `rand_generator` or a missing seed (lower-level path only; the runner always
+  passes `threefry`). The ignored `X0` is expected, not an error. See
+  [5](#5-troubleshooting-appendix).
+- **Compare (aggregate).** `--compare` / `--verify` as 3.1, pointed at
+  `results\dt-gsk\...`; every suite has `dt-gsk` tables, produced at the
+  reference's full protocol.
+- **Compare (per run).** For CEC2017 the reference evidence also holds
+  `evidence\per_run.csv` (every run with its seed), so a full campaign can be
+  compared run by run with `scripts/compare_reference_runs.m` (MATLAB, Statistics
+  and Machine Learning Toolbox):
+
+  ```matlab
+  cd('<repo>/gsk_family'); addpath('scripts')
+  report = compare_reference_runs('results/dt-gsk/cec2017', ...   % or results/_run_all/dt-gsk/cec2017
+      'benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv', ...
+      'out', 'results/dt-gsk/cec2017_vs_reference.csv');
+  ```
+
+  Each argument is a `per_run.csv` path or a folder holding `summary\per_run.csv`
+  (or `per_run.csv`); for duplicate (dimension, function, run) rows from resumed
+  runs the last row counts. For every (dimension, function) cell in both sets it
+  prints Best/Median/Mean on each side (errors, or raw objectives where `error`
+  is `NaN`), whether Median and Mean agree to within one order of magnitude
+  (`'decades'`, default 1; values below `'zero_tol'` = `1e-8` count as 0), and
+  the two-sided Wilcoxon rank-sum p-value (`ranksum`) at `'alpha'` (default
+  `0.05`); a cell is `MATCH` when both checks pass, else `DIFFERS`. When both
+  sides used the same seed for each run (true here: both use the unified
+  schedule), the paired signed-rank p-value is added for information. A final
+  line counts the cells still significant after a Holm adjustment across all
+  cells (about `alpha` x cells raw rejections are expected by chance). The
+  returned `report.table` (and the `'out'` CSV) holds every column, including
+  `p_holm`. Expect statistical, not bit-for-bit, agreement: MATLAB's Threefry
+  produces the same 64-bit words as the Python replica but converts them to
+  doubles differently (at most `2^-53` per uniform draw), so live trajectories
+  separate once a last-bit difference flips a discrete decision. Results of the
+  CEC2017 campaign are recorded in the DT-GSK README.
 
 ---
 
 ## 4. Reproduce the default matrix
 
-The default experiment matrix is: all six optimizers on **CEC2017** and
+The default experiment matrix is: all seven optimizers on **CEC2017** and
 **CEC2011**, plus **AGSK on CEC2020**. The ready-made configs encode the full
 run counts (CEC2017: 51 runs; CEC2011: 25 runs; CEC2020 AGSK: 30 runs). These
-are long runs — start them when you can leave the machine.
+are long runs — start them when you can leave the machine. DT-GSK runs inside
+these configs with its own unified-only seeding; its other suites and the
+per-run comparison against its imported reference are in [3.7](#37-dt-gsk).
 
 Prerequisites: complete [2.4](#24-build-the-c-clis-cmake--ctest) (build) and
 [2.5](#25-build-the-mex-bridge) (MEX bridge), and make MATLAB locatable
 ([2.6](#26-putting-matlab-on-path--passing---matlab)).
 
 ```powershell
-# 1. Full CEC2017 matrix: all six optimizers x D{10,30,50,100}; F2 excluded
+# 1. Full CEC2017 matrix: all seven optimizers x D{10,30,50,100}; F2 excluded
 build\gsk_run.exe --config configs\all_cec2017.yml --root .
 
-# 2. Full CEC2011 matrix: all six optimizers x problems 1..22 (native dims) x 25 runs, budget 150000
+# 2. Full CEC2011 matrix: all seven optimizers x problems 1..22 (native dims) x 25 runs, budget 150000
 build\gsk_run.exe --config configs\all_cec2011.yml --root .
 
 # 3. AGSK on CEC2020 (its native suite): D{5,10,15,20} x F{1..10} x 30 runs
@@ -936,8 +1123,11 @@ build\gsk_run.exe --config configs\agsk_cec2020.yml --root .
 ```
 
 Each config drives one MATLAB invocation per optimizer and auto-verifies every
-`(optimizer, suite)` against its reference table (where one exists). `gsk_run`
-exits nonzero if any run `DEVIATES`.
+`(optimizer, suite)` against its reference table (where one exists). Every
+optimizer in a config is run and verified even after an earlier one fails or
+`DEVIATES`; `gsk_run` then prints a per-optimizer summary and exits with the
+first nonzero code (1 MATLAB failure, 2 verification error, 3 `DEVIATES` or no
+summary).
 
 Then compare everything against the published references in one pass and write a
 CSV:
@@ -946,9 +1136,11 @@ CSV:
 build\gsk_validate.exe --compare results benchmarks\cec_reference_results --out results\comparison.csv
 ```
 
-This walks every `results\<opt>\<suite>\summary\<opt>_<suite>_D<dim>.csv`, matches
-each to its published table by (suite, algorithm, dimension), and prints one line
-per comparable (function, dimension):
+This walks every `results\<opt>\<suite>\summary\<opt>_<suite>_D<dim>.csv`
+(skipping `_overwrite_archive\` and `_archive\` folders below the results root),
+takes optimizer, suite and dimension from the file name, matches each to its
+published table by (suite, algorithm, dimension), and prints one line per
+comparable (function, dimension):
 
 ```text
 gsk cec2017 f1 D10 mean=<your mean> ref_mean=<published mean> rel_diff=<...> -> <win|tie|loss>
@@ -957,8 +1149,13 @@ compared=<N> win=<...> tie=<...> loss=<...> no_reference=<...>
 ```
 
 `no_reference` counts functions with no published table for that optimizer/suite
-(e.g. apgsk/egsk/fdb-agsk on CEC2011, anything on CEC2013/LSGO). Lower mean is
-better; `tie` is within relative `1e-8`.
+(e.g. any optimizer except `dt-gsk` on CEC2013LSGO, optimizers other than
+`gsk`/`dt-gsk` on CEC2013, any optimizer except `agsk` and `dt-gsk` on CEC2020;
+see [2.8](#28-suites-dimensions--default-budgets-reference)).
+Lower mean is better; `tie` is within relative `1e-8`. `--compare` works on
+per-function means; for a run-by-run statistical comparison of a campaign with
+an imported per-run record, use `scripts/compare_reference_runs.m`
+([3.7](#37-dt-gsk)).
 
 Optional: generate the comparison tables, Friedman/Wilcoxon stats, and box/
 convergence figures (toolbox-free) with the MATLAB analysis script:
@@ -973,7 +1170,16 @@ analyze_results('project_root','<repo>/gsk_family', ...
 
 It writes `comparison_table.csv`, `friedman_ranks.csv`,
 `wilcoxon_vs_reference.csv`, and `fig_<suite>_D<dim>_boxplot.pdf` /
-`fig_<suite>_D<dim>_convergence.pdf` under the output dir.
+`fig_<suite>_D<dim>_convergence.pdf` under the output dir. `_archive\` and
+`_overwrite_archive\` trees are ignored, and each run is matched only to the
+reference table of its exact dimension (no table: blank `reference_mean`,
+`insufficient_reference`). With `results_root` at `<root>/results`, both
+`results\<opt>\<suite>` (`gsk_run`) and `results\_run_all\<opt>\<suite>`
+(launchers) are read; a duplicate (optimizer, suite, dimension) prints a
+`WARNING` and is labeled by its path (`_run_all/gsk` vs `gsk`). Use
+`results_root = <root>/results/_run_all` (or `<root>/results/<opt>`) to analyze
+one layout only. Tie ranks come from a local helper, so no Statistics Toolbox is
+needed.
 
 ---
 
@@ -982,16 +1188,23 @@ It writes `comparison_table.csv`, `friedman_ranks.csv`,
 | Symptom | Cause | Fix |
 |---|---|---|
 | `gskcec:mexMissingPrerequisite` / `gskcec:mexMissing` | The MEX bridge was never built, or `build\mex\gskcec_eval.<mexext>` is missing. `run_all_cec*.m` and `run_experiment` stop at startup for this global prerequisite so they do not write partial all-skipped CEC results. | Build it: `powershell -File scripts\build_mex_bridge.ps1` (2.5), or follow the checklist in `build.txt`. `run_experiment` auto-adds `build\mex`; for the lower-level `gskcec_make_problem` path add it yourself: `addpath('<root>/build/mex')`. The pure-MATLAB `sphere` suite needs no bridge. |
+| `gskcec:mexNotLoadable` | The bridge file exists but MATLAB cannot load it; the startup gate (`gskcec_require_mex`) forces a real load. A bridge built by the old script imports `libwinpthread-1.dll` and fails with `Invalid MEX-file ... The specified module could not be found.` when no MinGW `bin` folder is on PATH. | Rebuild with `powershell -File scripts\build_mex_bridge.ps1` (2.5), which links `-static` and needs no MinGW runtime DLL. If the script cannot replace the file, run `gskcec_eval('clear'); clear mex` in MATLAB (live handles keep the bridge locked) or close MATLAB, then retry. |
+| `run_experiment:outputUnsafe` | `output_dir` is inside (or equal to) `benchmarks\cec_reference_results`; refused on every run, before anything is created. | Write results under `results\` (or any other folder outside the imported reference tree). |
 | `gsk_run: MATLAB invocation failed` / MATLAB not found | MATLAB not on PATH and neither `--matlab` nor `GSKCEC_MATLAB` set. | Pass `--matlab "C:\path\to\MATLAB\R2025b\bin\matlab.exe"`, or set `$env:GSKCEC_MATLAB`, or add `...\bin` to PATH (2.6). |
-| Existing result tree is reused | This is intentional. The runner resumes from `summary/per_run.csv`, skips completed run ids, appends missing runs, and archives refreshed fixed-name artifacts under `_archive/<timestamp>/`. | Choose a new `--output` / `output_dir` only when you want a separate experiment tree. |
+| Existing result tree is reused | This is intentional. The runner resumes from `summary/per_run.csv`, skips completed run ids whose stored seed, budget (`max_nfes`) and generator match the active run (other rows are re-run and appended), appends missing runs, and archives refreshed fixed-name artifacts under `_archive/<timestamp>/`. | Choose a new `--output` / `output_dir` only when you want a separate experiment tree. |
 | `SKIP <suite> fN Dd: ...` lines during a run | That (function, dimension) cell has no reference/benchmark data (e.g. CEC2020 F1/F8 at D5/D15). | Expected and explicit; the cell is recorded in `environment.json` → `skipped_cells` and excluded from summaries. Not an error. |
-| Verdict `DEVIATES`, `gsk_run` exits nonzero | A **hard-failure** check fired: non-finite statistic; (known-optimum suite) a best error below `-1e-6` (beating the optimum is impossible if correct); or (full protocol only) a mean `> 1e6 ×` a non-trivial reference mean. | Open `summary\verification.json` → `failures` for the exact (function, dimension) and reason. Non-finite/sign failures indicate a real bug. A gross-deviation failure under a short/over-budget run is expected — re-check with `--reduced` (`gsk_validate --verify <run_dir> benchmarks\cec_reference_results --reduced`). |
-| Verdict `CONSISTENT` but win/tie/loss all 0 and `missing_reference` > 0 | No published reference table for that optimizer/suite (e.g. apgsk on CEC2011; anything on CEC2013/LSGO). | Nothing to fix — there is simply nothing to compare against. The run is still valid. |
+| Verdict `DEVIATES`, `gsk_run` exits nonzero | A **hard-failure** check fired: non-finite statistic; (known-optimum suite) a best error below `-1e-6` (beating the optimum is impossible if correct); or (full protocol only) a mean `> 1e6 ×` a non-trivial reference mean. | Open `summary\verification.json` → `failures` for the exact (function, dimension) and reason. Non-finite/sign failures indicate a real bug. A gross-deviation failure under a short/over-budget run is expected; `gsk_validate --verify <run_dir> benchmarks\cec_reference_results` reads the protocol from the run's `summary\environment.json` (pass `--reduced` to force the reduced-budget context). |
+| Verdict `CONSISTENT` but win/tie/loss all 0 and `missing_reference` > 0 | No published reference table for that optimizer/suite/dimension (e.g. `gsk` on CEC2013 D20 or CEC2013LSGO; any optimizer except `agsk` and `dt-gsk` on CEC2020). | Nothing to fix — there is simply nothing to compare against. The run is still valid. |
 | eGSK `egsk:fminconUnavailable` | The Optimization Toolbox / `fmincon` is not available for the reference-mode IP stage. | Install/enable Optimization Toolbox, or run a lower-level explicit diagnostic with `options.use_fmincon=false` knowing it will not match the reference IP behavior. |
+| `dt_gsk_optimize:options` ... `DT-GSK draws from Threefry substreams only; got rand_generator '...'` (or `options.seed is required`) | A lower-level `dt_gsk_optimize` call passed a generator other than `threefry` (or no seed). The runner never triggers it: it always hands DT-GSK `threefry`. | Pass `'rand_generator','threefry'` (empty, `auto` and `default` are also accepted) and a seed ([3.7](#37-dt-gsk)). |
+| DT-GSK ignores the unified `X0`; its seed/generator do not follow `--seed-policy` / `--rand-generator` | Expected: DT-GSK is unified-only (`get_cec_seed` + `threefry` under every policy) and samples its own `NP = 5*D` population (documented fair-start exception, recorded as `initial_population_policy`). | Nothing to fix. Do not count DT-GSK in a claim that all optimizers started from the same `X0`; it does share their seeds ([3.7](#37-dt-gsk)). |
+| `compare_reference_runs:toolbox` | `ranksum` is missing: the Statistics and Machine Learning Toolbox is not installed. | Install/enable the toolbox, or use the toolbox-free `analyze_results` / `gsk_validate --compare` instead. |
 | FDB-AGSK empty `KW_ind` / index issues in old reduced-budget traces | Original reference flow assumed `np_init < 0.1*max_nfes`; this port guards the phase condition, but very large opt-in populations still reduce generation count sharply. | Use a larger `max_nfes` or a smaller `options.np_init` (default 100) for quick checks. |
-| `gsk_run: dimension D is not part of suite ...` | A nonzero dimension was given for a native-dimension suite (cec2011, cec2013lsgo). | Use `--dimension 0` (or omit dimensions / set `[0]`). (2.8) |
+| `gsk_run: suite S has fixed per-function dimensions; omit dimensions or use 0.` | A nonzero dimension was given for a native-dimension suite (cec2011, cec2013lsgo); the native value itself (e.g. 1000) is rejected too. | Use `--dimension 0` (or omit dimensions / set `[0]`). (2.8) |
+| `gsk_run: dimension D is not part of suite S.` | D is not a supported dimension of a fixed-dimension-list suite (cec2013, cec2017, cec2020); `0` is not accepted there. | Pick a listed dimension from `build\gsk_list.exe --benchmarks`, or omit dimensions to run all of them. (2.8) |
 | `gsk_run: function N is not part of suite ...` | Requested a function outside the suite's range. | Check ranges with `build\gsk_list.exe --benchmarks` (2.8). Note CEC2017 F2 is valid but excluded from default comparisons. |
-| `Config error <file>:<line>: unknown key '...'` (or `parallel ... not implemented`) | A typo'd or unsupported config key; or `parallel: true`. | Use only the documented keys (2.7 / [configuration.md](configuration.md) / `configs/README.md`). Runs are sequential — only `parallel: false` is accepted. |
+| `Config error <file>:<line>: unknown key '...'` (or `parallel ... not implemented`, or `data_root is not supported`) | A typo'd or unsupported config key; `parallel: true`; or a `data_root` key (benchmark data always loads from `<root>\benchmarks\cec_suite_cpp\<suite>\input_data`). | Use only the documented keys (2.7 / [configuration.md](configuration.md) / `configs/README.md`). Runs are sequential — only `parallel: false` is accepted. Remove any `data_root` line. |
+| `gsk_run: --function expects one integer, got '1,3'` (also `--dimension`, `--runs`, `--max-evaluations`, `--seed`) | Each numeric flag takes one whole integer; comma lists, fractions and trailing text are rejected (exit 2). | Repeat the flag for several values (`--function 1 --function 3`); `--seed` must be in `[0, 2^53]` and `--max-evaluations` `>= 0`. |
 | `ctest` reports a failed test | The C++ build/toolchain is broken (not your experiment). | Re-run the build (2.4); fix the compiler/CMake before running any optimizer. Use `ctest --test-dir build --output-on-failure` for detail. |
 | `gsk_validate: no summary tables found under <root>` | `--compare`/`--verify` pointed at a path without the CEC summary layout. | Point at the results root (e.g. `results`) or a run dir containing `summary\<opt>_<suite>_D<dim>.csv` (2.9). |
 
@@ -1016,13 +1229,15 @@ General: run any tool with no arguments (or `--help`) to print its exact usage �
 | Run with MATLAB off PATH | add `--matlab "C:\path\to\MATLAB\R2025b\bin\matlab.exe"` |
 | Override the budget (iterations) | add `--max-evaluations 50000` (CLI) / `'max_nfes',50000` (runner) / `max_evaluations: 50000` (config) |
 | Native-dim suite (cec2011) | `build\gsk_run.exe --optimizer gsk --suite cec2011 --dimension 0 --runs 3 --seed 20240620 --max-evaluations 150000 --overwrite` |
-| Full CEC2017 matrix (6 optimizers) | `build\gsk_run.exe --config configs\all_cec2017.yml --root .` |
-| Full CEC2011 matrix (6 optimizers) | `build\gsk_run.exe --config configs\all_cec2011.yml --root .` |
+| Full CEC2017 matrix (7 optimizers) | `build\gsk_run.exe --config configs\all_cec2017.yml --root .` |
+| Full CEC2011 matrix (7 optimizers) | `build\gsk_run.exe --config configs\all_cec2011.yml --root .` |
 | AGSK on CEC2020 | `build\gsk_run.exe --config configs\agsk_cec2020.yml --root .` |
+| DT-GSK full CEC2017 campaign | `build\gsk_run.exe --optimizer dt-gsk --suite cec2017 --runs 51 --seed 20240620` |
+| Per-run comparison vs an imported campaign (Statistics Toolbox) | MATLAB: `compare_reference_runs('results/dt-gsk/cec2017','benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv')` (from the project root with `scripts` on the path) |
 | MATLAB IDE: high-level run | `cd src/runners` then `run_experiment('optimizer','gsk','suite','cec2017','functions',[1 3],'dimensions',[10],'runs',3,'base_seed',20240620,'max_nfes',0,'project_root','<root>','output_dir','<root>/results/gsk/cec2017','overwrite',true)` |
 | MATLAB IDE: low-level run (custom options) | `problem = gskcec_make_problem('cec2017',1,10,'<root>',50000); result = gsk_optimize(problem, struct('seed',777,'np',100));` |
 | Compare all results vs references | `build\gsk_validate.exe --compare results benchmarks\cec_reference_results --out results\comparison.csv` |
-| Re-verify one run dir | `build\gsk_validate.exe --verify results\gsk\cec2017 benchmarks\cec_reference_results --reduced` (or `--full`) |
+| Re-verify one run dir | `build\gsk_validate.exe --verify results\gsk\cec2017 benchmarks\cec_reference_results` (protocol read from `summary\environment.json`; `--reduced` / `--full` override it) |
 | Skip auto-verification on a run | add `--no-verify` to `gsk_run` |
-| Stats + figures (toolbox-free) | MATLAB: `analyze_results('project_root','<root>','results_root','<root>/results','reference_root','<root>/benchmarks/cec_reference_results','output_dir','<root>/results/analysis')` |
+| Stats + figures (toolbox-free) | MATLAB: `analyze_results('project_root','<root>','results_root','<root>/results','reference_root','<root>/benchmarks/cec_reference_results','output_dir','<root>/results/analysis')` (archives ignored; references matched to the exact dimension; duplicate `gsk_run` / launcher layouts are labeled by path with a warning, so use `results_root = <root>/results/_run_all` or `<root>/results/<opt>` to pick one layout) |
 | MATLAB-only smoke tests (no MEX) | `matlab -batch "cd('src/tests'); run_matlab_smoke_tests"` |

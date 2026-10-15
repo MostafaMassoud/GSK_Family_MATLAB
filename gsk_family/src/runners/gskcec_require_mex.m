@@ -3,7 +3,9 @@ function gskcec_require_mex(project_root, caller_name)
 %
 % The run_all_cec*.m launchers call this during setup so a missing
 % build\mex\gskcec_eval.<mexext> fails early with build instructions instead
-% of producing a long sequence of skipped result cells.
+% of producing a long sequence of skipped result cells. It also forces a real
+% load of the bridge, so a file that exists but cannot be loaded (e.g. a
+% dependent DLL missing from PATH) fails here the same way.
 
 if nargin < 2 || isempty(caller_name)
     caller_name = 'CEC experiment';
@@ -35,5 +37,19 @@ if exist('gskcec_eval', 'file') ~= 3
     error('gskcec:mexNotLoadable', ...
           ['gskcec_eval exists at %s but MATLAB did not recognize it as a MEX file. ' ...
            'Rebuild the bridge with scripts\\build_mex_bridge.ps1.'], mex_file);
+end
+
+% exist() only inspects the file. A bare call loads the MEX and raises its
+% own usage error without touching any problem handle; any other error means
+% MATLAB could not load it.
+try
+    gskcec_eval();
+catch err
+    if ~strcmp(err.identifier, 'gskcec:usage')
+        error('gskcec:mexNotLoadable', ...
+              ['gskcec_eval exists at %s but MATLAB could not load it (%s: %s). ' ...
+               'Rebuild the bridge with scripts\\build_mex_bridge.ps1.'], ...
+              mex_file, err.identifier, err.message);
+    end
 end
 end

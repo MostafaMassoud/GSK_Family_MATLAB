@@ -78,8 +78,11 @@ re-randomized wherever they collide).
   largest-gets-remainder redistribution.
 - Per-individual `K`: uniform(0,1) with prob 0.5, integer `ceil(20*rand)`
   with prob 0.5; `D_junior = ceil(D*(1-nfes/max_nfes).^K)`.
-- Reference budget-crossing counter semantics (counter may end at
-  `max_nfes + 1` when a generation crosses the budget mid-population).
+- Reference budget-crossing counter semantics: the internal per-child counter
+  may read `max_nfes + 1` when a generation crosses the budget
+  mid-population. `result.nfes` and `convergence.nfes` are clipped at
+  `max_nfes` (bookkeeping only; the internal counter that drives the KW
+  phase, the junior schedule and the resize plan is unchanged).
 
 ## Preserved quirks / usage notes
 
@@ -107,6 +110,9 @@ re-randomized wherever they collide).
   `problem.target_error`, NaN for unknown optimum).
 - Convergence recorded once per generation; `termination` is always
   `'max_evaluations'` (the reference never stops early).
+- The reported `result.nfes` / `convergence.nfes` are clipped at `max_nfes`
+  although the reference counter can read `max_nfes + 1` (see above).
+  Bookkeeping only; no RNG or trajectory impact.
 
 Smoke test: `src/tests/test_fdb_agsk_smoke.m` (default config, all five
 cases briefly, invalid-case rejection, determinism, budget accounting).

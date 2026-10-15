@@ -46,7 +46,7 @@ slot selection, improvement-credit weight update, and LPSR are **identical to
 AGSK** — see [AGSK](agsk.md). Only the three APGSK-specific pieces are derived
 here.
 
-**Negative secondary KF pool** (`apgsk_optimize.m:36-37`). Both pools are indexed
+**Negative secondary KF pool** (`apgsk_optimize.m:46-47`). Both pools are indexed
 by the AGSK slot `s in {1,2,3,4}` chosen for each individual:
 
 ```text
@@ -56,7 +56,7 @@ kf_pool_negative = [-0.15 -0.05 -0.05 -0.15 ]   % negative secondary (reference 
 
 `KR` always comes from `kr_pool = [0.2 0.1 0.9 0.9]`.
 
-**Positive-vs-negative gate** (`apgsk_optimize.m:139-143`). The pool is chosen
+**Positive-vs-negative gate** (`apgsk_optimize.m:149-153`). The pool is chosen
 *once per generation* for the whole population, **only in the adaptive phase**
 (`nfes >= 0.1*max_nfes`). Because the short-circuit `&&` evaluates left-to-right,
 one scalar `rand` is consumed every adaptive generation regardless of `nfes`:
@@ -81,13 +81,13 @@ Read the gate as two regimes:
   diversification burst.
 
 During the **initial** phase `KF` always comes from the positive pool and no extra
-scalar is drawn (`apgsk_optimize.m:124`). Because the negative magnitudes are
+scalar is drawn (`apgsk_optimize.m:134`). Because the negative magnitudes are
 small (`|KF| <= 0.15`), the anti-step is a gentle nudge away from the donor
 difference, not a large jump; midpoint repair still pulls any out-of-bounds
 coordinate back to the parent-bound midpoint, so a negative step can never leave
 `[lb, ub]`.
 
-**Stochastic scalar junior schedule** (`apgsk_optimize.m:153-157`). One scalar
+**Stochastic scalar junior schedule** (`apgsk_optimize.m:163-167`). One scalar
 `rand` per generation (drawn *after* the phase block) selects between two
 exponents; `ratio = nfes/max_nfes`:
 
@@ -105,8 +105,8 @@ against `rand(NP,D)` for the junior-probability mask. Contrast with the
 
 ```text
 GSK   (gsk_optimize.m:97):    D_junior = ceil( D * (1 - g/G_Max)^K ),   K = 10  (fixed)
-AGSK  (agsk_optimize.m:132):  D_junior = ceil( D * (1 - ratio)^K_i )            (per-row K_i, fixed for the run)
-APGSK (apgsk_optimize.m:153): exponent flips between 0.5 and 2 each generation by a coin vs. ratio
+AGSK  (agsk_optimize.m:142):  D_junior = ceil( D * (1 - ratio)^K_i )            (per-row K_i, fixed for the run)
+APGSK (apgsk_optimize.m:163): exponent flips between 0.5 and 2 each generation by a coin vs. ratio
 ```
 
 Two things follow. First, the exponent is a **scalar** for the whole population
@@ -118,11 +118,14 @@ exploration early and exploitation late, layered on top of the `(1 - ratio)`
 decay.
 
 > **RNG note.** APGSK still draws AGSK's initial per-individual `K` vector
-> (`apgsk_optimize.m:87-90`) purely to keep the random stream bit-identical to
-> AGSK, but the stochastic schedule above **never uses it** (the AGSK formula is
-> commented out in the reference source). The draw order per adaptive generation
-> is: slot draw -> negative-gate scalar `rand` -> junior-schedule scalar `rand`
-> -> three `rand(NP,D)` mask blocks.
+> (`apgsk_optimize.m:97-100`) purely for random-stream fidelity with the APGSK
+> reference (which draws it exactly as AGSK does), but the stochastic schedule
+> above **never uses it** (the AGSK formula is commented out in the reference
+> source). The draw order per adaptive generation is: slot draw `rand(NP,1)` ->
+> negative-gate scalar `rand` -> junior-schedule scalar `rand` -> junior donor
+> `Rg3` draw `rand(1,NP)` (plus collision redraws) -> three senior `rand(NP,1)`
+> block samples -> three `rand(NP,D)` mask blocks. Early (non-adaptive)
+> generations draw the same sequence without the gate scalar.
 
 ## Pseudocode
 
@@ -130,9 +133,9 @@ decay.
 np_init = 100 (200*D / 250 reference policy opt-in); min_pop_size = 12   # apgsk_optimize.m:30-32
 max_pop_size = np_init
 initialize / accept fair-start population, evaluate, scan best
-K = draw_initial_K(NP)            # RNG-fidelity only, UNUSED            # apgsk_optimize.m:87-90
+K = draw_initial_K(NP)            # RNG-fidelity only, UNUSED            # apgsk_optimize.m:97-100
 KW_ind = [];  All_Imp = zeros(1,4)
-for g = 1, 2, ... until nfes >= max_nfes:                               # apgsk_optimize.m:108
+for g = 1, 2, ... until nfes >= max_nfes:                               # apgsk_optimize.m:118
     if isempty(KW_ind) or nfes < 0.1*max_nfes:        # initial phase
         KW_ind = [0.85 0.05 0.05 0.05]
         slot = select_slots(KW_ind);  KF = kf_pool(slot);  KR = kr_pool(slot)   # positive only
@@ -141,45 +144,45 @@ for g = 1, 2, ... until nfes >= max_nfes:                               # apgsk_
         slot = select_slots(KW_ind);  KR = kr_pool(slot)
         if rand >= 0.3 && nfes > 0.5*max_nfes: KF = kf_pool(slot)            # positive
         else:                                  KF = kf_pool_negative(slot)   # negative
-    if rand > nfes/max_nfes: D_junior = ceil(round(D*(1-ratio)^0.5))    # scalar; apgsk_optimize.m:153
+    if rand > nfes/max_nfes: D_junior = ceil(round(D*(1-ratio)^0.5))    # scalar; apgsk_optimize.m:163
     else:                    D_junior = ceil(round(D*(1-ratio)^2))
     order   = sort(fitness, 'ascend')                                   # best -> worst
     [Rg1,Rg2,Rg3] = junior_donors(order)                               # shared with GSK
-    [R1,R2,R3]    = senior_donors(order, P=0.05)                       # apgsk_optimize.m:163
+    [R1,R2,R3]    = senior_donors(order, P=0.05)                       # apgsk_optimize.m:173
     trial = junior/senior gained vectors (signed KF) + midpoint repair + split/KR mask
     evaluate trial; nfes += min(NP, max_nfes - nfes); scan best
-    All_Imp = improvement_credit(fitness, children_fitness, slot)       # AGSK; apgsk_optimize.m:238
+    All_Imp = improvement_credit(fitness, children_fitness, slot)       # AGSK; apgsk_optimize.m:248
     greedy replace: parent <- child where f(child) < f(parent)          # ties keep parent
-    LPSR: plan=round((min-max)*ratio^(1-ratio)+max); drop worst rows + K   # apgsk_optimize.m:265
+    LPSR: plan=round((min-max)*ratio^(1-ratio)+max); drop worst rows + K   # apgsk_optimize.m:275
     append (nfes, best_so_far) to the convergence trace
-    if best - optimum < target_error: zero error and stop              # apgsk_optimize.m:286-292
+    if best - optimum < target_error: zero error and stop              # apgsk_optimize.m:296-302
 ```
 
 ## Parameters
 
 APGSK exposes only the AGSK population options; the pools and gate constants are
-fixed in code (source: `apgsk_optimize.m:30-41` and
+fixed in code (source: `apgsk_optimize.m:30-32,43-51` and
 `src/optimizers/apgsk/README.md`).
 
 | Option | Symbol | Default | Valid range | Meaning | Code |
 |---|---|---|---|---|---|
 | `seed` | — | required | integer | RNG seed; applied through `gsk_set_rng(options)`. | `apgsk_optimize.m:21-24` |
 | `rand_generator` | — | `twister` | `threefry`, `twister`, `seed`, `state` | RNG family. Direct calls default to `twister`; unified runner resolves to `threefry` when supported, else `twister`. | `apgsk_optimize.m:24` |
-| `np_init` | NP_init | `100` | integer >= `min_pop_size` | Initial population size. The `200*D` (D>5) / `250` reference policy is opt-in. | `apgsk_optimize.m:30-31` |
-| `min_pop_size` | NP_min | `12` | integer >= 1 | Floor for population reduction. | `apgsk_optimize.m:32` |
+| `np_init` | NP_init | `100` | integer >= `min_pop_size` (enforced) | Initial population size. The `200*D` (D>5) / `250` reference policy is opt-in. | `apgsk_optimize.m:30-31,33-42` |
+| `min_pop_size` | NP_min | `12` | integer >= 11 (the P = 0.05 senior partition needs NP >= 11); smaller values, or `np_init < min_pop_size`, raise `apgsk_optimize:options` | Floor for population reduction. | `apgsk_optimize.m:32-42` |
 
 Fixed constants (not options):
 
 | Constant | Value | Valid range | Meaning | Code |
 |---|---|---|---|---|
-| `kf_pool` | `[0.1 1.0 0.5 1.0]` | positive reals | Positive knowledge-factor pool (shared with AGSK). | `apgsk_optimize.m:36` |
-| `kf_pool_negative` | `[-0.15 -0.05 -0.05 -0.15]` | negative reals | Negative secondary pool (APGSK only; reference `KF_poool`). | `apgsk_optimize.m:37` |
-| `kr_pool` | `[0.2 0.1 0.9 0.9]` | each in [0,1] | Knowledge-ratio pool. | `apgsk_optimize.m:38` |
-| `KW_ind` (init) | `[0.85 0.05 0.05 0.05]` | sums to 1 | Initial slot-selection weights. | `apgsk_optimize.m:118` |
-| `P` | `0.05` | (0, 0.5) | Senior best/worst block fraction. | `apgsk_optimize.m:41` |
-| negative-gate draw cutoff | `0.3` | (0,1) | `rand >= 0.3` keeps the positive pool in the second half. | `apgsk_optimize.m:139` |
-| negative-gate stage cutoff | `0.5 * max_nfes` | — | Boundary between the always-negative and probabilistic halves. | `apgsk_optimize.m:139` |
-| junior-schedule exponents | `0.5` / `2` | — | Slow vs. fast junior-decay exponents chosen by `rand > ratio`. | `apgsk_optimize.m:153-156` |
+| `kf_pool` | `[0.1 1.0 0.5 1.0]` | positive reals | Positive knowledge-factor pool (shared with AGSK). | `apgsk_optimize.m:46` |
+| `kf_pool_negative` | `[-0.15 -0.05 -0.05 -0.15]` | negative reals | Negative secondary pool (APGSK only; reference `KF_poool`). | `apgsk_optimize.m:47` |
+| `kr_pool` | `[0.2 0.1 0.9 0.9]` | each in [0,1] | Knowledge-ratio pool. | `apgsk_optimize.m:48` |
+| `KW_ind` (init) | `[0.85 0.05 0.05 0.05]` | sums to 1 | Initial slot-selection weights. | `apgsk_optimize.m:128` |
+| `P` | `0.05` | (0, 0.5) | Senior best/worst block fraction. | `apgsk_optimize.m:51` |
+| negative-gate draw cutoff | `0.3` | (0,1) | `rand >= 0.3` keeps the positive pool in the second half. | `apgsk_optimize.m:149` |
+| negative-gate stage cutoff | `0.5 * max_nfes` | — | Boundary between the always-negative and probabilistic halves. | `apgsk_optimize.m:149` |
+| junior-schedule exponents | `0.5` / `2` | — | Slow vs. fast junior-decay exponents chosen by `rand > ratio`. | `apgsk_optimize.m:163-166` |
 
 ## Worked example
 
@@ -242,12 +245,12 @@ or a narrow one (`junior_prob = 0.1`), depending on the reference scalar draw.
 ```mermaid
 flowchart TD
   A["Sort population best to worst"] --> B{"adaptive phase?<br/>nfes >= 0.1*max_nfes"}
-  B -- "early (no)" --> C["KW_ind = [0.85 0.05 0.05 0.05]; positive KF pool"]
+  B -- "early (no)" --> C["KW_ind = [0.85 0.05 0.05 0.05]; slot from KW_ind; KF = kf_pool(slot), KR = kr_pool(slot) (no gate draw)"]
   B -- "adaptive (yes)" --> D["KW_ind = norm(0.95*KW_ind + 0.05*All_Imp)"]
-  D --> E["draw rand; KF positive iff rand>=0.3 AND nfes>0.5*max_nfes, else negative pool"]
-  C --> F["slot from KW_ind; KR = kr_pool(slot)"]
-  E --> F
-  F --> G["draw rand; exponent = 0.5 if rand>ratio else 2; D_junior = ceil(round(D*(1-ratio)^exp))"]
+  D --> F["slot from KW_ind; KR = kr_pool(slot)"]
+  F --> E["draw rand; KF = kf_pool(slot) iff rand>=0.3 AND nfes>0.5*max_nfes, else kf_pool_negative(slot)"]
+  C --> G
+  E --> G["draw rand; exponent = 0.5 if rand>ratio else 2; D_junior = ceil(round(D*(1-ratio)^exp))"]
   G --> H["Junior donors Rg1,Rg2,Rg3 + Senior donors R1,R2,R3 (P=0.05)"]
   H --> I["Shared kernel: junior/senior gained vectors with signed KF"]
   I --> J["Midpoint bound repair"]
@@ -267,7 +270,7 @@ flowchart TD
   *negative*-`KF` steps too, so anti-steps never leave `[lb, ub]`.
 - **Budget.** The loop runs whole generations until `nfes >= max_nfes`; the final
   generation is partially counted via `n_count = min(pop_size, max_nfes - nfes)`
-  (`apgsk_optimize.m:224`). With LPSR active the population shrinks toward
+  (`apgsk_optimize.m:234`). With LPSR active the population shrinks toward
   `min_pop_size`, so later generations spend fewer evaluations each. Best-so-far
   is monotone non-increasing.
 - **Target-error stop.** Like AGSK and unlike GSK, APGSK checks
@@ -276,11 +279,15 @@ flowchart TD
   'target_error_reached'`. There is no end-of-run zeroing on a budget exit; the
   check is skipped when `target_error` or `optimum` is `NaN`.
 - **Determinism.** The trial kernel is pure arithmetic; all randomness is drawn by
-  the caller in a fixed order per adaptive generation — slot draw, then the
-  negative-gate scalar `rand` (consumed every adaptive generation via short-circuit
-  `&&`), then the junior-schedule scalar `rand`, then three `rand(NP,D)` mask
-  blocks. The unused `k_vec` draw (`apgsk_optimize.m:87-90`) is kept to preserve
-  byte-for-byte stream parity with AGSK. See
+  the caller in a fixed order per adaptive generation — slot draw `rand(NP,1)`,
+  then the negative-gate scalar `rand` (consumed every adaptive generation via
+  short-circuit `&&`), then the junior-schedule scalar `rand`, then the junior
+  donor `Rg3` draw `rand(1,NP)` plus collision redraws, then the three senior
+  `rand(NP,1)` block samples, then three `rand(NP,D)` mask blocks (early
+  generations skip only the gate scalar). The unused `k_vec` draw
+  (`apgsk_optimize.m:97-100`) is kept for stream fidelity with the APGSK
+  reference, which draws it exactly as AGSK does; APGSK's stream as a whole
+  differs from AGSK's because of the extra gate and schedule scalars. See
   [Seed Policy](../reference/seed_policy.md).
 
 ## Complexity
@@ -301,7 +308,7 @@ schedule keeps the exploration/exploitation balance from locking onto a single
 curve. If you do not need the sign-switch or the schedule jitter, prefer plain
 [AGSK](agsk.md) (deterministic, one fewer source of variance) or baseline
 [GSK](gsk.md). Other siblings: [FDB-AGSK](fdb-agsk.md),
-[ATMALS-GSK](atmals-gsk.md), [eGSK](egsk.md).
+[ATMALS-GSK](atmals-gsk.md), [eGSK](egsk.md), [DT-GSK](dt-gsk.md).
 
 Default reproduction matrix: **CEC2017** and **CEC2011** (the reference APGSK
 release is CEC2020-era code in spirit, but in this toolkit CEC2020 is AGSK's
@@ -342,8 +349,16 @@ state for fair cross-family starts.
   AGSK one) with identical pools, gate, schedule, and draw order. Entry point and
   interface contract: [matlab_interface.md](../reference/matlab_interface.md); run
   instructions: [runbook.md](../getting-started/runbook.md).
-- Tests cover the positive/negative KF gate, the stochastic junior schedule,
-  shared adaptive slot selection, improvement credit, population reduction, target
-  stopping, fair starts, deterministic replay, and runner integration. See
+- `src/tests/test_apgsk_smoke.m` checks the result contract on the pure-MATLAB
+  `sphere` problem (D = 5, default NP = 100, budget 10000), budget accounting,
+  the target-error semantics of both exits (target stop zeroes the error, a
+  budget exit reports the raw error), that the result beats the median of a
+  random population, bit-identical replay with the same seed, a different seed
+  changing the result, and the `min_pop_size >= 11` / `np_init >= min_pop_size`
+  option check. The fair-start helpers are tested on their own in
+  `src/tests/test_common_helpers.m`, and the unified fair-start path through
+  `run_experiment` (runner `X0` plus the post-`X0` RNG state) is checked for
+  APGSK by `src/tests/test_runner_fair_start.m`. No test yet checks the KF gate,
+  the junior schedule, slot selection, or LPSR directly. See
   [validation_report.md](../research/validation_report.md) and
   [numerical_examples.md](../research/numerical_examples.md).

@@ -73,8 +73,9 @@ seed = mod(69241385, 2147483646) + 1
      = 69241386
 ```
 
-So GSK, AGSK, APGSK, ATMALS-GSK, eGSK, and FDB-AGSK all receive seed `69241386`
-for `(D=30, F7, run=12)`. The runner then makes the start fair
+So GSK, AGSK, APGSK, ATMALS-GSK, eGSK, FDB-AGSK, and DT-GSK all receive seed
+`69241386` for `(D=30, F7, run=12)` (DT-GSK under every seed policy). For the
+first six the runner then makes the start fair
 (`src/runners/run_experiment.m`):
 
 ```text
@@ -86,7 +87,10 @@ for `(D=30, F7, run=12)`. The runner then makes the start fair
 ```
 
 Differences between optimizers therefore come from the algorithms, not from
-luckier initial points. `run_all_cec*.m` launchers call
+luckier initial points. DT-GSK is the documented exception: it derives named
+Threefry substreams from the same seed and samples its own `NP = 5*D` initial
+population (`150` rows at `D=30`) instead of the shared `X0`. `run_all_cec*.m`
+launchers call
 `verify_unified_seed_schedule.m` to assert every optimizer used this same seed
 per `(Dim, Function, Run)`. The [reference policy](../reference/seed_policy.md)
 uses per-optimizer seeds instead, to reproduce published tables.
@@ -146,7 +150,8 @@ CEC-style summaries report `Best,Median,Mean,Worst,SD` where `SD` is the
 population divisor `n`. On known-optimum suites (cec2017, cec2020, cec2013) the
 statistics are computed over errors `best_fitness - optimum` with a `1e-8` zero
 cutoff; on no-optimum suites (cec2011, cec2013lsgo) they are computed over raw
-objectives and the `error` column is `NaN`
+objectives, and the per-run `error` column is `NaN` on cec2011 and the raw
+objective (`best_fitness - 0`) on cec2013lsgo
 ([Benchmark Protocol](../reference/benchmark_protocol.md#statistics-conventions-all-suites)).
 
 For three runs:
@@ -174,7 +179,8 @@ tables are written in `%.10E` scientific notation
 ## LPSR population schedule (adaptive variants)
 
 AGSK, APGSK, and FDB-AGSK shrink the population as the budget burns (nonlinear
-LPSR, `src/common/gsk_reduction_survivors.m` removes the worst rows). With
+LPSR, `src/common/gsk_reduction_survivors.m` removes the worst rows; DT-GSK
+has its own nonlinear reduction from `5*D` inside `dt_gsk_optimize.m`). With
 `max = np_init`, `min = min_pop_size`, and budget ratio `t = nfes / max_nfes`:
 
 ```text
@@ -230,3 +236,4 @@ that optimizer apart:
 | FDB-AGSK | fitness-distance-balance donor selection | [fdb-agsk.md](../algorithms/fdb-agsk.md#worked-example) |
 | ATMALS-GSK | memory-roulette pools + local search | [atmals-gsk.md](../algorithms/atmals-gsk.md#worked-example) |
 | eGSK | KF1/KF2 fuzzy membership + late-stage `fmincon` refinement | [egsk.md](../algorithms/egsk.md#worked-example) |
+| DT-GSK | NLPSR from `5*D` + ACE probabilities, with mechanisms switched on by dimension tier | [dt-gsk.md](../algorithms/dt-gsk.md#worked-example) |

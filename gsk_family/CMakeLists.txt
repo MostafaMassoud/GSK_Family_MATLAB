@@ -114,7 +114,7 @@ if(GSKCEC_BUILD_TESTS)
 
     gskcec_add_test(gskcec_core_tests benchmarks/cec_suite_cpp/cec_tools/tests/unit/core_tests.cpp)
     gskcec_add_test(gskcec_reference_results_tests benchmarks/cec_suite_cpp/cec_tools/tests/unit/reference_results_tests.cpp)
-    gskcec_add_test(gskcec_experiment_tests benchmarks/cec_suite_cpp/cec_tools/tests/unit/experiment_tests.cpp)
+    gskcec_add_test(gskcec_experiment_tests benchmarks/cec_suite_cpp/cec_tools/tests/unit/experiment_tests.cpp ${CMAKE_CURRENT_SOURCE_DIR})
     gskcec_add_test(gskcec_cec2011_wpa_tests benchmarks/cec_suite_cpp/cec_tools/tests/unit/cec2011_wpa_tests.cpp ${CMAKE_CURRENT_SOURCE_DIR})
     gskcec_add_test(gskcec_cec2011_wpb_tests benchmarks/cec_suite_cpp/cec_tools/tests/unit/cec2011_wpb_tests.cpp ${CMAKE_CURRENT_SOURCE_DIR})
     gskcec_add_test(gskcec_cec2011_wpc_tests benchmarks/cec_suite_cpp/cec_tools/tests/unit/cec2011_wpc_tests.cpp ${CMAKE_CURRENT_SOURCE_DIR})
@@ -133,11 +133,34 @@ if(GSKCEC_BUILD_TESTS)
     # (the timing numbers themselves are not asserted - see docs/research/performance.md).
     add_test(NAME gskcec_bench_smoke
              COMMAND gsk_bench --root ${CMAKE_CURRENT_SOURCE_DIR} --iterations 50)
+
+    # CLI exit codes: gsk_run verdict -> exit status (0 / 1 MATLAB failure /
+    # 2 verification error / 3 DEVIATES), strict flag parsing, multi-optimizer
+    # configs, gsk_validate --verify protocol detection and gsk_bench argument
+    # checks. Stub "MATLAB" executables stand in for MATLAB, so no licence is
+    # needed; the script writes only under the build tree.
+    add_executable(gskcec_fake_matlab_ok benchmarks/cec_suite_cpp/cec_tools/tests/cli/fake_matlab.cpp)
+    add_executable(gskcec_fake_matlab_fail benchmarks/cec_suite_cpp/cec_tools/tests/cli/fake_matlab.cpp)
+    target_compile_definitions(gskcec_fake_matlab_fail PRIVATE FAKE_MATLAB_RC=1)
+    gskcec_apply_flags(gskcec_fake_matlab_ok)
+    gskcec_apply_flags(gskcec_fake_matlab_fail)
+    add_test(NAME gskcec_cli_exit_codes
+             COMMAND ${CMAKE_COMMAND}
+                 -DGSK_RUN=$<TARGET_FILE:gsk_run>
+                 -DGSK_VALIDATE=$<TARGET_FILE:gsk_validate>
+                 -DGSK_BENCH=$<TARGET_FILE:gsk_bench>
+                 -DFAKE_MATLAB_OK=$<TARGET_FILE:gskcec_fake_matlab_ok>
+                 -DFAKE_MATLAB_FAIL=$<TARGET_FILE:gskcec_fake_matlab_fail>
+                 -DPROJECT_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+                 -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/cli_exit_codes
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/cec_suite_cpp/cec_tools/tests/cli/gsk_run_exit_codes.cmake)
 endif()
 
 # Installation / export: `cmake --install <build> --prefix <dir>` lays out the
 # CLIs, the static library, and the public headers. Lets downstream CMake do
-# find_package(gskcec) against the exported target.
+# find_package(gskcec) against the exported target (gskcec::gskcec): the
+# package config file below just includes the exported targets, since the
+# library has no external link dependencies to re-find.
 install(TARGETS gskcec gsk_list gsk_validate gsk_run gsk_bench
         EXPORT gskcecTargets
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -147,4 +170,16 @@ install(DIRECTORY benchmarks/cec_suite_cpp/cec_tools/include/gskcec
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(EXPORT gskcecTargets
         NAMESPACE gskcec::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/gskcec)
+
+include(CMakePackageConfigHelpers)
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/gskcecConfig.cmake
+     "include(\"\${CMAKE_CURRENT_LIST_DIR}/gskcecTargets.cmake\")\n")
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/gskcecConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/gskcecConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/gskcecConfigVersion.cmake
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/gskcec)

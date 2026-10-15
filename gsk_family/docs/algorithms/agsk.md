@@ -40,7 +40,7 @@ identical to [GSK](gsk.md) — only the *inputs* differ (`KF`, `KR`, and the jun
 probability are now per-individual, and `P = 0.05`). This section documents only
 the four AGSK-specific mechanisms.
 
-**Parameter pools** (`agsk_optimize.m:31-32`). Four slots, indexed `1..4`. Slot
+**Parameter pools** (`agsk_optimize.m:41-42`). Four slots, indexed `1..4`. Slot
 `s` supplies one `(KF, KR)` pair:
 
 ```text
@@ -49,7 +49,7 @@ kr_pool = [0.2 0.1 0.9 0.9]      % knowledge ratio per slot
 slot s ->  KF = kf_pool(s),  KR = kr_pool(s)
 ```
 
-**Slot selection** (`agsk_optimize.m:121-127`). One `rand(NP,1)` draw per
+**Slot selection** (`agsk_optimize.m:131-137`). One `rand(NP,1)` draw per
 generation; each individual's slot index `1..4` is relabeled by cumulative
 `KW_ind` thresholds:
 
@@ -61,7 +61,7 @@ KW(1:3)    < u <= KW(1:4) (= 1)    -> slot 4
 KF = kf_pool(slot)';  KR = kr_pool(slot)'
 ```
 
-**Adaptive setting probabilities `KW_ind`** (`agsk_optimize.m:112-117`). A
+**Adaptive setting probabilities `KW_ind`** (`agsk_optimize.m:122-127`). A
 two-phase scheme decides how often each slot is chosen. During the exploration
 phase (`nfes < 0.1*max_nfes`) `KW_ind` is **reset every generation** to the prior
 `[0.85 0.05 0.05 0.05]`; after that it is an exponential moving average toward the
@@ -73,7 +73,7 @@ adaptive    (otherwise):            KW_ind = 0.95*KW_ind + 0.05*All_Imp
                                     KW_ind = KW_ind ./ sum(KW_ind)
 ```
 
-**Improvement credit `All_Imp`** (`agsk_optimize.m:212-231`). The per-slot metric
+**Improvement credit `All_Imp`** (`agsk_optimize.m:222-241`). The per-slot metric
 is the *summed absolute fitness gain* of the children that strictly improved,
 bucketed by the slot that produced them. Let `dif = |parent - child|` and
 `child_better = parent > child`. For each slot `s in 1..4`:
@@ -88,12 +88,12 @@ else:
     largest slot = 1 - sum(the other three)                  % keep sum = 1
 ```
 
-The floor-the-losers / cap-the-winner step (`agsk_optimize.m:224-228`) guarantees
+The floor-the-losers / cap-the-winner step (`agsk_optimize.m:234-238`) guarantees
 every slot keeps at least `0.05` weight (so no setting is permanently starved)
 while the sum stays exactly `1`. The credit uses the **full** generation —
 including any children beyond the budget — exactly as the reference.
 
-**Per-individual junior schedule** (`agsk_optimize.m:132`). Unlike GSK
+**Per-individual junior schedule** (`agsk_optimize.m:142`). Unlike GSK
 (generation ratio), AGSK drives the junior-coordinate count by the **evaluation**
 ratio, with a per-individual exponent `K`:
 
@@ -103,12 +103,12 @@ junior_prob            = D_Gained_Shared_Junior / D
 ```
 
 `K` is sampled **once at initialization** and only trimmed (never redrawn) during
-reduction (`agsk_optimize.m:80-83`): for each row, `Kind = rand`; where
+reduction (`agsk_optimize.m:90-93`): for each row, `Kind = rand`; where
 `Kind < 0.5`, `K = rand` in (0,1); else `K = ceil(20*rand)` in {1..20}. A small
 `K` keeps an individual junior longer; a large `K` flips it to senior almost
 immediately.
 
-**Nonlinear population reduction (LPSR)** (`agsk_optimize.m:239-256`). With
+**Nonlinear population reduction (LPSR)** (`agsk_optimize.m:249-266`). With
 `max_pop_size = np_init`, the planned size at budget ratio `t = nfes/max_nfes`
 follows:
 
@@ -133,32 +133,32 @@ per-individual arrays the reference trims (`popold`, `pop`, `fitness`, `K`) are
 trimmed here, in original row order.
 
 **Selection** is the same strict-greedy replacement as GSK
-(`agsk_optimize.m:234-236`): `fitness = min(parent, child)` element-wise, and rows
+(`agsk_optimize.m:244-246`): `fitness = min(parent, child)` element-wise, and rows
 where the child won copy the child into `popold`; ties keep the parent.
 
 ## Pseudocode
 
 ```text
-pop_size = np_init;  max_pop_size = np_init                  # agsk_optimize.m:44-45
+pop_size = np_init;  max_pop_size = np_init                  # agsk_optimize.m:54-55
 initialize / accept fair-start population, evaluate, scan best
-K = draw_initial_K(NP)            # mixed unif(0,1) / int 1..20  # agsk_optimize.m:80-83
+K = draw_initial_K(NP)            # mixed unif(0,1) / int 1..20  # agsk_optimize.m:90-93
 KW_ind = [];  All_Imp = zeros(1,4)
-for g = 1, 2, ... until nfes >= max_nfes:                    # agsk_optimize.m:102
+for g = 1, 2, ... until nfes >= max_nfes:                    # agsk_optimize.m:112
     if isempty(KW_ind) or nfes < 0.1*max_nfes:  KW_ind = [0.85 0.05 0.05 0.05]   # reset
     else:                                       KW_ind = norm(0.95*KW_ind + 0.05*All_Imp)
-    slot = select_slots(KW_ind)              # one rand(NP,1); agsk_optimize.m:121
+    slot = select_slots(KW_ind)              # one rand(NP,1); agsk_optimize.m:131
     KF = kf_pool(slot);  KR = kr_pool(slot)              # per-individual
-    D_junior = ceil(D * (1 - nfes/max_nfes)^K)           # per-individual; agsk_optimize.m:132
+    D_junior = ceil(D * (1 - nfes/max_nfes)^K)           # per-individual; agsk_optimize.m:142
     order    = sort(fitness, 'ascend')                   # best -> worst
     [Rg1,Rg2,Rg3] = junior_donors(order)                 # shared with GSK
-    [R1,R2,R3]    = senior_donors(order, P=0.05)         # agsk_optimize.m:138
+    [R1,R2,R3]    = senior_donors(order, P=0.05)         # agsk_optimize.m:148
     trial = junior/senior gained vectors + midpoint repair + split/KR mask   # shared kernel
     evaluate trial; nfes += min(NP, max_nfes - nfes); scan best
-    All_Imp = improvement_credit(fitness, children_fitness, slot)   # agsk_optimize.m:212
+    All_Imp = improvement_credit(fitness, children_fitness, slot)   # agsk_optimize.m:222
     greedy replace: parent <- child where f(child) < f(parent)      # ties keep parent
-    LPSR: plan=round((min-max)*t^(1-t)+max); drop worst rows + K     # agsk_optimize.m:239
+    LPSR: plan=round((min-max)*t^(1-t)+max); drop worst rows + K     # agsk_optimize.m:249
     append (nfes, best_so_far) to the convergence trace
-    if best - optimum < target_error: zero error and stop           # agsk_optimize.m:266-272
+    if best - optimum < target_error: zero error and stop           # agsk_optimize.m:276-282
 ```
 
 ## Parameters
@@ -170,12 +170,12 @@ Defaults are reference/interface values, overridable through `options` (source:
 |---|---|---|---|---|---|
 | `seed` | — | required | integer | RNG seed; applied through `gsk_set_rng(options)`. | `agsk_optimize.m:18-21` |
 | `rand_generator` | — | `twister` | `threefry`, `twister`, `seed`, `state` | RNG family. Direct calls default to `twister`; unified runner resolves to `threefry` when supported, else `twister`. | `agsk_optimize.m:21` |
-| `np_init` | NP_init | `100` | integer >= `min_pop_size` | Initial population size; also `max_pop_size` for LPSR. | `agsk_optimize.m:27` |
-| `min_pop_size` | NP_min | `12` | integer >= 1 | Floor for population reduction. | `agsk_optimize.m:28` |
-| `kf_pool` | kf-pool | `[0.1 1.0 0.5 1.0]` | fixed constant | Per-slot knowledge factors (step scale). | `agsk_optimize.m:31` |
-| `kr_pool` | kr-pool | `[0.2 0.1 0.9 0.9]` | fixed constant | Per-slot knowledge ratios (per-coord update prob.). | `agsk_optimize.m:32` |
-| `KW_ind` (init) | kw0 | `[0.85 0.05 0.05 0.05]` | fixed constant | Exploration-phase reset prior over the four slots. | `agsk_optimize.m:113` |
-| `P` | p | `0.05` | fixed constant | Senior partition fraction (best/worst block = round(NP*P)). | `agsk_optimize.m:35` |
+| `np_init` | NP_init | `100` | integer >= `min_pop_size` (enforced) | Initial population size; also `max_pop_size` for LPSR. | `agsk_optimize.m:27,29-38` |
+| `min_pop_size` | NP_min | `12` | integer >= 11 (the P = 0.05 senior partition needs NP >= 11); smaller values, or `np_init < min_pop_size`, raise `agsk_optimize:options` | Floor for population reduction. | `agsk_optimize.m:28-38` |
+| `kf_pool` | kf-pool | `[0.1 1.0 0.5 1.0]` | fixed constant | Per-slot knowledge factors (step scale). | `agsk_optimize.m:41` |
+| `kr_pool` | kr-pool | `[0.2 0.1 0.9 0.9]` | fixed constant | Per-slot knowledge ratios (per-coord update prob.). | `agsk_optimize.m:42` |
+| `KW_ind` (init) | kw0 | `[0.85 0.05 0.05 0.05]` | fixed constant | Exploration-phase reset prior over the four slots. | `agsk_optimize.m:123` |
+| `P` | p | `0.05` | fixed constant | Senior partition fraction (best/worst block = round(NP*P)). | `agsk_optimize.m:45` |
 
 The pools, the reset prior, and `P` are fixed in code, not runner-exposed options
 (the reference local senior helper hard-codes `round(NP*0.05)` / `round(NP*0.95)`).
@@ -230,7 +230,7 @@ If the old probability vector was
 KW_ind_old = [0.85, 0.05, 0.05, 0.05]
 ```
 
-then the next adaptive probability vector is (`agsk_optimize.m:115-116`):
+then the next adaptive probability vector is (`agsk_optimize.m:125-126`):
 
 ```text
 KW_ind_new = 0.95*KW_ind_old + 0.05*All_Imp
@@ -281,12 +281,12 @@ flowchart TD
   never reflected past the parent. See
   [GSK](gsk.md#bounds-budget-and-determinism).
 - **Budget.** The loop runs whole generations; the last one is partially counted
-  via `n_count = min(NP, max_nfes - nfes)` (`agsk_optimize.m:196`), and `nfes`
+  via `n_count = min(NP, max_nfes - nfes)` (`agsk_optimize.m:206`), and `nfes`
   advances by `n_count`. As the population shrinks, later generations cost fewer
   evaluations, so AGSK fits more generations into the same budget than fixed-NP
   GSK. The best-so-far is monotone non-increasing.
 - **Exploration window.** While `nfes < 0.1*max_nfes` the pool is held at
-  `[0.85 0.05 0.05 0.05]` every generation (`agsk_optimize.m:112-113`); adaptation
+  `[0.85 0.05 0.05 0.05]` every generation (`agsk_optimize.m:122-123`); adaptation
   only begins once 10% of the budget is spent, so early noise does not move
   `KW_ind`.
 - **Target-error stop.** Unlike GSK, AGSK checks `best_fitness - optimum < 1e-8`
@@ -295,9 +295,9 @@ flowchart TD
   zeroing on a budget exit. The per-generation check is skipped when
   `target_error` or `optimum` is `NaN`.
 - **Determinism.** All randomness comes from the caller's RNG in a fixed draw
-  order per generation: the slot draw `rand(NP,1)` (`agsk_optimize.m:121`), the
+  order per generation: the slot draw `rand(NP,1)` (`agsk_optimize.m:131`), the
   donor draws, then three `rand(NP,D)` mask blocks. `K` is drawn once before the
-  loop (`agsk_optimize.m:80`). Reductions are deterministic (stable worst-removal
+  loop (`agsk_optimize.m:90`). Reductions are deterministic (stable worst-removal
   survivors). See [Seed Policy](../reference/seed_policy.md).
 
 ## Complexity

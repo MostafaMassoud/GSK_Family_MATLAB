@@ -15,7 +15,10 @@ historical source: agsk/agsk/AGSK-CODE-FINAL/boundConstraint.m
 
 ## Parameters
 
-- `np_init` = 100, `min_pop_size` = 12 (interface defaults). The
+- `np_init` = 100, `min_pop_size` = 12 (interface defaults).
+  `min_pop_size` must be >= 11 (the P = 0.05 senior partition needs
+  NP >= 11) and `np_init >= min_pop_size`; otherwise `agsk_optimize:options`
+  is raised before any RNG draw. The
   reference CEC2020 driver sets `pop_size = 40*D` for `D > 5` and 100
   otherwise; pass `options.np_init` explicitly to reproduce that rule.
 - Pools (fixed, reference values): `KF_pool = [0.1 1.0 0.5 1.0]`,
@@ -75,7 +78,9 @@ historical source: agsk/agsk/AGSK-CODE-FINAL/boundConstraint.m
 
 - Seeding policy: `gsk_set_rng(options)` once at entry. Under runner
   `seed_policy='reference'`, AGSK keeps the reference `D*func*run` seed rule
-  and uses the legacy `seed` generator. Direct optimizer calls default to
+  and uses the legacy `seed` generator (a project choice: the archived AGSK
+  driver seeds the same value with `twister`, so reference mode does not
+  replay that driver's random stream). Direct optimizer calls default to
   `twister`, with `threefry`, `twister`, and deterministic legacy `seed`/`state`
   available for checks. Wall-clock seeding is not supported.
 - `np_init` default is the interface value 100, not the reference

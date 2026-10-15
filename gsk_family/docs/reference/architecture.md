@@ -23,9 +23,11 @@ The project has five layers.
    naming the offending file. Evaluation state is per-instance (mutable
    scratch buffers; instances are not thread-safe - use one instance per
    thread).
-3. **MATLAB optimizer layer** (`src/optimizers`, `src/common`): the six
-   GSK-family algorithms, faithful to the reference MATLAB sources (see
-   `docs/reference/matlab_interface.md` and `docs/reference/porting_notes.md`).
+3. **MATLAB optimizer layer** (`src/optimizers`, `src/common`): the seven
+   GSK-family algorithms - six faithful to the reference MATLAB sources, plus
+   DT-GSK, ported from its Python reference implementation and self-contained
+   in `src/optimizers/dt-gsk` (see `docs/reference/matlab_interface.md` and
+   `docs/reference/porting_notes.md`).
 4. **Experiment layer**: C++ config parsing
    (`gskcec/experiment/config.hpp`), the MATLAB runner
    (`src/runners/run_experiment.m`) which executes optimizers and writes
@@ -62,10 +64,14 @@ wall-clock seeding as provenance only:
   `std::mt19937_64`.
 - MATLAB runs: `src/runners/run_experiment.m` defaults to the fair `unified`
   policy documented in `docs/reference/seed_policy.md` (`reference`/`native`/`derived`
-  remain selectable); every optimizer seeds through `src/common/gsk_set_rng.m`,
-  so `threefry`, `twister`, and deterministic legacy `seed`/`state` checks
-  are explicit. Every per-run seed is recorded in `summary/seed_schedule.csv`,
-  `summary/per_run.csv`, and `summary/environment.json`.
+  remain selectable); every optimizer except DT-GSK seeds through
+  `src/common/gsk_set_rng.m`, so `threefry`, `twister`, and deterministic
+  legacy `seed`/`state` checks are explicit (DT-GSK draws from its own named
+  Threefry substreams). Every per-run seed is recorded in
+  `summary/seed_schedule.csv`, `summary/per_run.csv`, and the `gen_logs/`
+  `Seed` column;
+  `summary/environment.json` records `base_seed`, the seed scheme, and the
+  effective generator (not per-cell seeds).
 - Unified MATLAB runs use
   `get_cec_seed(base_seed, dim, func, run) =
   mod(base_seed + 1000003*dim + 1000033*func + 1000037*run, 2147483646) + 1`.
@@ -74,12 +80,15 @@ wall-clock seeding as provenance only:
   and budget. The runner resolves one generator (`threefry` when available,
   otherwise `twister`), then owns the first population draw and the
   post-initialization RNG state, while optimizers keep their reference update
-  logic unchanged.
+  logic unchanged. DT-GSK is the documented fair-start exception: it samples
+  its own `NP = 5*D` population.
 - Reference MATLAB runs keep the published/recovered per-family seed split:
   GSK/ATMALS-GSK/eGSK use `base_seed + 9973*func + run-1`, while
   AGSK/APGSK/FDB-AGSK use `D*func*run`. Reference mode also selects the
   effective MATLAB RNG family per optimizer, as documented in
   `docs/reference/seed_policy.md`.
+- DT-GSK is unified-only: under every policy it gets the unified seed and
+  `threefry`, the schedule its imported Python reference campaign used.
 
 ## Boundaries
 
@@ -113,7 +122,7 @@ flowchart TB
 The diagram has two important boundaries:
 
 - The MATLAB optimizer boundary keeps algorithm research readable and close to
-  the historical MATLAB releases.
+  the historical MATLAB releases (for DT-GSK, to its Python reference).
 - The C++ benchmark boundary keeps CEC evaluation fast, testable, and independent
   of MATLAB scripts or current-directory state.
 

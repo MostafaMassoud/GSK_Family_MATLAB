@@ -45,15 +45,130 @@ env_agsk = jsondecode(fileread(fullfile(out_agsk, 'summary', 'environment.json')
 assert(strcmp(env_gsk.rand_generator, selected_generator), 'unexpected unified generator for GSK');
 assert(strcmp(env_agsk.rand_generator, selected_generator), 'unexpected unified generator for AGSK');
 assert(contains(env_gsk.seed_policy, 'unified:'), 'environment should record unified policy');
+assert(~contains(env_gsk.seed_policy, 'unified: unified:'), 'environment seed_policy label duplicated');
 
-if license('test', 'Distrib_Computing_Toolbox')
-    task_matrix = [30 1 1; 30 2 1; 30 3 1; 30 1 2; 30 2 2; 30 3 2];
-    serial_fingerprints = seed_task_fingerprints(task_matrix, base_seed, selected_generator, false);
-    parallel_fingerprints = seed_task_fingerprints(task_matrix, base_seed, selected_generator, true);
-    assert(isequaln(serial_fingerprints, parallel_fingerprints), ...
-        'serial and parfor unified seed/X0 schedules must match');
+% ---- seed_policy / rand_generator validation -----------------------------
+% seed_policy is one of the four documented policies, matched
+% case-insensitively; a typo must not silently run the hashed derived schedule.
+small = {'suite', 'sphere', 'functions', 1, 'dimensions', 2, 'runs', 1, ...
+         'max_nfes', 300, 'project_root', project_root, 'verbose', false};
+bad_out = fullfile(out_root, 'rejected');
+assert_rejected(@() run_experiment('optimizer', 'gsk', small{:}, 'output_dir', bad_out, ...
+                                   'seed_policy', 'unifed'), 'seed_policy', bad_out);
+% auto/default are resolved only under unified; native/derived would fail every cell.
+assert_rejected(@() run_experiment('optimizer', 'gsk', small{:}, 'output_dir', bad_out, ...
+                                   'seed_policy', 'native', 'rand_generator', 'auto'), ...
+                'rand_generator', bad_out);
+out_mixed = fullfile(out_root, 'mixed_case', 'gsk', 'sphere');
+run_experiment('optimizer', 'gsk', small{:}, 'output_dir', out_mixed, 'seed_policy', 'Unified');
+assert(read_first_seed(out_mixed) == get_cec_seed(base_seed, 2, 1, 1), ...
+       'mixed-case ''Unified'' must select the unified schedule');
+
+% ---- reference-mode seed metadata matches the optimizer's real formula ------
+ref_root = fullfile(out_root, 'reference');
+for opt = {'gsk', 'agsk'}
+    out_ref = fullfile(ref_root, opt{1}, 'sphere');
+    run_experiment('optimizer', opt{1}, 'suite', 'sphere', 'functions', 3, 'dimensions', D, ...
+                   'runs', 2, 'max_nfes', 300, 'project_root', project_root, ...
+                   'output_dir', out_ref, 'seed_policy', 'reference', 'verbose', false);
+    cfg = jsondecode(fileread(fullfile(out_ref, 'summary', 'run_config.json')));
+    proto = jsondecode(fileread(fullfile(out_ref, 'summary', 'phase0_protocol.json')));
+    env = jsondecode(fileread(fullfile(out_ref, 'summary', 'environment.json')));
+    seeds = read_seeds(out_ref);
+    if strcmp(opt{1}, 'gsk')
+        assert(cfg.stride_run == 1 && cfg.dim_stride == 0 && cfg.func_stride == 9973, ...
+               'gsk reference strides must describe base_seed + 9973*func + (run-1)');
+        assert(isequal(seeds, cfg.base_seed + cfg.func_stride * 3 + cfg.stride_run * ((1:2)' - 1)), ...
+               'gsk reference seeds must follow the recorded strides');
+        assert(strcmp(proto.seed_policy.base_seed_field, 'base_seed'), 'gsk phase0 base_seed_field');
+    else
+        assert(isempty(cfg.stride_run) && isempty(cfg.dim_stride) && isempty(cfg.func_stride), ...
+               'agsk reference (dim*func*run) has no additive strides (null)');
+        assert(strcmp(cfg.seed_formula, 'dim*func*run') && strcmp(proto.seed_policy.formula, 'dim*func*run'), ...
+               'agsk reference seed_formula');
+        assert(isempty(proto.seed_policy.base_seed_field), 'agsk reference does not use base_seed');
+        assert(isequal(seeds, D * 3 * (1:2)'), 'agsk reference seeds must be dim*func*run');
+        assert(contains(env.seed_policy, 'dim*func*run') && ~contains(env.seed_policy, '9973'), ...
+               'agsk reference scheme must describe only its own formula');
+    end
+end
+
+% ---- verify_unified_seed_schedule: compare common keys, warn on missing ones ----
+syn = fullfile(out_root, 'synthetic');
+write_schedule(syn, 'opt_a', [10 1 1 11; 10 1 2 12]);
+write_schedule(syn, 'opt_b', [10 1 1 11]);                 % a failed/skipped cell
+write_schedule(syn, 'opt_c', [10 1 2 12; 10 2 1 21]);      % extra historical key
+lastwarn('');
+verify_unified_seed_schedule(syn, {'opt_a', 'opt_b', 'opt_c'}, 'sphere');
+[~, warn_id] = lastwarn;
+assert(strcmp(warn_id, 'verify_unified_seed_schedule:missingKeys'), ...
+       'missing schedule keys must be reported as a warning, not an error');
+% A key absent from the first optimizer is still compared between the others.
+write_schedule(syn, 'opt_d', [10 2 1 99]);
+threw = false;
+try
+    verify_unified_seed_schedule(syn, {'opt_b', 'opt_c', 'opt_d'}, 'sphere');
+catch err
+    threw = strcmp(err.identifier, 'verify_unified_seed_schedule:seedMismatch');
+end
+assert(threw, 'a seed mismatch on a key the first optimizer lacks must still fail');
+
+% ---- policy round trip: reused runs must be visible in the schedule --------
+% unified -> reference -> unified into the same trees: the third session
+% reuses the unified rows, and the verifier (latest row per key) must see the
+% unified seeds again, not the intermediate reference ones.
+rt_root = fullfile(out_root, 'round_trip');
+for policy = {'unified', 'reference', 'unified'}
+    for opt = {'gsk', 'agsk'}
+        run_experiment('optimizer', opt{1}, small{:}, 'output_dir', fullfile(rt_root, opt{1}, 'sphere'), ...
+                       'seed_policy', policy{1});
+    end
+end
+verify_unified_seed_schedule(rt_root, {'gsk', 'agsk'}, 'sphere');
+assert(numel(read_seeds(fullfile(rt_root, 'gsk', 'sphere'))) == 3, ...
+       'the reused unified run must be re-recorded in seed_schedule.csv');
+
+% ---- serial vs parfor -----------------------------------------------------
+if license('test', 'Distrib_Computing_Toolbox') && ~isempty(ver('parallel'))
+    [pool_ok, pool_note, pool_guard] = small_process_pool(); %#ok<ASGLU>
+    if pool_ok
+        task_matrix = [30 1 1; 30 2 1; 30 3 1; 30 1 2; 30 2 2; 30 3 2];
+        serial_fingerprints = seed_task_fingerprints(task_matrix, base_seed, selected_generator, false);
+        parallel_fingerprints = seed_task_fingerprints(task_matrix, base_seed, selected_generator, true);
+        assert(isequaln(serial_fingerprints, parallel_fingerprints), ...
+            'parfor workers must reproduce the unified seed and rng(seed,generator) draws');
+
+        % The runner's own parfor branch (per-worker problem, runner X0,
+        % sliced seeds/rows) must write the same artifacts as the serial loop.
+        common = {'optimizer', 'gsk', 'suite', 'sphere', 'functions', 1, 'dimensions', D, ...
+                  'runs', 3, 'base_seed', base_seed, 'max_nfes', 1200, 'project_root', project_root, ...
+                  'seed_policy', 'unified', 'rand_generator', 'threefry', 'verbose', false, ...
+                  'write_graphs', false, 'overwrite', true};
+        out_ser = fullfile(out_root, 'parcheck', 'serial');
+        out_par = fullfile(out_root, 'parcheck', 'parfor');
+        run_experiment(common{:}, 'output_dir', out_ser, 'use_parallel', false);
+        run_experiment(common{:}, 'output_dir', out_par, 'use_parallel', true);
+        assert(~isempty(gcp('nocreate')), 'runner parfor check ran without a pool');
+        strip_runtime = @(txt) regexprep(txt, '^((?:[^,\r\n]*,){10})[^,\r\n]*', '$1', 'lineanchors');
+        same = {fullfile('summary', 'seed_schedule.csv'), fullfile('summary', 'gsk_sphere_D10.csv'), ...
+                fullfile('gen_logs', 'CheckpointErrors_gsk_F1_D10.csv')};
+        for k = 1:numel(same)
+            assert(strcmp(fileread(fullfile(out_ser, same{k})), fileread(fullfile(out_par, same{k}))), ...
+                   'serial and parfor runner outputs differ: %s', same{k});
+        end
+        assert(strcmp(strip_runtime(fileread(fullfile(out_ser, 'summary', 'per_run.csv'))), ...
+                      strip_runtime(fileread(fullfile(out_par, 'summary', 'per_run.csv')))), ...
+               'serial and parfor runner per_run.csv differ (runtime column excluded)');
+        cs = dir(fullfile(out_ser, 'curves', '*.csv'));
+        cp = dir(fullfile(out_par, 'curves', '*.csv'));
+        assert(isequal({cs.name}, {cp.name}) && ...
+               strcmp(fileread(fullfile(cs(1).folder, cs(1).name)), fileread(fullfile(cp(1).folder, cp(1).name))), ...
+               'serial and parfor runner median curves differ');
+    else
+        fprintf('test_seed_policy: parfor checks skipped (%s)\n', pool_note);
+    end
 else
-    fprintf('test_seed_policy: parallel reproducibility check skipped (Parallel Computing Toolbox unavailable)\n');
+    fprintf('test_seed_policy: parfor checks skipped (Parallel Computing Toolbox unavailable)\n');
 end
 
 fprintf('test_seed_policy: PASS\n');
@@ -66,10 +181,64 @@ fields = strsplit(char(rows(2)), ',');
 seed = str2double(fields{4});
 end
 
+function seeds = read_seeds(out_dir)
+% Seed column of every seed_schedule.csv row, in file order.
+rows = readlines(fullfile(out_dir, 'summary', 'seed_schedule.csv'));
+rows = rows(strlength(strtrim(rows)) > 0);
+seeds = zeros(numel(rows) - 1, 1);
+for i = 2:numel(rows)
+    fields = strsplit(char(rows(i)), ',');
+    seeds(i - 1) = str2double(fields{4});
+end
+end
+
+function assert_rejected(call, what, out_dir)
+threw = false;
+try
+    call();
+catch err
+    threw = contains(err.message, what);
+end
+assert(threw, 'run_experiment must reject an invalid %s', what);
+assert(~exist(out_dir, 'dir'), 'a rejected call must not create the output tree');
+end
+
+function write_schedule(root, opt, rows)
+d = fullfile(root, opt, 'sphere', 'summary');
+if ~exist(d, 'dir'); mkdir(d); end
+fid = fopen(fullfile(d, 'seed_schedule.csv'), 'w');
+fprintf(fid, 'Dim,Function,Run,Seed\n');
+fprintf(fid, '%d,%d,%d,%d\n', rows');
+fclose(fid);
+end
+
+function [ok, note, guard] = small_process_pool()
+% A 2-worker process pool for the parfor checks (instead of letting parfor or
+% run_experiment open a pool with one worker per core); it is deleted again by
+% guard when this test created it. An existing thread pool is left alone (the
+% runner would replace it), so the checks are skipped then.
+ok = false;
+note = '';
+guard = [];
+pool = gcp('nocreate');
+if ~isempty(pool)
+    ok = isa(pool, 'parallel.ProcessPool');
+    if ~ok; note = 'an existing non-process pool is open'; end
+    return;
+end
+try
+    parpool('Processes', 2);
+    ok = true;
+    guard = onCleanup(@() delete(gcp('nocreate')));
+catch err
+    note = sprintf('could not start a process pool: %s', err.message);
+end
+end
+
 function fingerprints = seed_task_fingerprints(task_matrix, base_seed, rng_generator, use_parallel)
-% Exercise the same seed/X0 schedule in serial and parfor without running a
-% full optimizer. This keeps the reproducibility test independent of worker
-% startup quirks, MEX handles, plotting, and optimizer runtime.
+% Cheap worker check without a full optimizer run: parfor workers reproduce
+% rng(seed, generator) draws for the unified seed formula (not the runner's X0;
+% the run_experiment serial-vs-parfor comparison in test_seed_policy covers that).
 num_tasks = size(task_matrix, 1);
 fingerprints = zeros(num_tasks, 4);
 np = 8;

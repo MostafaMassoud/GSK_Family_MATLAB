@@ -30,6 +30,16 @@ actual_seed = gsk_set_rng(options);   % direct-call default 'twister'; selects t
 np_default = 100;
 np_init = local_option(options, 'np_init', np_default);
 min_pop_size = local_option(options, 'min_pop_size', 12);
+% The P = 0.05 senior partition needs non-empty best/worst blocks
+% (round(0.05*NP) >= 1 and NP - round(0.95*NP) >= 1), i.e. NP >= 11 for
+% every population size LPSR can reach. Checked before any RNG draw.
+if ~(isscalar(np_init) && isscalar(min_pop_size) && ...
+        min_pop_size >= 11 && np_init >= min_pop_size)
+    error('apgsk_optimize:options', ...
+        ['min_pop_size must be >= 11 (the P = 0.05 senior partition needs ' ...
+         'NP >= 11) and np_init >= min_pop_size; got np_init=%s, min_pop_size=%s'], ...
+        mat2str(np_init), mat2str(min_pop_size));
+end
 
 % Reference parameter pools. The negative secondary pool is named
 % "KF_poool" (sic) in the reference source; renamed kf_pool_negative here.

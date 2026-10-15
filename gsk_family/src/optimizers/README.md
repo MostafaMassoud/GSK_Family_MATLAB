@@ -9,18 +9,35 @@ apgsk/
 atmals-gsk/
 egsk/
 fdb-agsk/
+dt-gsk/
 ```
+
+`dt-gsk/` (DT-GSK, the seventh optimizer) holds three code files:
+`dt_gsk_optimize.m` (the whole optimizer), `dt_gsk_config.m` (the published
+`pub` profile by dimension tier) and `dt_gsk_graph.m` (the interaction graph
+used from D = 50). Its `README.md` is the authoritative record of behavior,
+source (DT-GSK reference implementation v2.46, Python, MIT license) and
+validation.
 
 Keep variant-specific behavior visible. Do not collapse materially different
 algorithms into flags on one shared implementation.
 
-All optimizer entry points seed through `src/common/gsk_set_rng.m`. Under
-`seed_policy='unified'`, `run_experiment.m` may also pass
-`options.initial_population` and `options.rng_state_after_initialization`; use
-the shared helpers so the runner controls the fair-start `X0` and post-`X0`
-RNG state without rewriting variant-specific search logic.
+The six original optimizer entry points seed through
+`src/common/gsk_set_rng.m`. Under `seed_policy='unified'`, `run_experiment.m`
+may also pass `options.initial_population` and
+`options.rng_state_after_initialization`; use the shared helpers so the runner
+controls the fair-start `X0` and post-`X0` RNG state without rewriting
+variant-specific search logic.
 
-Direct optimizer calls keep the conservative `twister` default, while
+DT-GSK is the exception: it derives named Threefry substreams from
+`options.seed`, never touches the global RNG, samples its own `NP = 5*D`
+initial population and ignores a runner `X0` (documented fair-start
+exception). `run_experiment` treats it as unified-only: it is scheduled with
+`get_cec_seed(base_seed, dim, func, run)` and `threefry` under every
+`seed_policy`, and the runner draws no `X0` for it.
+
+Direct optimizer calls keep the conservative `twister` default (DT-GSK requires
+`threefry`; empty/`auto`/`default` are accepted), while
 `run_experiment` resolves unified CEC benchmark runs to `threefry` when the
 installed MATLAB release supports it and falls back to `twister` otherwise.
 Seed values remain optimizer-independent in unified mode; algorithm names,

@@ -6,7 +6,7 @@
 > **For:** anyone profiling or speeding up `gsk_family` who must not change a
 > single result. **Prerequisites:** [Reproducibility](reproducibility.md) for
 > the seed/RNG contract that tunings must preserve; a working C++ build (see
-> [Runbook](../getting-started/runbook.md)). **After reading:** you will know how
+> [Runbook](../../../RUNBOOK.md)). **After reading:** you will know how
 > to run `gsk_bench`, the default-vs-native build trade-off and its numerical
 > equivalence proof, the indicative speedups, and which MATLAB changes are safe
 > vs. stream-breaking.
@@ -47,7 +47,7 @@ IEEE results; `-O3` does not reassociate FP without `-ffast-math`, which is
 never enabled. With the fix the **native build passes all 12 ctest suites (all
 that existed then; the later 13th, `gskcec_cli_exit_codes`, checks CLI exit codes,
 not numerics) at the same tolerances as the default build** - so the speedup below is free of
-any numerical cost. This is the mandate's "prove no numerical change" gate in
+any numerical cost. This is the project's "prove no numerical change" rule in
 action.
 
 ## Results (30000 evals/cell, GCC 16.1, one host; indicative, single-shot)
@@ -179,10 +179,10 @@ do not add optimizer-specific values while tuning code.
   order and therefore later trajectories.
 - Changing eGSK's `fmincon` options, IP trigger, or local-refinement budget is a
   behavioral change, not a performance tuning.
-- DT-GSK follows its Python reference's draw order per Threefry substream and
-  its floating-point operation order (sequential and NumPy-style pairwise sums,
-  stable sorts); vectorizing a sum or swapping a sort changes trajectories. A
-  speed rewrite must keep runs bit-identical to the current version, as the
+- DT-GSK follows its reference implementation's draw order per Threefry
+  substream and its floating-point operation order (sequential and pairwise
+  sums as the reference computes them, stable sorts); vectorizing a sum or
+  swapping a sort changes trajectories. A speed rewrite must keep runs bit-identical to the current version, as the
   compact three-file version did against the line-by-line port (see
   `src/optimizers/dt-gsk/README.md`).
 

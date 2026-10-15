@@ -1,7 +1,6 @@
 #pragma once
 
-// Umbrella header for the CEC2013 Large-Scale Global Optimization suite
-// function classes (gskcec::cec2013lsgo::F1..F15).
+// Includes every CEC2013-LSGO function class (gskcec::cec2013lsgo::F1..F15).
 
 #include "F1.h"
 #include "F2.h"

@@ -54,7 +54,7 @@ them bit-compatibly; they are flagged `[PRESERVE]` below.
 | `c_bifunc_data.mat` | needed by problem 3 — single variable `c` (10×4 double); full-precision values embedded in §Problem 3 below, so no MATLAB export is strictly required |
 | `messengerfull.mat` | needed by problem 21 — struct `MGADSMproblem`; fields enumerated in §Problem 21 (embedded) |
 | `cassini2.mat` | needed by problem 22 — struct `MGADSMproblem`; fields enumerated in §Problem 22 (embedded) |
-| `matlab.mat` (145 KB) | ORPHAN — loaded by nothing in the folder (verified by grep for `load`); no export needed |
+| `matlab.mat` (145 KB) | ORPHAN — loaded by nothing in the folder (verified by grep for `load`); no export needed; kept in `input_data/` for provenance only |
 
 ### GSK-optimizer / driver files — NOT part of the benchmark port
 - `GSK.m` — GSK optimizer driver (25 runs × 150,000 FEs, pop 100, loops func 1..22; historical source used a clock-based RNG seed, see §3)

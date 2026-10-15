@@ -1,16 +1,19 @@
 function test_mex_bridge()
 %TEST_MEX_BRIDGE Verify gskcec_eval evaluates the C++ ports correctly.
 %
-% Cross-checks the bridge against the MEX-derived ground truth in
-% benchmarks/cec_suite_cpp/cec_tools/tests/data/ (the same values the C++ unit tests
-% use), proving the bridge wiring: D x NP orientation, the 'info' struct,
-% batch evaluation, handle lifecycle (live handles keep the MEX locked so
-% 'clear' cannot recycle their ids), input validation (sparse X and
-% non-integer / non-finite integer arguments raise gskcec:badInput), and the
-% gskcec_require_mex load probe.
+% Compares the bridge with the MEX-derived ground truth in
+% benchmarks/cec_suite_cpp/cec_tools/tests/data/ (the same values the C++
+% unit tests use). Checks:
+%   - D x NP input (one candidate per column), the 'info' struct and
+%     batch evaluation;
+%   - handle lifecycle: a live handle keeps the MEX locked, so 'clear'
+%     cannot reuse its id;
+%   - input validation: sparse X and non-integer or non-finite integer
+%     arguments raise gskcec:badInput;
+%   - the gskcec_require_mex load probe.
 %
-% Skips with a clear message (not a failure) when the bridge has not been
-% built, so the smoke suite still runs without the optional MEX component.
+% If the bridge is not built, prints SKIP and returns (not a failure), so
+% the smoke suite still runs without the optional MEX component.
 
 here = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(here));
@@ -24,13 +27,13 @@ end
 data_root = fullfile(project_root, 'benchmarks', 'cec_suite_cpp', 'cec2017', 'input_data');
 test_data = fullfile(project_root, 'benchmarks', 'cec_suite_cpp', 'cec_tools', 'tests', 'data');
 
-% Ground truth: function, dimension, point index, expected f.
+% Ground truth columns: function, dimension, point index, expected f.
 expected = readmatrix(fullfile(test_data, 'cec2017_expected.csv'), 'FileType', 'text', ...
                       'NumHeaderLines', 3);
 points10 = readmatrix(fullfile(test_data, 'points_D10.txt'), 'FileType', 'text');
 assert(size(points10, 2) == 10, 'points_D10 must have 10 columns');
 
-% Single-problem correctness: cec2017 f1, D=10, all 5 probe points.
+% Single-problem correctness: CEC2017 f1, D = 10, all 5 probe points.
 h = gskcec_eval('new', 'cec2017', 1, 10, data_root);
 info = gskcec_eval('info', h);
 assert(info.dimension == 10, 'info dimension');
@@ -53,8 +56,9 @@ for p = 1:5
            p, f(p), exp_f, rel);
 end
 
-% Input validation: sparse X would expose only its nonzero buffer, and
-% integer arguments must not be silently truncated (1.7 -> 1, h+0.5 -> h).
+% Input validation: sparse X is rejected (the bridge would see only its
+% nonzero buffer), and integer arguments must not be silently truncated
+% (1.7 -> 1, h+0.5 -> h).
 expect_bad_input(@() gskcec_eval('eval', h, sparse(X)), 'sparse X');
 expect_bad_input(@() gskcec_eval('eval', h, sparse(10, 2)), 'all-zero sparse X');
 expect_bad_input(@() gskcec_eval('new', 'cec2017', 1.7, 10, data_root), 'non-integer function_id');
@@ -84,7 +88,7 @@ assert(mislocked('gskcec_eval'), 'bridge stays locked while any handle is live')
 gskcec_eval('free', h_other);
 assert(~mislocked('gskcec_eval'), 'freeing the last handle must unlock the bridge');
 
-% A second suite + handle lifecycle: cec2020 public f5 (internal 4), D=10.
+% Second suite and handle lifecycle: CEC2020 public f5 (internal 4), D = 10.
 h2 = gskcec_eval('new', 'cec2020', 5, 10, ...
                  fullfile(project_root, 'benchmarks', 'cec_suite_cpp', 'cec2020', 'input_data'));
 info2 = gskcec_eval('info', h2);
@@ -93,7 +97,7 @@ f2 = gskcec_eval('eval', h2, info2.lb');   % single column
 assert(isscalar(f2) && isfinite(f2), 'cec2020 single-column eval');
 gskcec_eval('free', h2);
 
-% Error handling surfaces as MATLAB errors.
+% Bridge errors surface as MATLAB errors (here: an invalid function id).
 threw = false;
 try
     gskcec_eval('new', 'cec2017', 99, 10, data_root);
@@ -105,7 +109,8 @@ assert(threw, 'invalid function id must raise');
 gskcec_eval('clear');
 assert(~mislocked('gskcec_eval'), '''clear'' must unlock the bridge');
 
-% The startup gate must accept a bridge that loads (it forces a real load).
+% The gskcec_require_mex startup check must accept a bridge that loads
+% (it forces a real load) and must not leave a live handle behind.
 addpath(fullfile(project_root, 'src', 'runners'));
 gskcec_require_mex(project_root, 'test_mex_bridge');
 assert(~mislocked('gskcec_eval'), 'the gskcec_require_mex probe must not create a handle');

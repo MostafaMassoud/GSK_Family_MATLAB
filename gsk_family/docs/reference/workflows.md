@@ -5,7 +5,7 @@
 > direct `run_experiment` call), validating output, spreading runs across cores,
 > and rebuilding the docs. **For:** anyone who wants the big-picture flow before
 > diving into a specific module. **Prerequisites:** a built toolchain plus the
-> MEX bridge (see [../getting-started/runbook.md](../getting-started/runbook.md))
+> MEX bridge (see the [Runbook](../../../RUNBOOK.md))
 > and the terms in [glossary.md](glossary.md). **After reading** you will know
 > which entry point to use for which job and have one worked end-to-end example.
 
@@ -50,8 +50,8 @@ The output root is `out_root / optimizer / suite` (`run_one` in `gsk_run.cpp`). 
 config that lists several optimizers runs and verifies every one of them even
 after an earlier one fails or `DEVIATES`, prints a per-optimizer summary, and
 exits with the first nonzero code. The accepted config keys and
-flag names are in the runbook's knob-mapping table
-([../getting-started/runbook.md](../getting-started/runbook.md)).
+flag names are in the Command Reference's knob-mapping table
+([../getting-started/command_reference.md](../getting-started/command_reference.md)).
 
 Preview without running (needs neither MATLAB nor the bridge):
 
@@ -103,7 +103,7 @@ runner's `X0` (see [seed_policy.md](seed_policy.md)).
 **Direct (`run_experiment`).** Call the runner yourself for one optimizer with
 full argument control. This is the high-level path; for custom variant
 parameters (population, `kf`, `fdb_case`, ...) or a custom single seed, use the
-lower-level `gskcec_make_problem` + `<opt>_optimize` path shown in the runbook.
+lower-level `gskcec_make_problem` + `<opt>_optimize` path shown in the Command Reference.
 
 ```matlab
 cd('<repo>/gsk_family/src/runners')
@@ -120,7 +120,7 @@ A direct `run_experiment(...)` call defaults to `seed_policy='unified'` and
 C++ post-run verification step - that is performed by `gsk_run.exe` or, on
 demand, by `gsk_validate.exe --verify` (see below). The argument-to-knob mapping
 (functions, dimensions, budget, runs, seed, policy) is the same table the CLI
-flags map to; see the runbook.
+flags map to; see the Command Reference.
 
 ## Worked End-to-End Example
 
@@ -232,7 +232,8 @@ Toolbox). Where per-run reference evidence exists, as for DT-GSK on CEC2017,
 ```text
 compare_reference_runs(generated, reference, ['alpha',0.05, 'out','comparison.csv'])
   -> per (dimension, function): Best / Median / Mean of each set
-  -> magnitude check: Median and Mean agree within 'decades' orders of magnitude
+  -> both sides rounded to 'sig_digits' (11) significant digits first
+  -> magnitude check: Best, Median and Mean agree within 'decades' orders of magnitude
   -> two-sided Wilcoxon rank-sum (ranksum) at alpha; paired signed-rank when the
      seeds match (informational)
   -> MATCH / DIFFERS per cell; Holm-adjusted rank-sum p-values across cells
@@ -276,7 +277,7 @@ recorded in `environment.json` (`use_parallel`, `initial_population_policy`). Se
 ## Documentation Workflow
 
 Documentation is maintained as Markdown under `docs/` - that is the source of
-truth. There is no Python anywhere in this project; the browsable HTML site is
+truth. The browsable HTML site is
 built by a PowerShell script that renders the tracked Markdown (via Pandoc, with
 a built-in minimal fallback when Pandoc is absent or older than 3.8), generates
 the C++ API

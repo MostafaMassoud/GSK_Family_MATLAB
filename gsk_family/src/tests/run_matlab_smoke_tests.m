@@ -4,15 +4,15 @@ function run_matlab_smoke_tests()
 % Usage (CI / command line):
 %   matlab -batch "cd('<repo>/src/tests'); run_matlab_smoke_tests"
 %
-% Discovers every test_*.m in this folder dynamically with dir() (tests
-% added later are picked up automatically), runs each test function in a
-% try/catch, prints PASS/FAIL per test, and ends with error() if any test
-% failed so that matlab -batch exits nonzero.
+% Finds every test_*.m in this folder at run time, so new tests are picked
+% up automatically. Runs each test in try/catch and prints PASS or FAIL.
+% Raises run_matlab_smoke_tests:failed if any test fails, so that
+% matlab -batch exits nonzero.
 
 this_dir = fileparts(mfilename('fullpath'));
 src_dir = fileparts(this_dir);
 
-% Make the tests, the shared helpers and every optimizer reachable.
+% Put the tests, the shared helpers and all optimizers on the path.
 addpath(this_dir);
 addpath(genpath(src_dir));
 

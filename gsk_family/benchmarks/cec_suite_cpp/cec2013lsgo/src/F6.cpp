@@ -25,14 +25,14 @@ double F6::compute(const double* x) {
         anotherz[i] = x[i] - Ovector[i];
     }
 
-    // s_size non-separable parts with rotation
+    // s_size rotated, non-separable groups, weighted by w[i]
     int c = 0;
     for (i = 0; i < s_size; i++) {
         std::vector<double>& anotherz1 = rotateVector(i, c);
         result += w[i] * ackley(anotherz1.data(), s[i]);
     }
 
-    // one separable part without rotation
+    // Remaining coordinates: one separable part, no rotation
     std::vector<double> z(static_cast<std::size_t>(dimension - c));
     for (i = c; i < dimension; i++) {
         z[i - c] = anotherz[Pvector[i]];

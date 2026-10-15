@@ -16,12 +16,11 @@ namespace gskcec::cec2013lsgo {
 
 namespace {
 
-// Reads every numeric value from a text file, treating commas as
-// separators in addition to whitespace. This reproduces the token stream
-// of the reference line/comma parsers for the comma-separated permutation
-// (F<ID>-p.txt) and rotation matrix (F<ID>-R*.txt) files. Throws
-// std::runtime_error naming the file path when the file is missing,
-// unreadable, empty or contains a non-numeric token.
+// Reads every number in a text file; commas count as separators, like
+// whitespace. This gives the same values as the reference parsers for the
+// comma-separated permutation (F<ID>-p.txt) and rotation matrix
+// (F<ID>-R*.txt) files. Throws std::runtime_error naming the path when the
+// file is missing, unreadable, empty or has a non-numeric token.
 std::vector<double> readNumberList(const std::filesystem::path& path) {
     require_file(path);
     std::ifstream file(path);
@@ -66,18 +65,14 @@ void requireValueCount(const std::vector<double>& values, std::size_t expected,
     }
 }
 
-// --- per-dim pow caches (GROUP A: bit-identical) -------------------------
-//
-// elliptic() and Lambda() call std::pow(const_base, f(i, dim)) for every
-// coordinate on every evaluation, where the exponent depends only on i and
-// dim (not on the input values). Caching the per-index pow results keyed by
-// dim turns a pow() per coordinate per call into a table lookup. The cached
-// doubles are produced by the SAME std::pow(base, exponent) expression with
-// the SAME operands, so reusing them is bit-identical to recomputing.
-//
-// thread_local because the surrounding class documents one instance per
-// thread; this keeps the cache lock-free while staying safe if separate
-// worker threads each construct their own benchmark objects.
+// ---- Per-dimension pow caches ----
+// elliptic() and Lambda() need std::pow(base, f(i, dim)) for every
+// coordinate on every evaluation, and the exponent depends only on i and
+// dim, not on x. These tables store the values per dim (and per alpha for
+// Lambda), so each call does a lookup instead of a pow(). The values come from the same std::pow
+// expression with the same operands, so results match bit for bit.
+// thread_local: each thread uses its own problem instances, so each thread
+// keeps its own cache and no lock is needed.
 
 // elliptic: pow(1.0e6, i / (double)(dim-1)), i in [0, dim).
 const std::vector<double>& ellipticPowTable(int dim) {
@@ -131,8 +126,8 @@ std::vector<std::vector<double>> Benchmarks::readOvectorVec() const {
         total += static_cast<std::size_t>(s[i]);
     }
     requireValueCount(values, total, path);
-    // Same grouping as the reference reader: group i takes the next s[i]
-    // consecutive values of the file.
+    // As in the reference reader: group i takes the next s[i] values of the
+    // file.
     std::vector<std::vector<double>> groups(static_cast<std::size_t>(s_size));
     auto group_begin = values.begin();
     for (int i = 0; i < s_size; ++i) {
@@ -148,7 +143,7 @@ std::vector<int> Benchmarks::readPermVector() const {
     requireValueCount(values, static_cast<std::size_t>(dimension), path);
     std::vector<int> perm(values.size());
     for (std::size_t i = 0; i < values.size(); ++i) {
-        perm[i] = static_cast<int>(values[i] - 1.0); // reference: stod(value) - 1 into int
+        perm[i] = static_cast<int>(values[i] - 1.0); // reference: int(stod(value) - 1)
         if (perm[i] < 0 || perm[i] >= dimension) {
             throw std::runtime_error("Permutation index " + std::to_string(values[i]) +
                                      " out of range [1," + std::to_string(dimension) +
@@ -163,7 +158,7 @@ std::vector<std::vector<double>> Benchmarks::readR(int sub_dim) const {
     const std::vector<double> values = readNumberList(path);
     const std::size_t n = static_cast<std::size_t>(sub_dim);
     requireValueCount(values, n * n, path);
-    // Row-major file layout (one matrix row per line), as the reference read it.
+    // Row-major: one matrix row per line, as the reference reads it.
     std::vector<std::vector<double>> m(n, std::vector<double>(n));
     for (std::size_t i = 0; i < n; ++i) {
         for (std::size_t j = 0; j < n; ++j) {
@@ -179,7 +174,7 @@ std::vector<int> Benchmarks::readS(int num) const {
     requireValueCount(values, static_cast<std::size_t>(num), path);
     std::vector<int> sizes(values.size());
     for (std::size_t i = 0; i < values.size(); ++i) {
-        sizes[i] = static_cast<int>(values[i]); // reference: stod(value) into int
+        sizes[i] = static_cast<int>(values[i]); // reference: int(stod(value))
     }
     return sizes;
 }
@@ -191,10 +186,9 @@ std::vector<double> Benchmarks::readW(int num) const {
     return values;
 }
 
-// --- transformation chain (verbatim from the reference) ---
+// ---- Transformations (same as the reference) ----
 
 void Benchmarks::transform_osz(double* z, int dim) const {
-    // apply osz transformation to z
     for (int i = 0; i < dim; ++i) {
         z[i] = sign(z[i]) *
                std::exp(hat(z[i]) +
@@ -211,8 +205,8 @@ void Benchmarks::transform_asy(double* z, double beta, int dim) const {
 }
 
 void Benchmarks::Lambda(double* z, double alpha, int dim) const {
-    // GROUP A: pow(alpha, 0.5*i/(dim-1)) depends only on (alpha, i, dim) and is
-    // served from a per-dim cache; the multiply order/operands are unchanged.
+    // pow(alpha, 0.5*i/(dim-1)) comes from the per-dim cache; the multiply
+    // is as in the reference, so results match bit for bit.
     const std::vector<double>& lambdaPow = lambdaPowTable(alpha, dim);
     for (int i = 0; i < dim; ++i) {
         z[i] = z[i] * lambdaPow[static_cast<std::size_t>(i)];
@@ -246,7 +240,7 @@ double Benchmarks::c2(double x) {
     return 3.1;
 }
 
-// --- basic functions (verbatim formulas and loop order) ---
+// ---- Basic functions (same formulas and loop order as the reference) ----
 
 double Benchmarks::elliptic(double* x, int dim) const {
     double result = 0.0;
@@ -254,8 +248,8 @@ double Benchmarks::elliptic(double* x, int dim) const {
 
     transform_osz(x, dim);
 
-    // GROUP A: pow(1.0e6, i/(dim-1)) depends only on (i, dim) and is served
-    // from a per-dim cache; the accumulation order/operands are unchanged.
+    // pow(1.0e6, i/(dim-1)) comes from the per-dim cache; the sum is as in
+    // the reference, so results match bit for bit.
     const std::vector<double>& ellipticPow = ellipticPowTable(dim);
     for (i = 0; i < dim; i++) {
         result += ellipticPow[static_cast<std::size_t>(i)] * x[i] * x[i];
@@ -332,7 +326,7 @@ double Benchmarks::sphere(double* x, int dim) const {
     int i;
 
     for (i = dim - 1; i >= 0; i--) {
-        sum += x[i] * x[i]; // GROUP B: std::pow(x[i], 2) -> x[i]*x[i] (<=1 ULP)
+        sum += x[i] * x[i]; // reference: std::pow(x[i], 2); <= 1 ULP apart
     }
 
     return sum;
@@ -354,7 +348,7 @@ double Benchmarks::rosenbrock(double* x, int dim) const {
     return s;
 }
 
-// --- rotation helpers (verbatim logic; buffers returned by value) ---
+// ---- Rotation helpers (same logic as the reference) ----
 
 std::vector<double> Benchmarks::multiply(const double* z,
                                          const std::vector<std::vector<double>>& matrix,
@@ -375,8 +369,7 @@ std::vector<double> Benchmarks::multiply(const double* z,
 void Benchmarks::multiply_into(double* out, const double* z,
                                const std::vector<std::vector<double>>& matrix,
                                int dim) const {
-    // Identical accumulation to multiply() (same i/j order, same operands);
-    // only the destination differs (caller buffer instead of a fresh vector).
+    // Same loops and operands as multiply(); only the output buffer differs.
     for (int i = dim - 1; i >= 0; i--) {
         out[i] = 0;
 
@@ -396,8 +389,8 @@ const std::vector<std::vector<double>>& Benchmarks::rotationMatrixFor(int subDim
     if (subDimension == 100) {
         return r100;
     }
-    // Reference printed "size of rotation matrix out of range" and went on
-    // with a stale buffer; surface it as an error instead.
+    // The reference printed "size of rotation matrix out of range" and went
+    // on with a stale buffer; here it is an error.
     throw std::runtime_error("cec2013lsgo F" + std::to_string(ID) +
                              ": rotation matrix size out of range: " +
                              std::to_string(subDimension));
@@ -408,7 +401,7 @@ std::vector<double>& Benchmarks::rotateVector(int i, int& c) const {
     if (z_scratch_.size() < n) z_scratch_.resize(n);
     if (rot_scratch_.size() < n) rot_scratch_.resize(n);
 
-    // copy values into the scratch vector
+    // Gather the permuted subcomponent into the scratch vector
     for (int j = c; j < c + s[i]; ++j) {
         z_scratch_[j - c] = anotherz[Pvector[j]];
     }
@@ -423,7 +416,8 @@ std::vector<double>& Benchmarks::rotateVectorConform(int i, int& c) const {
     if (z_scratch_.size() < n) z_scratch_.resize(n);
     if (rot_scratch_.size() < n) rot_scratch_.resize(n);
 
-    // copy values into the scratch vector
+    // Gather the subcomponent. It starts at c - i * overlap, so it shares
+    // `overlap` positions with the previous group.
     for (int j = c - i * overlap; j < c + s[i] - i * overlap; ++j) {
         z_scratch_[j - (c - i * overlap)] = anotherz[Pvector[j]];
     }
@@ -438,7 +432,7 @@ std::vector<double>& Benchmarks::rotateVectorConflict(int i, int& c, const doubl
     if (z_scratch_.size() < n) z_scratch_.resize(n);
     if (rot_scratch_.size() < n) rot_scratch_.resize(n);
 
-    // copy values into the scratch vector
+    // Gather the overlapping subcomponent and subtract its own shift group
     for (int j = c - i * overlap; j < c + s[i] - i * overlap; ++j) {
         z_scratch_[j - (c - i * overlap)] = x[Pvector[j]] - OvectorVec[i][j - (c - i * overlap)];
     }

@@ -1,21 +1,21 @@
-// cec2011_wpa_tests.cpp -- validation harness for the CEC2011 work package A
-// port (problems 1-8 and 10; benchmarks/cec_suite_cpp/cec2011/src/cec2011_problems_a.cpp).
+// cec2011_wpa_tests.cpp -- tests for CEC2011 work package A: problems 1-8
+// and 10 (benchmarks/cec_suite_cpp/cec2011/src/cec2011_problems_a.cpp).
 //
-// Ground truth: MATLAB R2025b evaluations of the reference code
-// (Calc_Fitx_2011, including the NaN->0 rule) stored in
-//   tests/data/cec2011_bounds.txt      -- define_boundaries.m bounds (0 ulp)
+// Reference values: MATLAB R2025b runs of the original code
+// (Calc_Fitx_2011, including its NaN -> 0 rule), stored in
+//   tests/data/cec2011_bounds.txt       -- define_boundaries.m bounds (0 ulp)
 //   tests/data/cec2011_points_F<fn>.txt -- 3 probe rows (mid, q1, q3)
 //   tests/data/cec2011_expected.csv     -- (function,probe,f) at %.17g
 //
-// Gates:
-//   * dimension and suite metadata per problem;
-//   * bounds equal the MATLAB export bit-for-bit (0 ulp);
-//   * probe objectives within relative 1e-12 of MATLAB, where
-//     |got - exp| <= tol * max(1, |exp|). Problems 3 and 4 run through the
-//     re-implemented MATLAB ode45; they are gated at 1e-12 as well -- the
-//     replica reproduces MATLAB's exact step sequence and the only residual
-//     deviation is C-runtime vs MATLAB libm 1-ulp noise in exp/pow.
-//   * error handling: wrong evaluate() size and out-of-package ids throw
+// Checks:
+//   * dimension and suite metadata of each problem;
+//   * bounds equal the MATLAB export bit for bit (0 ulp);
+//   * probe objectives within relative 1e-12 of MATLAB, i.e.
+//     |got - exp| <= tol * max(1, |exp|). Problems 3 and 4 use a
+//     re-implementation of MATLAB's ode45 and pass 1e-12 too: it reproduces
+//     MATLAB's exact step sequence, and the only remaining difference is
+//     1-ulp noise in exp/pow between the C runtime and MATLAB's libm.
+//   * a wrong evaluate() input size and ids outside the package throw
 //     std::invalid_argument.
 //
 // Usage: cec2011_wpa_tests [project_root]   (default ".")
@@ -61,7 +61,7 @@ std::string format_value(double value) {
 const std::vector<std::pair<int, int>> kProblems = {
     {1, 6}, {2, 30}, {3, 1}, {4, 1}, {5, 30}, {6, 30}, {7, 20}, {8, 7}, {10, 12}};
 
-// Whitespace tokens of a text file with '#' comment lines removed.
+// Splits a text file into whitespace-separated tokens, skipping '#' lines.
 std::vector<std::string> read_tokens(const std::filesystem::path& path) {
     std::ifstream in(path);
     if (!in) {
@@ -167,10 +167,9 @@ int main(int argc, char** argv) {
     const std::filesystem::path data_root = root / "benchmarks" / "cec_suite_cpp" / "cec2011" / "input_data";
     const std::filesystem::path test_data = root / "benchmarks" / "cec_suite_cpp" / "cec_tools" / "tests" / "data";
 
-    // Relative tolerance gates. Problems 3-4 (MATLAB ode45 replica) achieved
-    // the same 1e-12 gate as the closed-form problems in validation runs; if
-    // a future toolchain's libm perturbs the step sequence, this is the knob
-    // the port plan says to document and adjust.
+    // Relative tolerances. Problems 3-4 (ode45 re-implementation) pass the
+    // same 1e-12 limit as the closed-form problems. If another toolchain's
+    // libm changes the ode45 step sequence, adjust kTolOde and document why.
     const double kTolClosedForm = 1e-12;
     const double kTolOde = 1e-12;
 
@@ -201,7 +200,7 @@ int main(int argc, char** argv) {
         check(problem->dimension() == dim, tag + " dimension is " + std::to_string(dim));
         check(std::isnan(problem->optimum()), tag + " optimum is NaN (no published optimum)");
 
-        // Bounds: exact (0 ulp) match against the MATLAB export.
+        // Bounds must match the MATLAB export exactly (0 ulp).
         const auto bounds_it = bounds_records.find(fn);
         check(bounds_it != bounds_records.end(), tag + " bounds present in cec2011_bounds.txt");
         if (bounds_it != bounds_records.end()) {
@@ -269,9 +268,9 @@ int main(int argc, char** argv) {
         check(threw_invalid, tag + " evaluate rejects wrong dimension with std::invalid_argument");
     }
 
-    // Problem 8 maps the inclusive lower bound x == 0 to candidate index 1.
-    // This keeps the published [0,15] bound usable for optimizers that land
-    // exactly on lb; it is equivalent to any tiny positive value.
+    // Problem 8 maps x == 0 (its inclusive lower bound) to candidate index 1,
+    // the same as any tiny positive value, so the published [0,15] bound
+    // works for optimizers that land exactly on lb.
     {
         const auto p8 = gskcec::cec2011::detail::make_problem_wpa(8, data_root);
         const gskcec::Vector zeros(7, 0.0);
@@ -283,8 +282,8 @@ int main(int argc, char** argv) {
               "f8 x == 0 maps to the first candidate index");
     }
 
-    // Problem 3 requires c_bifunc_data.txt; a bad data root must surface as
-    // std::runtime_error naming the asset.
+    // Problem 3 needs c_bifunc_data.txt; a bad data root must throw
+    // std::runtime_error naming the file.
     {
         bool threw_runtime = false;
         try {
@@ -296,7 +295,7 @@ int main(int argc, char** argv) {
         check(threw_runtime, "f3 with missing data root throws std::runtime_error");
     }
 
-    // Ids outside the work package must be rejected with std::invalid_argument.
+    // Ids outside the work package must throw std::invalid_argument.
     for (const int bad_id : {0, 9, 11, 20, 23}) {
         bool threw_invalid = false;
         try {

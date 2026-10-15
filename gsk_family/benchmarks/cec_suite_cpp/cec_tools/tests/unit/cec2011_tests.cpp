@@ -1,8 +1,8 @@
-// CEC2011 suite-level integration test: exercises the public dispatcher
-// (gskcec::cec2011::make_problem) and the generic factory across all 22
-// problems against the MATLAB-generated ground truth. The per-work-package
-// tests (cec2011_wpa/wpb/wpc_tests.cpp) cover construction details; this
-// one proves the assembled suite.
+// CEC2011 suite test: checks the public dispatcher
+// (gskcec::cec2011::make_problem) and the generic factory on all 22
+// problems against reference values exported from MATLAB. The
+// cec2011_wpa/wpb/wpc_tests.cpp files test each problem's construction;
+// this file tests the whole suite.
 
 #include "gskcec/benchmark/cec2011.hpp"
 #include "gskcec/benchmark/factory.hpp"
@@ -130,7 +130,7 @@ int main(int argc, char** argv) {
             check(gskcec::cec2011::native_dimension(fn) == ref.dimension,
                   "native_dimension matches MATLAB export for f" + std::to_string(fn));
 
-            // Through the generic factory with dimension 0 (native).
+            // Generic factory; dimension 0 means the problem's native D.
             const auto problem = gskcec::make_problem("cec2011", fn, 0, data_root);
             check(problem->suite_name() == "cec2011", "suite name f" + std::to_string(fn));
             check(problem->function_id() == fn, "function id f" + std::to_string(fn));
@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
         }
         std::cout << "max relative probe deviation: " << max_rel << " (f" << worst_fn << ")\n";
 
-        // Dispatcher/factory error handling.
+        // Ids 0 and 23 and a non-native D must throw std::invalid_argument.
         bool threw = false;
         try {
             (void)gskcec::cec2011::make_problem(0, data_root);

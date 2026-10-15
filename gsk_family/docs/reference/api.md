@@ -63,9 +63,6 @@ This split mirrors the project's language boundary: algorithms in MATLAB under
   If this prints nothing, `dot` is not installed - that is fine; see "Graphviz"
   below.
 
-No Python is involved at any step (the project forbids it, including in
-doc tooling).
-
 ## Generate the docs
 
 From the **project root** (the folder with `CMakeLists.txt`):

@@ -8,6 +8,9 @@
 
 namespace gskcec {
 
+/// Box constraints of a problem: one [lower, upper] range per coordinate
+/// (length D). The constructor throws std::invalid_argument when D == 0,
+/// the lengths differ, or a lower value is above its upper value (or NaN).
 class Bounds {
 public:
     Bounds() = default;
@@ -21,8 +24,8 @@ public:
             throw std::invalid_argument("Bounds lower/upper dimensions differ.");
         }
         for (Index i = 0; i < lower_.size(); ++i) {
-            // <= rather than <: CEC2011 problem 12 fixes unit 10 at
-            // Pmin == Pmax == 55, a legitimate zero-width range.
+            // lower == upper is allowed: CEC2011 problem 12 fixes unit 10
+            // at Pmin == Pmax == 55, a valid zero-width range.
             if (!(lower_[i] <= upper_[i])) {
                 throw std::invalid_argument("Bounds lower value must not exceed upper value at index " + std::to_string(i) + ".");
             }
@@ -56,6 +59,8 @@ public:
         validate_dimension(x.size());
     }
 
+    /// Moves each out-of-range coordinate of @p candidate halfway between
+    /// @p parent and the bound it crossed.
     void repair_midpoint(Vector& candidate, const Vector& parent) const {
         validate_vector(candidate);
         validate_vector(parent);

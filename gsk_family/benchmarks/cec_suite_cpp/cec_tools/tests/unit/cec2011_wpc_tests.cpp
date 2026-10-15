@@ -1,24 +1,21 @@
-// cec2011_wpc_tests.cpp -- validation harness for work package C of the
-// CEC2011 port (cec2011_problems_c.cpp): problems 21 (Messenger full
-// mission) and 22 (Cassini 2), both MGA-DSM trajectory costs sharing the
-// mga_dsm.m astrodynamics core.
+// cec2011_wpc_tests.cpp -- tests for CEC2011 work package C
+// (cec2011_problems_c.cpp): problems 21 (Messenger full mission) and
+// 22 (Cassini 2), both MGA-DSM trajectory costs built on the mga_dsm.m
+// astrodynamics core.
 //
-// Layers:
+// Checks:
 //   1. Metadata: suite name, ids, dimensions (26 / 22), NaN optimum.
-//   2. Bounds: exact (bitwise) match against the MATLAB-exported
-//      tests/data/cec2011_bounds.txt -- independently confirms the
-//      dossier-flagged quirk that P22 element 9 lower bound is 400
-//      (define_boundaries.m, GSK-canonical) and NOT the 800 of
-//      getlimit_cassini2.m / the .mat bounds field.
-//   3. Ground truth: the 3 probe vectors per problem from
-//      tests/data/cec2011_points_F21.txt / _F22.txt evaluated against the
-//      MATLAB R2025b reference values in tests/data/cec2011_expected.csv
-//      (Calc_Fitx_2011, includes the NaN->0 rule) at RELATIVE 1e-12.
-//      The achieved agreement is printed per probe; see the tolerance
-//      note above kProbeTolerance.
-//   4. Determinism (bit-identical repeat evaluations), wrong-size
-//      argument errors, unsupported-id errors (20, 23 -> the work-package
-//      factory owns only 21/22).
+//   2. Bounds: bit-for-bit match with the MATLAB-exported
+//      tests/data/cec2011_bounds.txt. This also confirms the known quirk
+//      that the P22 element 9 lower bound is 400 (define_boundaries.m, as
+//      used by GSK), not the 800 of getlimit_cassini2.m / the .mat bounds.
+//   3. Reference values: the 3 probe vectors per problem from
+//      tests/data/cec2011_points_F21.txt / _F22.txt must match the MATLAB
+//      R2025b values in tests/data/cec2011_expected.csv (Calc_Fitx_2011,
+//      with the NaN -> 0 rule) within RELATIVE 1e-12. The worst error per
+//      problem is printed; see the note above kProbeTolerance.
+//   4. Repeat evaluations are bit-identical; wrong input sizes and ids 20
+//      and 23 throw std::invalid_argument (this factory handles only 21/22).
 //
 // Usage: cec2011_wpc_tests [project_root]   (default ".")
 
@@ -62,15 +59,14 @@ std::string format_value(double value) {
     return buffer;
 }
 
-// Probe tolerance: RELATIVE 1e-12 against the MATLAB ground truth, as
-// required by the port plan; the gate is met, no relaxation was needed.
-// Achieved agreement (printed as NOTE lines) is ~2e-13 worst-case on the
-// MinGW UCRT toolchain: the port reproduces MATLAB's mod/dot/norm/sum
-// kernels bitwise (see cec2011_problems_c.cpp), so the residual is
-// elementary-function scatter (MATLAB's libm vs UCRT's differ by ~1 ulp
-// per sin/cos/acos/... call) amplified through 5-6 chained swingby legs.
-// If a toolchain/libm change ever pushes a probe above 1e-12, compare
-// per-leg DV values against the reference before loosening this gate.
+// Probe tolerance: RELATIVE 1e-12 against the MATLAB reference values.
+// The worst observed error (printed as NOTE lines) is ~2e-13 on the MinGW
+// UCRT toolchain. The port reproduces MATLAB's mod/dot/norm/sum kernels bit
+// for bit (see cec2011_problems_c.cpp); the remaining error comes from
+// ~1 ulp differences per sin/cos/acos/... call between MATLAB's libm and
+// UCRT's, amplified over 5-6 chained swingby legs. If a toolchain or libm
+// change pushes a probe above 1e-12, compare per-leg DV values with the
+// reference before loosening this limit.
 constexpr double kProbeTolerance = 1e-12;
 
 double rel_error(double actual, double expected) {
@@ -84,7 +80,7 @@ double rel_error(double actual, double expected) {
     return std::fabs(actual - expected) / scale;
 }
 
-// Bounds file: '#' comment lines, then per function "fn n" followed by a
+// Bounds file: '#' comment lines, then for each function "fn n", a
 // lower-bound row and an upper-bound row of n values each.
 struct BoundsEntry {
     int dimension = 0;
@@ -188,9 +184,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path tests_data = root / "benchmarks" / "cec_suite_cpp" / "cec_tools" / "tests" / "data";
 
     try {
-        /* -------------------------------------------------------- */
-        /* Construction + metadata                                   */
-        /* -------------------------------------------------------- */
+        // ---- Construction and metadata ----
         const auto p21 = gskcec::cec2011::detail::make_problem_wpc(21, data_root);
         const auto p22 = gskcec::cec2011::detail::make_problem_wpc(22, data_root);
 
@@ -203,9 +197,7 @@ int main(int argc, char** argv) {
         check(std::isnan(p21->optimum()), "f21 optimum() is NaN (no published optimum)");
         check(std::isnan(p22->optimum()), "f22 optimum() is NaN (no published optimum)");
 
-        /* -------------------------------------------------------- */
-        /* Bounds vs MATLAB-exported cec2011_bounds.txt (exact)      */
-        /* -------------------------------------------------------- */
+        // ---- Bounds vs MATLAB-exported cec2011_bounds.txt (exact) ----
         const auto bounds_table = load_bounds_file(tests_data / "cec2011_bounds.txt");
         for (const auto* problem : {p21.get(), p22.get()}) {
             const int fn = problem->function_id();
@@ -234,9 +226,9 @@ int main(int argc, char** argv) {
             check(lower_ok, tag + " lower bounds match define_boundaries export exactly");
             check(upper_ok, tag + " upper bounds match define_boundaries export exactly");
         }
-        // The dossier-flagged quirk, asserted explicitly: Cassini 2
-        // element 9 (1-based) lower bound is 400 per define_boundaries.m,
-        // NOT the 800 of getlimit_cassini2.m / the .mat bounds field.
+        // Known quirk, checked explicitly: the Cassini 2 element 9 (1-based)
+        // lower bound is 400 per define_boundaries.m, not the 800 of
+        // getlimit_cassini2.m / the .mat bounds field.
         check(p22->bounds().lower()[8] == 400.0,
               "f22 element 9 lower bound is the GSK-canonical 400 (not GTOP's 800)");
         const auto bounds22 = bounds_table.find(22);
@@ -245,9 +237,7 @@ int main(int argc, char** argv) {
                   "bounds file independently confirms f22 element 9 lower bound 400");
         }
 
-        /* -------------------------------------------------------- */
-        /* Ground-truth probes vs MATLAB (relative 1e-12)            */
-        /* -------------------------------------------------------- */
+        // ---- Reference probes vs MATLAB (relative 1e-12) ----
         const auto expected_csv = load_expected_csv(tests_data / "cec2011_expected.csv");
         for (const auto* problem : {p21.get(), p22.get()}) {
             const int fn = problem->function_id();
@@ -276,9 +266,7 @@ int main(int argc, char** argv) {
                       << format_value(worst) << "\n";
         }
 
-        /* -------------------------------------------------------- */
-        /* Determinism: repeat evaluations are bit-identical         */
-        /* -------------------------------------------------------- */
+        // ---- Determinism: repeat evaluations are bit-identical ----
         for (const auto* problem : {p21.get(), p22.get()}) {
             const int fn = problem->function_id();
             const auto points = load_probe_points(
@@ -292,9 +280,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        /* -------------------------------------------------------- */
-        /* Error handling                                            */
-        /* -------------------------------------------------------- */
+        // ---- Error handling ----
         {
             bool threw = false;
             try {

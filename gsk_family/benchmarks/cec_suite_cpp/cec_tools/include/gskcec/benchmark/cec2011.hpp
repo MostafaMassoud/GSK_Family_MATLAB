@@ -10,31 +10,30 @@ namespace gskcec::cec2011 {
 
 /// Creates a CEC2011 real-world benchmark problem.
 ///
-/// Ported from the CEC2011 real-world MATLAB package
-/// (define_boundaries.m, Calc_Fitx_2011.m, bench_func.m and dependent
-/// objective files) into standalone C++. Problem dimensions and bounds
-/// vary per problem and are fixed by the suite. Former .mat data
-/// dependencies are converted into plain text assets in @p data_root.
+/// Standalone C++ port of the CEC2011 MATLAB package (define_boundaries.m,
+/// Calc_Fitx_2011.m, bench_func.m and the objective files they call).
+/// Each problem has its own fixed dimension and bounds. The original .mat
+/// data is stored as plain text files in @p data_root.
 ///
-/// Known reference quirks that are preserved and documented in
-/// docs/reference/porting_notes.md include the reference NaN-to-zero fitness rule.
-/// Most problems have no published optimum; optimum() returns NaN for
-/// those and error reporting must fall back to raw objectives.
+/// Reference quirks are kept on purpose, including the rule that a NaN
+/// fitness becomes 0 (see docs/reference/porting_notes.md). optimum()
+/// returns NaN for every problem (most have no published optimum), so
+/// results use raw objective values instead of errors.
 ///
-/// @param function_id  1..22 in the GSK reference numbering.
-/// @param data_root    Directory holding the converted CEC2011 data assets.
+/// @param function_id  1..22, numbered as in the GSK reference code.
+/// @param data_root    Directory with the converted CEC2011 data files.
 /// @throws std::invalid_argument for unsupported function ids.
-/// @throws std::runtime_error when a required data asset is missing/bad.
+/// @throws std::runtime_error when a required data file is missing or bad.
 std::unique_ptr<BenchmarkProblem> make_problem(int function_id,
                                                const std::filesystem::path& data_root);
 
-/// Function ids exposed by the suite (1..22).
+/// Function ids in the suite (1..22).
 const std::vector<int>& supported_functions();
 
-/// Native dimension of @p function_id (fixed per problem).
+/// Fixed dimension of problem @p function_id.
 int native_dimension(int function_id);
 
-/// Evaluation budget used by the GSK CEC2011 reference drivers (150000).
+/// Evaluation budget (max_nfes) of the GSK CEC2011 reference drivers.
 inline constexpr long long reference_budget = 150000;
 
 } // namespace gskcec::cec2011

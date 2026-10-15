@@ -9,6 +9,7 @@ namespace gskcec {
 
 namespace {
 
+// Throws std::runtime_error("Config error <file>:<line>: <message>").
 [[noreturn]] void fail(const std::filesystem::path& path, std::size_t line_no, const std::string& message) {
     throw std::runtime_error("Config error " + path.string() + ":" + std::to_string(line_no) + ": " + message);
 }
@@ -78,7 +79,7 @@ std::vector<int> parse_int_list_or_all(const std::filesystem::path& path, std::s
     }
     const auto tokens = split_list(path, line_no, value);
     if (tokens.empty()) {
-        // An empty list would otherwise be indistinguishable from `all`.
+        // An empty list would look the same as `all`, so reject it.
         fail(path, line_no, "empty list; use 'all' for the suite defaults");
     }
     std::vector<int> out;
@@ -91,15 +92,15 @@ std::vector<int> parse_int_list_or_all(const std::filesystem::path& path, std::s
 } // namespace
 
 Seed parse_seed_value(const std::string& token) {
-    // 2^53: every accepted value survives exactly as a MATLAB double, and the
+    // Max 2^53: every accepted seed is exact as a MATLAB double, and the
     // uint64 sums in get_cec_seed.m cannot saturate.
     constexpr unsigned long long kMaxSeed = 9007199254740992ULL;
     const auto bad = [&token]() {
         return std::invalid_argument("must be an integer in [0, 2^53 = 9007199254740992], got '" +
                                      token + "'");
     };
-    // A leading digit rules out '-' (stoull would wrap it to 2^64-k), '+'
-    // and leading whitespace.
+    // Requiring a leading digit rejects '-' (stoull would wrap it to
+    // 2^64-k), '+' and leading whitespace.
     if (token.empty() || std::isdigit(static_cast<unsigned char>(token.front())) == 0) {
         throw bad();
     }
@@ -126,6 +127,9 @@ bool is_valid_rand_generator(const std::string& value) {
            value == "state";
 }
 
+// Reads a flat "key: value" config file; '#' starts a comment. An unknown
+// key, a bad value, or a missing optimizers/suite entry throws
+// std::runtime_error naming the file (and the line, when there is one).
 ExperimentConfig load_experiment_config(const std::filesystem::path& path) {
     std::ifstream in(path);
     if (!in) {
@@ -139,9 +143,9 @@ ExperimentConfig load_experiment_config(const std::filesystem::path& path) {
     while (std::getline(in, raw)) {
         ++line_no;
         if (line_no == 1 && raw.compare(0, 3, "\xEF\xBB\xBF") == 0) {
-            // Tolerate a leading UTF-8 BOM (Windows PowerShell 5.1
-            // Set-Content/Out-File -Encoding utf8, some editors). A BOM
-            // anywhere else is still an error.
+            // Skip a UTF-8 BOM at the start of the file (written by Windows
+            // PowerShell 5.1 Set-Content/Out-File -Encoding utf8 and some
+            // editors). A BOM anywhere else is still an error.
             raw.erase(0, 3);
         }
         const auto hash = raw.find('#');
@@ -200,9 +204,8 @@ ExperimentConfig load_experiment_config(const std::filesystem::path& path) {
         } else if (key == "output_root") {
             cfg.output_root = value;
         } else if (key == "data_root") {
-            // Rejected explicitly rather than silently ignored: the MATLAB
-            // runner has no data_root input, so the value could never take
-            // effect.
+            // Rejected, not silently ignored: the MATLAB runner has no
+            // data_root input, so the value could never take effect.
             fail(path, line_no,
                  "data_root is not supported: benchmark data always loads from "
                  "<project_root>/benchmarks/cec_suite_cpp/<suite>/input_data; remove this key");

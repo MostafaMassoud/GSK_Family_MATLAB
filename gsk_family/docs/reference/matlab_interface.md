@@ -145,7 +145,7 @@ behavior stays inside the variant folder - do not over-factor.
 DT-GSK uses none of these helpers: its donors, bound repair, population
 reduction, and RNG streams are local to `src/optimizers/dt-gsk/`
 (`dt_gsk_optimize.m`, `dt_gsk_config.m`, `dt_gsk_graph.m`), following its
-Python reference rather than the MATLAB GSK sources.
+reference implementation rather than the MATLAB GSK sources.
 
 ## Reproducibility
 
@@ -162,7 +162,7 @@ Python reference rather than the MATLAB GSK sources.
   installed MATLAB, otherwise `twister`.
 - DT-GSK is unified-only: under every runner policy (`reference`, `unified`,
   `native`, `derived`) it gets `get_cec_seed(base_seed, dim, func, run)` and
-  `threefry`, as in its Python reference campaign.
+  `threefry`, as in its reference campaign.
 - An optimizer run is fully determined by `(problem, options.seed,
   options.rand_generator, variant options)`. Wall-clock seeding is not a
   supported run mode.
@@ -185,5 +185,5 @@ budgets; `test_mex_bridge.m` is the bridge cross-check and skips when the
 bridge is not built) and `run_matlab_smoke_tests.m`, which discovers and runs
 every `test_*.m` and fails with a nonzero exit under `matlab -batch` on any
 failure. `test_dt_gsk_smoke.m` checks the DT-GSK contract, determinism, the
-ignored runner `X0`, every dimension tier, and the Python reference's golden
-values.
+ignored runner `X0`, every dimension tier, and the reference implementation's
+golden values.

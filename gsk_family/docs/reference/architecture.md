@@ -25,7 +25,7 @@ The project has five layers.
    thread).
 3. **MATLAB optimizer layer** (`src/optimizers`, `src/common`): the seven
    GSK-family algorithms - six faithful to the reference MATLAB sources, plus
-   DT-GSK, ported from its Python reference implementation and self-contained
+   DT-GSK, ported from its reference implementation and self-contained
    in `src/optimizers/dt-gsk` (see `docs/reference/matlab_interface.md` and
    `docs/reference/porting_notes.md`).
 4. **Experiment layer**: C++ config parsing
@@ -88,7 +88,7 @@ wall-clock seeding as provenance only:
   effective MATLAB RNG family per optimizer, as documented in
   `docs/reference/seed_policy.md`.
 - DT-GSK is unified-only: under every policy it gets the unified seed and
-  `threefry`, the schedule its imported Python reference campaign used.
+  `threefry`, the schedule its imported reference campaign used.
 
 ## Boundaries
 
@@ -98,8 +98,9 @@ wall-clock seeding as provenance only:
 - All GSK algorithm code lives under `src/` (MATLAB root, not C++).
 - Standard CEC2013 (converted from the CEC2013 R package) and CEC2013LSGO
   are separate suites and are never merged.
-- Python is excluded entirely: no scripts, wrappers, generated Cython
-  bindings, or package metadata anywhere in the project.
+- MATLAB and C++ code, plus PowerShell helper scripts: no scripts, wrappers,
+  generated bindings, or package metadata in any other language anywhere in the
+  project.
 
 ## Component interaction diagram
 
@@ -122,7 +123,7 @@ flowchart TB
 The diagram has two important boundaries:
 
 - The MATLAB optimizer boundary keeps algorithm research readable and close to
-  the historical MATLAB releases (for DT-GSK, to its Python reference).
+  the historical MATLAB releases (for DT-GSK, to its reference implementation).
 - The C++ benchmark boundary keeps CEC evaluation fast, testable, and independent
   of MATLAB scripts or current-directory state.
 

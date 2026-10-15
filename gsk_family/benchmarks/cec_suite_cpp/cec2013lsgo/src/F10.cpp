@@ -25,7 +25,7 @@ double F10::compute(const double* x) {
         anotherz[i] = x[i] - Ovector[i];
     }
 
-    // s_size non-separable parts with rotation
+    // s_size rotated, non-separable groups, weighted by w[i]
     int c = 0;
     for (i = 0; i < s_size; i++) {
         std::vector<double>& anotherz1 = rotateVector(i, c);

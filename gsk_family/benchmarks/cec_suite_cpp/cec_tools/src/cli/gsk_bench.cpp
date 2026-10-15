@@ -1,18 +1,19 @@
-// gsk_bench: micro-benchmark for the C++ CEC benchmark ports.
+// gsk_bench: speed test for the C++ CEC benchmark ports.
 //
-// Times raw evaluate() throughput on representative (suite, function,
-// dimension) cells so performance work can be measured before/after with no
-// guesswork. Pure timing of deterministic evaluations - it changes no state
-// and reads no RNG, so results are comparable across builds (e.g. default vs
-// the GSKCEC_NATIVE optimized build).
+// Times evaluate() on chosen (suite, function, dimension) cells, so a speed
+// change can be measured before and after. It only times deterministic
+// evaluations (no RNG, no state changed), so timings compare fairly across
+// builds (e.g. the default build vs the GSKCEC_NATIVE optimized build).
 //
 // Usage:
 //   gsk_bench --root <project_root> [--iterations N] [--csv <out.csv>]
 //             [--cell <suite> <function> <dimension>]...
 //
-// With no --cell, a default representative set spanning all five suites and
-// the heaviest configurations is used. Dimension 0 means the suite's native
-// per-function dimension (cec2011, cec2013lsgo).
+// --root defaults to "."; --iterations to 20000 evaluations per cell.
+// Without --cell, a default set covering all five suites and the heaviest
+// cells is used. Dimension 0 means the native per-function dimension
+// (cec2011, cec2013lsgo).
+// Exit code: 0 ok, 1 bad argument or CSV error, 2 if any cell failed.
 
 #include "gskcec/benchmark/factory.hpp"
 #include "gskcec/core/timer.hpp"
@@ -30,12 +31,12 @@ namespace fs = std::filesystem;
 struct Cell {
     std::string suite;
     int function_id;
-    int dimension; // 0 => native
+    int dimension; // 0 = native dimension
 };
 
-// Representative cells: cheap and heavy functions across every suite. The
-// heavy large-scale and high-dimension cells dominate real run cost, so they
-// anchor the optimization targets.
+// Default cells: cheap and heavy functions from every suite. Heavy
+// large-scale and high-D cells dominate real run time, so they are the main
+// speed targets.
 std::vector<Cell> default_cells() {
     return {
         {"cec2017", 1, 100},  {"cec2017", 11, 100}, {"cec2017", 21, 100},
@@ -46,8 +47,8 @@ std::vector<Cell> default_cells() {
     };
 }
 
-// A deterministic in-bounds probe; varied per evaluation index so the
-// optimizer/compiler cannot fold the loop to a single call.
+// Deterministic in-bounds test point. It changes with the evaluation index k
+// so the compiler cannot reduce the loop to a single call.
 gskcec::Vector probe(const gskcec::Bounds& bounds, std::uint64_t k) {
     gskcec::Vector x(bounds.dimension());
     for (gskcec::Index j = 0; j < x.size(); ++j) {
@@ -126,7 +127,7 @@ int main(int argc, char** argv) {
 
     std::cout << "gsk_bench: " << iterations << " evaluations per cell\n";
     std::cout << "suite        f   D     ns/eval     Mevals/s\n";
-    double checksum = 0.0; // consumed so the work cannot be optimized away
+    double checksum = 0.0; // read at the end so the work is not optimized away
     int failures = 0;
     for (const auto& c : cells) {
         try {
@@ -134,7 +135,7 @@ int main(int argc, char** argv) {
             auto problem = gskcec::make_problem(c.suite, c.function_id, c.dimension, data_root);
             const auto bounds = problem->bounds();
 
-            // Warm up caches and the first-touch of the instance scratch.
+            // Untimed warm-up: fill caches and touch the problem's scratch.
             for (int w = 0; w < 100; ++w) {
                 checksum += problem->evaluate(probe(bounds, static_cast<std::uint64_t>(w)));
             }
@@ -160,7 +161,7 @@ int main(int argc, char** argv) {
             ++failures;
         }
     }
-    // Touch the checksum so the compiler must keep every evaluation.
+    // Read the checksum so the compiler must keep every evaluation.
     if (checksum == 1.2345e-300) {
         std::cerr << "(unreachable)\n";
     }

@@ -1,26 +1,29 @@
 function actual_seed = gsk_set_rng(options)
-%GSK_SET_RNG Seed the global RNG for a GSK-family optimizer, with a selectable
-% generator family via options.rand_generator (default 'twister' for direct
-% optimizer calls; run_experiment chooses threefry-or-twister for unified CEC).
+%GSK_SET_RNG Seed the global RNG for a GSK-family optimizer.
 %
-%   'threefry' -> counter-based Threefry generator when supported by MATLAB
-%   'twister' -> Mersenne Twister   (mt19937ar)  [default; == rng(seed,'twister')]
-%   'seed'    -> legacy v4 generator (mcg16807)   [== the classic rand('seed', s)]
-%   'state'   -> legacy v5 generator (swb2712)    [== the classic rand('state', s)]
+%   actual_seed = gsk_set_rng(options)
 %
-% WHY RandStream for deterministic legacy modes: the legacy rand('seed',s) /
-% rand('state',s) calls redirect only rand(). randperm (ATMALS-GSK) and randi
-% (FDB-AGSK) would keep drawing from the modern global stream and break
-% deterministic replay. RandStream.setGlobalStream selects the IDENTICAL
-% generator algorithms (mcg16807 = v4, swb2712 = v5, mt19937ar = Mersenne
-% Twister) while controlling every draw -- rand, randi AND randperm.
+% options.seed is required ('gsk:setRng' if absent or empty) and is returned
+% unchanged as actual_seed. options.rand_generator picks the generator
+% (case-insensitive); absent or empty means 'twister', the default for
+% direct optimizer calls. run_experiment picks threefry or twister for
+% unified CEC runs.
+%   'threefry' -> counter-based Threefry when MATLAB supports it, else twister
+%   'twister'  -> Mersenne Twister (mt19937ar)  [== rng(seed, 'twister')]
+%   'seed'     -> legacy v4 generator (mcg16807) [== rand('seed', s)]
+%   'state'    -> legacy v5 generator (swb2712)  [== rand('state', s)]
+% Aliases: 'mt', 'mt19937ar'; 'v4', 'mcg16807'; 'v5', 'swb2712'. Any other
+% name raises 'gsk:setRng'.
 %
-% Wall-clock seeding is intentionally not supported. Historical source releases
-% that used rand('seed', sum(100*clock)) are represented by deterministic
-% scheduled seeds in run_experiment so serial/parfor results remain replayable.
+% Legacy modes use RandStream.setGlobalStream because rand('seed', s) and
+% rand('state', s) redirect only rand(): randperm (ATMALS-GSK) and randi
+% (FDB-AGSK) would still draw from the modern global stream and break
+% replay. RandStream selects the same algorithms and controls every draw:
+% rand, randi and randperm.
 %
-% options.seed is required. options.rand_generator is optional (absent or empty
-% -> 'twister'), so callers that pass only a seed keep the previous behavior.
+% Wall-clock seeding is not supported. Source releases that used
+% rand('seed', sum(100*clock)) get deterministic scheduled seeds from
+% run_experiment, so serial and parfor results stay replayable.
 
 if ~isfield(options, 'seed') || isempty(options.seed)
     error('gsk:setRng', 'options.seed is required');
@@ -38,9 +41,9 @@ switch lower(generator)
         try
             rng(seed, 'threefry');
         catch
-            % Direct low-level calls on older MATLAB releases still remain
-            % reproducible by falling back to twister. The high-level runner
-            % resolves and records the actual generator before calling here.
+            % Older MATLAB releases: fall back to twister so direct calls
+            % stay reproducible. run_experiment resolves and records the
+            % actual generator before calling here.
             rng(seed, 'twister');
         end
     case {'twister', 'mt', 'mt19937ar'}

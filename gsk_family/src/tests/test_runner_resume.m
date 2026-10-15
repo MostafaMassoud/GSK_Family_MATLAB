@@ -1,18 +1,19 @@
 function test_runner_resume()
 %TEST_RUNNER_RESUME Resume/add mode reuses only rows of the active configuration.
 %
-% A summary/per_run.csv row is reused on resume only when its seed, its cell
-% budget (max_nfes column) and its effective generator (rand_generator column)
-% all match the active run. Otherwise the run id is executed again and
-% appended; the old row stays as history and the summary uses only the active
-% rows. Also covered on the pure-MATLAB sphere suite (no MEX):
+% On resume, a summary/per_run.csv row is reused only when its seed, its cell
+% budget (max_nfes column) and its effective generator (rand_generator
+% column) all match the active run. Otherwise that run id runs again and a
+% new row is appended; the old row stays as history and the summary uses
+% only the active rows. Runs on the sphere suite (no MEX) and also checks:
 %   - an identical rerun leaves per_run.csv and the summary byte-identical
 %     (per_run values are stored at round-trip precision),
 %   - a reused run whose latest seed_schedule.csv row came from another
 %     session gets the active seed appended again,
 %   - after a resume each cell keeps exactly one median-run curve,
-%   - a per_run.csv written before the max_nfes/rand_generator columns existed
-%     is upgraded from the tree's run_config.json and stays reusable.
+%   - a legacy per_run.csv without the max_nfes/rand_generator columns is
+%     upgraded from the tree's run_config.json and stays reusable; without
+%     run_config.json its runs are re-run.
 
 here = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(here));
@@ -39,7 +40,8 @@ assert(all(field(rows, 12) == "2000") && all(field(rows, 13) == gen), ...
        'per_run.csv must record the cell budget and the effective generator');
 
 % Identical rerun: every run is reused, nothing is appended, and the summary
-% rebuilt from per_run.csv is byte-identical to the one from the fresh values.
+% rebuilt from per_run.csv is byte-identical to the one built from the fresh
+% values.
 per_run_0 = fileread(per_run);
 summary_0 = fileread(summary);
 go(4242, 2000, 'threefry');
@@ -66,17 +68,17 @@ assert(isequal(new_seeds(:)', [get_cec_seed(4243, D, 1, 1), get_cec_seed(4243, D
        'appended rows must carry the new seeds');
 assert_summary_from(summary, rows(5:6));
 
-% Back to the 4242/3000 configuration: its rows are reused (nothing appended),
-% the summary is the 4242/3000 one again, and because the latest schedule rows
-% are now the 4243 seeds, the active seeds are recorded again.
+% Back to the 4242/3000 configuration: its rows are reused (nothing appended)
+% and the summary is the 4242/3000 one again. The latest schedule rows hold
+% the 4243 seeds, so the active seeds are recorded again.
 go(4242, 3000, 'threefry');
 assert(numel(data_rows(per_run)) == 6, 'matching rows must be reused, not re-run');
 assert(strcmp(fileread(summary), summary_3000), 'reused rows must reproduce the summary');
 latest = latest_schedule(schedule);
 assert(isequal(latest(:, 4)', [get_cec_seed(4242, D, 1, 1), get_cec_seed(4242, D, 1, 2)]), ...
        'latest seed_schedule rows must describe the reused (active) runs');
-% The stored curve now belongs to a 4243 run, not to the reused median run
-% (whose own curve was superseded in the 4243 session): no stale curve stays.
+% The stored curve is from a 4243 run, not from the reused median run (whose
+% own curve was replaced in the 4243 session), so it must not be kept.
 assert(isempty(curve_files(out, 1, D)), 'a curve of a stale run must not be kept as the median curve');
 
 % Generator change (unified threefry -> twister) is stale too.
@@ -114,7 +116,8 @@ for f = 1:2
             assert(numel(files) == 1 && strcmp(files{1}, sprintf('Figure_F%d_D%d_Run#%d.csv', f, d, med)), ...
                    'F%d D%d: expected only the median curve Run#%d, found %s', f, d, med, strjoin(files, ' '));
         else
-            % The median is an earlier non-median run whose trace was never stored.
+            % The median is an earlier run that was not the median of its
+            % session, so its trace was never stored.
             assert(isempty(files), 'F%d D%d: no stale curve may stand in for median run %d', f, d, med);
         end
     end
@@ -122,7 +125,7 @@ end
 assert(~median_changed || isfolder(fullfile(out_c, 'curves', '_archive')), ...
        'superseded curves must be archived, not deleted');
 
-% ---- per_run.csv from before the max_nfes/rand_generator columns -----------
+% ---- legacy per_run.csv without the max_nfes/rand_generator columns ------
 legacy_header = 'optimizer,suite,function,dimension,run,seed,best_fitness,error,nfes,termination,runtime_seconds';
 % (a) explicit budget, run_config.json present: rows are upgraded and reused.
 out_l = fullfile(out_root, 'legacy');
@@ -159,12 +162,34 @@ rows = data_rows(fullfile(out_u, 'summary', 'per_run.csv'));
 assert(numel(rows) == 4 && all(field(rows(1:2), 12) == "") && all(field(rows(3:4), 12) == "2000"), ...
        'legacy rows without a recorded configuration must be re-run, not reused');
 
+% ---- summary tables are written per dimension, once per session ------------
+% Each dimension's table is written when that dimension finishes (so a crash
+% in a later dimension keeps it); the final step must not write it again, so
+% a resumed session archives each existing table exactly once.
+out_d = fullfile(out_root, 'per_dim');
+dims_go = @() run_experiment('optimizer', 'gsk', 'suite', 'sphere', 'functions', 1, ...
+    'dimensions', [D 2 * D], 'runs', 2, 'max_nfes', 2000, 'project_root', project_root, ...
+    'output_dir', out_d, 'verbose', false);
+dims_go();
+tables = arrayfun(@(d) fullfile(out_d, 'summary', sprintf('gsk_sphere_D%d.csv', d)), [D 2 * D], ...
+                  'UniformOutput', false);
+assert(all(cellfun(@isfile, tables)), 'every dimension must have its summary table');
+before = cellfun(@fileread, tables, 'UniformOutput', false);
+pause(1.1);   % the archive folder is named by the session's second
+dims_go();
+assert(isequal(cellfun(@fileread, tables, 'UniformOutput', false), before), ...
+       'a resumed session must rewrite the same summary tables');
+arch = dir(fullfile(out_d, 'summary', '_archive', '*', 'gsk_sphere_D*.csv'));
+assert(numel(arch) == 2 && ~any(contains({arch.name}, '_1.csv')), ...
+       'each summary table must be archived exactly once per resumed session');
+
 fprintf('test_runner_resume: PASS\n');
 end
 
 % ---- helpers ------------------------------------------------------------------
 
 function rows = data_rows(path)
+% Data lines of a CSV file, as strings (header and blank lines dropped).
 rows = readlines(path);
 rows = rows(2:end);
 rows = rows(strlength(strtrim(rows)) > 0);
@@ -189,6 +214,7 @@ assert(vals(2) == sprintf('%.10E', min(err)) && vals(5) == sprintf('%.10E', max(
 end
 
 function rows = latest_schedule(path)
+% Latest seed_schedule.csv row per (Dim, Function, Run) key, sorted by key.
 fid = fopen(path, 'r');
 closer = onCleanup(@() fclose(fid)); %#ok<NASGU>
 fgetl(fid);
@@ -199,13 +225,14 @@ rows = sortrows(rows(last_idx, :), [1 2 3]);
 end
 
 function names = curve_files(out_dir, f, d)
+% Names of the curve files in out_dir/curves for function f, dimension d.
 L = dir(fullfile(out_dir, 'curves', sprintf('Figure_F%d_D%d_Run#*.csv', f, d)));
 names = {L.name};
 end
 
 function make_legacy(path, legacy_header)
-% Rewrite a per_run.csv the way the runner wrote it before the trailing
-% max_nfes,rand_generator columns existed.
+% Rewrite a per_run.csv in the legacy format: legacy_header plus the first
+% 11 fields of each row (no trailing max_nfes,rand_generator columns).
 rows = data_rows(path);
 out = legacy_header;
 for i = 1:numel(rows)
@@ -218,5 +245,6 @@ fclose(fid);
 end
 
 function remove_dir(d)
+% Delete folder d and its contents, if it exists.
 if exist(d, 'dir'); rmdir(d, 's'); end
 end

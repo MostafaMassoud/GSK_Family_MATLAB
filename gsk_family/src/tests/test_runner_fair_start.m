@@ -1,20 +1,25 @@
 function test_runner_fair_start()
-%TEST_RUNNER_FAIR_START Unified fair-start X0 through run_experiment, the six runner-X0 optimizers.
+%TEST_RUNNER_FAIR_START Fair-start X0 through run_experiment (unified policy).
 %
-% Under seed_policy='unified' the runner seeds get_cec_seed(base_seed,D,func,run)
-% with the resolved generator, draws X0 once (gsk_init_population, NP=100),
-% captures the post-X0 RNG state and passes both to the optimizer. DT-GSK is
-% not listed: it samples its own NP = 5*D population and the runner draws no
-% X0 for it (documented fair-start exception; test_dt_gsk_smoke checks that a
-% supplied X0 is ignored). Checks, on the pure-MATLAB sphere suite, for every
-% listed optimizer and run:
-%   1. the first gen_logs checkpoint (before any generation has finished, so
-%      it holds the first convergence record = best of the initial population)
-%      equals min f(X0) for the runner's X0 - the same value for all six;
-%   2. the per_run.csv best_fitness equals a direct optimizer call given that
-%      X0 and post-X0 RNG state (the runner wires both through unchanged);
-%   3. the final checkpoint E<max_nfes> equals the per-run final error, also
-%      for optimizers whose last counter reads max_nfes+1 (FDB-AGSK, eGSK).
+% With seed_policy = 'unified' the runner seeds the RNG with
+% get_cec_seed(base_seed, D, func, run) and the resolved generator, draws X0
+% once (gsk_init_population, NP = 100), saves the RNG state after X0 and
+% passes both to the optimizer. Tested: the six optimizers that take the
+% runner's X0 (gsk, agsk, apgsk, atmals-gsk, egsk, fdb-agsk; egsk is skipped
+% without the Optimization Toolbox). DT-GSK is left out: it samples its own
+% NP = 5*D population and the runner draws no X0 for it (a documented
+% fair-start exception; test_dt_gsk_smoke checks that a supplied X0 is
+% ignored).
+%
+% On the sphere suite (no MEX), for every optimizer and run, checks that:
+%   1. the first gen_logs checkpoint equals min f(X0) for the runner's X0,
+%      the same value for all optimizers (it is the first convergence
+%      record, taken before any generation ends, so it holds the best of
+%      the initial population);
+%   2. best_fitness in per_run.csv equals a direct optimizer call given the
+%      same X0 and post-X0 RNG state (the runner passes both on unchanged);
+%   3. the last checkpoint E<max_nfes> equals the per-run final error, also
+%      for optimizers whose counter ends at max_nfes+1 (FDB-AGSK, eGSK).
 
 here = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(here));
@@ -91,7 +96,8 @@ fprintf('test_runner_fair_start: PASS (%s)\n', strjoin(names, ', '));
 end
 
 function [header, rows] = csv_rows(path)
-% Header fields and the data rows of a small numeric CSV, as strings.
+%CSV_ROWS Header fields and data rows of a small numeric CSV, as strings.
+% Blank lines are skipped.
 lines = readlines(path);
 lines = lines(strlength(strtrim(lines)) > 0);
 header = split(lines(1), ',')';
@@ -102,5 +108,6 @@ end
 end
 
 function remove_dir(d)
+%REMOVE_DIR Delete folder d and its contents, if it exists.
 if exist(d, 'dir'); rmdir(d, 's'); end
 end

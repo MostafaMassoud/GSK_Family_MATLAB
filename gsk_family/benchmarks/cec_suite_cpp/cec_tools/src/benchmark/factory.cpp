@@ -73,7 +73,7 @@ std::unique_ptr<BenchmarkProblem> make_problem(const std::string& suite,
 
 std::filesystem::path default_data_root(const std::string& suite,
                                         const std::filesystem::path& project_root) {
-    suite_info(suite); // validates the name
+    suite_info(suite); // throws std::invalid_argument for an unknown suite
     return project_root / "benchmarks" / "cec_suite_cpp" / suite / "input_data";
 }
 

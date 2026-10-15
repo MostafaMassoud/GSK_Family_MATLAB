@@ -6,32 +6,33 @@
 
 A verified hybrid **MATLAB + C++** toolkit for the Gaining-Sharing Knowledge
 (GSK) optimizer family on five CEC benchmark suites. The CEC benchmark functions
-are standalone C++20 ports (no MATLAB/R/MEX/Python needed to evaluate them); the
+are standalone C++20 ports (no MATLAB/R/MEX needed to evaluate them); the
 seven optimizers are MATLAB implementations faithful to their reference sources
-(six MATLAB reference releases, plus DT-GSK ported from its Python reference
+(six MATLAB reference releases, plus DT-GSK ported from its reference
 implementation); and every experiment run is automatically checked against the
 published reference results.
 
 This site is generated from the Markdown sources in `docs/` by
-`scripts/build_docs.ps1` (no Python). Browse the rendered site at
-[html/index.html](html/index.html).
+`scripts/build_docs.ps1`. To browse the rendered site, open
+`docs/html/index.html` in a web browser.
 
 ## Reading paths
 
 Not sure where to start? Pick the goal that fits:
 
-- **Just run it.** [Tutorial](getting-started/tutorial.md) -> [User Guide](getting-started/user_guide.md) -> [Runbook](getting-started/runbook.md).
+- **Just run it.** [Runbook](../../RUNBOOK.md) -> [Tutorial](getting-started/tutorial.md) -> [User Guide](getting-started/user_guide.md) -> [Command Reference](getting-started/command_reference.md).
 - **Understand the algorithms.** [Explainer](getting-started/explainer.md) -> [GSK](algorithms/gsk.md) -> the variants ([AGSK](algorithms/agsk.md), [APGSK](algorithms/apgsk.md), [FDB-AGSK](algorithms/fdb-agsk.md), [ATMALS-GSK](algorithms/atmals-gsk.md), [eGSK](algorithms/egsk.md), [DT-GSK](algorithms/dt-gsk.md)) -> [Numerical Examples](research/numerical_examples.md).
 - **Reproduce or validate results.** [Researcher Handbook](research/researcher_handbook.md) -> [Reproducibility](research/reproducibility.md) -> [Validation Report](research/validation_report.md).
 - **Contribute code.** [Code Reading Guide](development/code_reading_guide.md) -> [Developer Guide](development/developer_guide.md) -> [Extension Guide](development/extension_guide.md) -> [Contributor Guide](development/contributor_guide.md).
-- **Look something up.** [Configuration](getting-started/configuration.md), [MATLAB Optimizer Interface](reference/matlab_interface.md), [Result Schema](reference/result_schema.md), [Glossary](reference/glossary.md), [Diagrams](reference/diagrams.md), [C++ API (Doxygen)](api/index.html).
+- **Look something up.** [Configuration](getting-started/configuration.md), [MATLAB Optimizer Interface](reference/matlab_interface.md), [Result Schema](reference/result_schema.md), [Glossary](reference/glossary.md), [Diagrams](reference/diagrams.md), [C++ API (Doxygen)](api/index.html) (in the built site).
 
 ## Getting Started - `getting-started/`
 
+- [Runbook](../../RUNBOOK.md): the beginner guide - prerequisites, your first run step by step, and parallel runs in MATLAB.
 - [Explainer](getting-started/explainer.md): plain-language overview for any reader (no GSK/CEC/C++/MATLAB background needed).
 - [Tutorial](getting-started/tutorial.md): one worked experiment end to end - build, test, validate, run, read output, interpret.
 - [User Guide](getting-started/user_guide.md): install, list capabilities, run experiments, validate output, inspect results.
-- [Runbook](getting-started/runbook.md): step-by-step run commands for every algorithm, from both the MATLAB IDE and Windows Terminal.
+- [Command Reference](getting-started/command_reference.md): step-by-step run commands for every algorithm, from both the MATLAB IDE and Windows Terminal.
 - [Configuration](getting-started/configuration.md): the YAML config subset, CLI overrides, and safe output paths.
 - [Troubleshooting](getting-started/troubleshooting.md): common build, MEX-bridge, benchmark, and result issues.
 
@@ -80,7 +81,7 @@ Copy-paste LLM prompts for reviewing and maintaining the repository (each is a s
 - [Deep Documentation Review Prompt](prompts/DOCS_DEEP_REVIEW_PROMPT.md): publication-quality documentation expansion with examples, diagrams, and researcher guidance.
 - [Documentation Review Prompt](prompts/documentation_review_prompt.md): final documentation consistency, stale-reference, generated-HTML, and text-quality gate.
 - [Inline Documentation Review Prompt](prompts/INLINE_DOCUMENTATION_REVIEW_PROMPT.md): MATLAB help text, `%` comments, C++ Doxygen, script comments, config comments, and test comments.
-- [Documentation Parity Prompt](prompts/documentation_parity_prompt.md): keep these docs mirrored with the Python project's structure while preserving MATLAB/C++ facts.
+- [Documentation Parity Prompt](prompts/documentation_parity_prompt.md): keep these docs mirrored with the sibling project's docs structure while preserving MATLAB/C++ facts.
 - [Legacy LLM Review Prompt](prompts/llm_review_prompt.md): compatibility entry for the earlier broad review prompt.
 
 ## Research - `research/`
@@ -93,4 +94,5 @@ Copy-paste LLM prompts for reviewing and maintaining the repository (each is a s
 
 ## C++ API
 
-- [C++ API reference](api/index.html) (Doxygen).
+- [C++ API reference](api/index.html) (Doxygen; available after building the site with
+  `scripts/build_docs.ps1`). The how-to page is [C++ API (how-to)](reference/api.md).

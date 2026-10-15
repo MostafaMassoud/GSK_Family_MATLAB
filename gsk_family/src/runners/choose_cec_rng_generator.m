@@ -1,15 +1,17 @@
 function rng_generator = choose_cec_rng_generator()
 %CHOOSE_CEC_RNG_GENERATOR Pick the unified-mode CEC RNG family.
 %
-% Unified CEC experiments prefer MATLAB's counter-based 'threefry' generator
-% because it is designed for reproducible independent streams and is a good fit
-% for serial/parfor-safe benchmark tasks. Older MATLAB releases may not support
-% it, so the project falls back to the widely available 'twister' generator.
+% Usage: rng_generator = choose_cec_rng_generator()
+% Returns 'threefry' when this MATLAB release supports it, else 'twister'.
 %
-% The helper probes support without leaving a side effect on the caller's
-% current global RNG state. Do not replace this with shuffle-based seeding,
-% worker identifiers, task IDs, clock time, or any other time/scheduling source;
-% unified seeds must depend only on (base_seed, dim, func, run).
+% Threefry is counter-based and gives reproducible independent streams, so it
+% suits serial and parfor benchmark runs. Older releases lack it, hence the
+% widely available 'twister' fallback. The probe restores the caller's global
+% RNG state, so it has no side effect.
+%
+% Never switch to shuffle seeding, worker or task IDs, the clock or any other
+% time or scheduling source: unified seeds depend only on
+% (base_seed, dim, func, run).
 
 preferred = 'threefry';
 fallback = 'twister';

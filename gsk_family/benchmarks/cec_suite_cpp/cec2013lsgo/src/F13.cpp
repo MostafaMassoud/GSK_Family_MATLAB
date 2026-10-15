@@ -7,7 +7,7 @@ F13::F13(const std::filesystem::path& dataDir) : Benchmarks(dataDir) {
     maxX = 100;
     ID = 13;
     s_size = 20;
-    dimension = 905; // because of overlapping
+    dimension = 905; // group sizes sum to 1000; 19 overlaps of 5 leave 905
     overlap = 5;
     anotherz.resize(static_cast<std::size_t>(dimension));
     Ovector = readOvector();
@@ -27,7 +27,7 @@ double F13::compute(const double* x) {
         anotherz[i] = x[i] - Ovector[i];
     }
 
-    // s_size non-separable parts with conforming overlapping rotation
+    // s_size rotated, overlapping groups sharing one shift (conforming)
     int c = 0;
     for (i = 0; i < s_size; i++) {
         std::vector<double>& anotherz1 = rotateVectorConform(i, c);

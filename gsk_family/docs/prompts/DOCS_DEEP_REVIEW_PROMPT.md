@@ -8,7 +8,7 @@
 > existing Markdown docs. **After using it** the docs should be richer, more
 > teachable, better cross-linked, and still faithful to the current code.
 
-This is the MATLAB/C++ counterpart of the Python project's
+This is the MATLAB/C++ counterpart of the sibling project's
 `DOCS_DEEP_REVIEW_PROMPT.md`. Use it when the goal is not merely to remove stale
 text, but to make the documentation genuinely useful as a user guide, developer
 guide, researcher handbook, implementation reference, and reproducibility
@@ -56,7 +56,8 @@ Repository and build:
 - Documentation source lives under `docs/`; generated HTML lives under
   `docs/html/` and is rebuilt by `scripts/build_docs.ps1`.
 - `docs/index.html` is a hand-maintained redirect into `docs/html/index.html`.
-- Do not add Python tooling to this project.
+- The project is MATLAB and C++ only (no other languages or generated
+  bindings).
 
 Algorithms:
 
@@ -150,7 +151,8 @@ Produce a table for every source Markdown file:
 
 Review at least:
 
-- README.md, SKILL.md, LICENSES.md, CHANGELOG.md
+- README.md, RUNBOOK.md (the beginner runbook), SKILL.md, LICENSES.md,
+  CHANGELOG.md
 - docs/index.md
 - docs/getting-started/*.md
 - docs/reference/*.md

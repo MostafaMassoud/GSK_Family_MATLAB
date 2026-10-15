@@ -1,3 +1,6 @@
+// Unit tests for the core helpers: bounds repair, run statistics, run seeds
+// and the RNG, and load_values_file.
+
 #include "gskcec/benchmark/data_loading.hpp"
 #include "gskcec/core/bounds.hpp"
 #include "gskcec/core/random.hpp"
@@ -14,8 +17,8 @@ namespace {
 
 int failures = 0;
 
-// Always-on check (unlike <cassert>, which NDEBUG disables in Release builds,
-// turning assert-based tests into silent no-ops).
+// Always-on check. <cassert> is disabled by NDEBUG in Release builds, which
+// would turn assert-based tests into silent no-ops.
 void check(bool condition, const char* message) {
     if (!condition) {
         std::cerr << "FAIL: " << message << "\n";
@@ -44,8 +47,8 @@ int main() {
         check(s.worst == 5.0, "summary worst");
         check(s.median == 2.5, "summary median");
         check(std::abs(s.mean - 2.75) < 1.0e-12, "summary mean");
-        // Sum of squared deviations is 8.75: sample SD divides by N-1 = 3
-        // (MATLAB std), population SD would divide by 4.
+        // Sum of squared deviations is 8.75. The sample SD divides by N-1 = 3
+        // (like MATLAB std); the population SD would divide by 4.
         check(std::abs(s.sd - std::sqrt(8.75 / 3.0)) < 1.0e-12,
               "summary sd is the sample (N-1) sd, matching MATLAB std");
     }
@@ -61,11 +64,12 @@ int main() {
         check(rng1.uniform_index(0, 100) == rng2.uniform_index(0, 100),
               "same seed yields the same RNG draw");
 
-        // Golden values from the get_cec_seed.m contract
-        // mod(base + 1000003*dim + 1000033*func + 1000037*run, 2147483646) + 1,
-        // so a stride/modulus/+1 drift cannot pass.
+        // Fixed expected values from the get_cec_seed.m formula
+        // mod(base + 1000003*dim + 1000033*func + 1000037*run, 2147483646) + 1.
+        // They catch any change to the strides, the modulus or the +1.
         check(a == 17000320ULL, "run seed matches get_cec_seed(42,10,3,4)");
-        // Pinned in src/tests/test_seed_policy.m and docs/reference/seed_policy.md.
+        // The same value is used in src/tests/test_seed_policy.m and
+        // docs/reference/seed_policy.md.
         check(make_run_seed(20240620, 30, 7, 12) == 69241386ULL,
               "run seed matches get_cec_seed(20240620,30,7,12)");
         check(make_run_seed(2147483645ULL, 0, 0, 0) == 2147483646ULL, "run seed upper bound (mod + 1)");
@@ -76,7 +80,7 @@ int main() {
 
     {
         // load_values_file(path, n): fewer than n values is an error; extra
-        // values are ignored (the reference CEC readers fscanf only n).
+        // values are ignored (the reference CEC readers fscanf only n values).
         const std::filesystem::path tmp = std::filesystem::temp_directory_path() / "gskcec_core_tests_values.txt";
         {
             std::ofstream out(tmp);

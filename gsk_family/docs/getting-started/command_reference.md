@@ -1,23 +1,24 @@
-# Runbook
+# Command Reference
 
-> **What this is:** the complete copy-paste runbook - build the tooling and run
+> **What this is:** the full copy-paste command reference for every algorithm,
+> for both the MATLAB IDE and a Windows terminal - build the tooling and run
 > **every** optimizer (`gsk`, `agsk`, `apgsk`, `atmals-gsk`, `egsk`,
-> `fdb-agsk`, `dt-gsk`) on every supported CEC suite, from both the MATLAB IDE and a
-> Windows terminal, then verify and compare against the published reference
-> tables. **For:** anyone running real experiments who wants exact, per-algorithm
-> commands. **Prerequisites:** the build and MEX bridge (sections 2.4-2.5),
-> MATLAB R2025b for any optimizer run; new to the project? Start with
+> `fdb-agsk`, `dt-gsk`) on every supported CEC suite, then verify and compare
+> against the published reference tables. **For:** anyone running real
+> experiments who wants exact, per-algorithm commands. **Prerequisites:** the
+> build and MEX bridge (sections 2.4-2.5), MATLAB R2025b for any optimizer run;
+> new to the project? Start with [RUNBOOK.md](../../../RUNBOOK.md), then
 > [tutorial.md](tutorial.md). **After reading:** you will be able to run, resume,
 > verify, and compare any optimizer/suite combination.
 
-A complete, copy-paste runbook for the `gsk_family` project: how to build the
+A complete, copy-paste command reference for the `gsk_family` project: how to build the
 tooling and run **every** optimizer (`gsk`, `agsk`, `apgsk`, `atmals-gsk`,
 `egsk`, `fdb-agsk`, `dt-gsk`) on every supported CEC suite, from both the MATLAB IDE and a
 Windows terminal, then verify and compare the results against the published
 reference tables. Every command below was checked against the actual sources
 (`benchmarks/cec_suite_cpp/cec_tools/src/cli/*.cpp`, `src/runners/run_experiment.m`,
 `src/runners/gskcec_make_problem.m`, the `configs/*.yml`, and each
-`src/optimizers/<name>/*`). No Python is used or required anywhere.
+`src/optimizers/<name>/*`).
 
 > Throughout, `<root>` (or "project root") is the folder that contains
 > `CMakeLists.txt` and `README.md` — i.e.
@@ -93,8 +94,8 @@ Two practical ways to get the C++ toolchain:
   `BrechtSanders.WinLibs.POSIX.UCRT`; its binaries land under
   `%LOCALAPPDATA%\Microsoft\WinGet\Packages\...\mingw64\bin`.
 - Or reuse the **CMake that ships inside MATLAB**, at
-  `C:\path\to\MATLAB\R2025b\bin\win64\cmake\bin\cmake.exe` (example:
-  `C:\path\to\MATLAB\R2025b\bin\win64\cmake\bin\cmake.exe`).
+  `<matlabroot>\bin\win64\cmake\bin\cmake.exe` (for example
+  `C:\Program Files\MATLAB\R2025b\bin\win64\cmake\bin\cmake.exe`).
 
 Check what is on your PATH:
 
@@ -207,7 +208,7 @@ build\libgskcec.a         the C++ support library
 build\gskcec_*_tests.exe  the C++ unit tests (run via ctest)
 ```
 
-This runbook uses `gsk_list`, `gsk_validate`, and `gsk_run`; `gsk_bench` is the
+This reference uses `gsk_list`, `gsk_validate`, and `gsk_run`; `gsk_bench` is the
 timing tool documented in [performance.md](../research/performance.md).
 
 Sanity-check the build (no MATLAB needed):
@@ -973,7 +974,7 @@ refinement, each switched on by the dimension tier. Entry point
 `src/optimizers/dt-gsk/dt_gsk_optimize.m`; the folder holds three code files
 (`dt_gsk_optimize.m`, the `pub` profile `dt_gsk_config.m`, and the interaction
 graph `dt_gsk_graph.m` used from `D = 50`). It is a port of the DT-GSK reference
-implementation (Python, MIT license) v2.46, not of a MATLAB release; its
+implementation v2.46 (MIT license), not of a MATLAB release; its
 [README](../../src/optimizers/dt-gsk/README.md) is the authoritative summary of
 behavior and validation, and [dt-gsk.md](../algorithms/dt-gsk.md) is the
 algorithm page.
@@ -990,7 +991,7 @@ target, `NaN` without a known optimum.
 > **Unified-only seeding (fair-start exception).** `run_experiment` schedules
 > DT-GSK with `get_cec_seed(base_seed, dim, func, run)` and `threefry` under
 > **every** `seed_policy` (`reference`, `unified`, `native`, `derived`),
-> mirroring the Python reference's `UNIFIED_ONLY_OPTIMIZERS`: that is how its
+> mirroring the reference implementation's `UNIFIED_ONLY_OPTIMIZERS`: that is how its
 > reference campaigns were produced. `gsk_run`'s default
 > `--seed-policy reference` therefore reproduces the reference seeds, and
 > `--rand-generator` has no effect on DT-GSK. DT-GSK derives named Threefry
@@ -1054,10 +1055,10 @@ x 4 dimensions x 51 runs as the reference evidence.
   tables on every suite: `cec2017` (D10/30/50/100, 51 runs), `cec2013`
   (D10/30/50, 51 runs), `cec2020` (D5/10/15/20, 30 runs), `cec2011` (native
   dims plus rollup, 25 runs) and `cec2013lsgo` (D1000/D905, 25 runs), imported
-  from the Python reference (provenance:
+  from the reference implementation (provenance:
   `benchmarks\cec_reference_results\cec2017\dt-gsk\PROVENANCE.md`). They are
-  cross-implementation evidence, produced by the Python code, not by this
-  toolkit.
+  cross-implementation evidence, produced by the reference implementation, not
+  by this toolkit.
 - **Common errors.** `dt_gsk_optimize:options` for a non-Threefry
   `rand_generator` or a missing seed (lower-level path only; the runner always
   passes `threefry`). The ignored `X0` is expected, not an error. See
@@ -1081,8 +1082,11 @@ x 4 dimensions x 51 runs as the reference evidence.
   (or `per_run.csv`); for duplicate (dimension, function, run) rows from resumed
   runs the last row counts. For every (dimension, function) cell in both sets it
   prints Best/Median/Mean on each side (errors, or raw objectives where `error`
-  is `NaN`), whether Median and Mean agree to within one order of magnitude
-  (`'decades'`, default 1; values below `'zero_tol'` = `1e-8` count as 0), and
+  is `NaN`), whether Best, Median and Mean each agree to within one order of
+  magnitude (`'decades'`, default 1; values below `'zero_tol'` = `1e-8` count
+  as 0; both sides are first rounded to `'sig_digits'` = 11 significant digits,
+  the precision of the reference file, so last-digit noise is not a
+  difference), and
   the two-sided Wilcoxon rank-sum p-value (`ranksum`) at `'alpha'` (default
   `0.05`); a cell is `MATCH` when both checks pass, else `DIFFERS`. When both
   sides used the same seed for each run (true here: both use the unified
@@ -1091,7 +1095,8 @@ x 4 dimensions x 51 runs as the reference evidence.
   cells (about `alpha` x cells raw rejections are expected by chance). The
   returned `report.table` (and the `'out'` CSV) holds every column, including
   `p_holm`. Expect statistical, not bit-for-bit, agreement: MATLAB's Threefry
-  produces the same 64-bit words as the Python replica but converts them to
+  generator produces the same 64-bit words as the reference implementation's
+  generator but converts them to
   doubles differently (at most `2^-53` per uniform draw), so live trajectories
   separate once a last-bit difference flips a discrete decision. Results of the
   CEC2017 campaign are recorded in the DT-GSK README.

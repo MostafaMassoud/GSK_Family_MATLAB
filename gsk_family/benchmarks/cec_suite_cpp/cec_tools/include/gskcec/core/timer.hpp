@@ -4,6 +4,7 @@
 
 namespace gskcec {
 
+/// Measures elapsed wall time (steady_clock) from construction.
 class Stopwatch {
 public:
     Stopwatch()

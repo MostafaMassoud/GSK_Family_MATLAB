@@ -15,7 +15,7 @@ This handbook explains the current `gsk_family` project as a research package:
 what problem it solves, how each algorithm works, how experiments are made
 reproducible, and where a researcher can safely modify the system.
 
-For exact command sequences, see [runbook](../getting-started/runbook.md). For the MATLAB
+For exact command sequences, see [Command Reference](../getting-started/command_reference.md). For the MATLAB
 function contract, see [matlab_interface.md](../reference/matlab_interface.md). For the seed
 rules, see [seed_policy.md](../reference/seed_policy.md).
 
@@ -137,8 +137,8 @@ are both controlled.
 **DT-GSK exception (unified-only).** DT-GSK's reference campaigns were produced
 on this unified schedule, so `run_experiment` gives DT-GSK
 `get_cec_seed(base_seed, dim, func, run)` and `threefry` under **every**
-`seed_policy` (`is_unified_only` in `run_experiment.m`, mirroring the Python
-reference's `UNIFIED_ONLY_OPTIMIZERS`). It does not take the shared `X0`: it
+`seed_policy` (`is_unified_only` in `run_experiment.m`, mirroring the reference
+implementation's `UNIFIED_ONLY_OPTIMIZERS`). It does not take the shared `X0`: it
 derives named Threefry substreams from the run seed, samples its own
 `NP = 5*D` initial population, and ignores a supplied
 `options.initial_population`; the runner draws no `X0` for it and records
@@ -534,7 +534,7 @@ Unsafe changes without a reference audit:
 | eGSK fails with `fminconUnavailable` | Optimization Toolbox unavailable | Install/enable toolbox or run explicit non-reference diagnostics with `use_fmincon=false`. |
 | FDB-AGSK case 2 errors on flat fitness | Reference degenerate behavior for empty FDB ranking | Use non-degenerate problems or another case for diagnostics. |
 | DT-GSK seeds ignore `seed_policy`; its first population differs from the shared `X0` | Expected: DT-GSK is unified-only and self-initializes (section 3) | `initial_population_policy` in `run_config.json`; nothing to fix. |
-| A DT-GSK campaign is not bit-identical to the Python reference runs | MATLAB's Threefry doubles differ from the Python replica by at most `2^-53` per uniform draw, so trajectories separate after a last-bit difference flips a discrete decision | Compare statistically with `scripts/compare_reference_runs.m`. |
+| A DT-GSK campaign is not bit-identical to the reference implementation's runs | MATLAB's Threefry doubles differ from the reference implementation's by at most `2^-53` per uniform draw, so trajectories separate after a last-bit difference flips a discrete decision | Compare statistically with `scripts/compare_reference_runs.m`. |
 | Tiny `Delta(New-Old)` signs appear confusing | Absolute differences below `1e-8` are considered zero in the MATLAB comparison table | See `src/runners/README.md`. |
 
 ## 18. Research usage checklist
@@ -560,8 +560,8 @@ Before reporting results:
 
 The implementations are tied to the reference releases named in each optimizer
 header and algorithm page: historical MATLAB releases for six optimizers, and
-the DT-GSK reference implementation (Python, MIT license) v2.46
-(<https://github.com/MostafaMassoud/DT-GSK>) for DT-GSK. The project uses those
+the DT-GSK reference implementation v2.46 (MIT license,
+<https://github.com/MostafaMassoud/DT-GSK>) for DT-GSK. The project uses those
 files as the primary provenance source because exact reproduction often depends
 on small code details that are not fully specified in papers.
 
@@ -579,7 +579,7 @@ Research lineage:
   Dimension-Tiered Adaptive Configuration Selection and Deterministic
   Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm."
   *Algorithms* (MDPI), 2026 (accepted, in production; DOI pending). A
-  line-by-line MATLAB port was verified against the unmodified Python code on
+  line-by-line MATLAB port was verified against the unmodified reference implementation on
   identical random numbers in all four dimension tiers and reproduces the
   reference's golden values to `1e-13`; the compact three-file version shipped
   here reproduces that port bit for bit. The full record, including the CEC2017

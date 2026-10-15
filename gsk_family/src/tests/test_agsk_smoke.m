@@ -1,15 +1,19 @@
 function test_agsk_smoke()
 %TEST_AGSK_SMOKE Smoke test for agsk_optimize on a pure-MATLAB sphere problem.
 %
-% Checks the docs/reference/matlab_interface.md result contract, that optimization
-% actually happened, budget accounting, convergence consistency,
-% seed-determinism, the target-error semantics of both exits (target stop
-% zeroes, budget exit reports raw), and the min_pop_size >= 11 floor.
-% Raises error() on any failure.
+% Checks:
+%   - the result contract in docs/reference/matlab_interface.md;
+%   - best_fitness beats the median of a random population;
+%   - budget accounting and a consistent convergence trace;
+%   - the same seed reproduces the run;
+%   - both exits: a target stop zeroes the error, a budget exit reports
+%     the raw error;
+%   - the min_pop_size >= 11 floor.
+% Raises an error when a check fails.
 
 d = 10;
-% np_init default = 100 (< 0.1*max_nfes so the initial KW phase exists,
-% as in the reference protocols)
+% Default np_init = 100 is below 0.1*max_nfes, so the initial KW phase
+% runs, as in the reference protocols.
 problem = local_sphere_problem(d, 8000);
 
 r1 = agsk_optimize(problem, struct('seed', 42));
@@ -22,8 +26,8 @@ med = median(problem.evaluate(rand_pop));
 local_assert(isfinite(r1.best_fitness) && r1.best_fitness < med, ...
     'agsk: best_fitness must beat a random population median');
 
-% budget semantics: either the full clipped budget was consumed, or the
-% run stopped early on the target with the error zeroed
+% Budget: either the full (clipped) budget is used, or the run stopped
+% early on the target with the error zeroed.
 if strcmp(r1.termination, 'max_evaluations')
     local_assert(r1.nfes == problem.max_nfes, ...
         'agsk: budget exit must consume the full clipped budget');
@@ -31,7 +35,7 @@ else
     local_assert(r1.error == 0, 'agsk: target exit must zero the error');
 end
 
-% determinism: same seed must reproduce everything bit-for-bit
+% Determinism: the same seed must reproduce the run bit for bit.
 r2 = agsk_optimize(problem, struct('seed', 42));
 local_assert(r2.best_fitness == r1.best_fitness, 'agsk: same seed, best_fitness differs');
 local_assert(r2.nfes == r1.nfes, 'agsk: same seed, nfes differs');
@@ -40,25 +44,25 @@ local_assert(isequal(r2.convergence.nfes, r1.convergence.nfes) && ...
     isequal(r2.convergence.best_fitness, r1.convergence.best_fitness), ...
     'agsk: same seed, convergence differs');
 
-% different seed must (almost surely) change the trajectory
+% A different seed must (almost surely) change the trajectory.
 r3 = agsk_optimize(problem, struct('seed', 43));
 local_assert(r3.best_fitness ~= r1.best_fitness, ...
     'agsk: different seed should change best_fitness');
 
-% reference dimension rule can be requested explicitly (40*D for D > 5)
+% The reference size rule (np_init = 40*D for D > 5) can be set explicitly.
 r4 = agsk_optimize(problem, struct('seed', 42, 'np_init', 40 * d));
 local_check_contract(r4, problem, 'agsk');
 local_assert(r4.params.np_init == 40 * d, 'agsk: np_init option not honored');
 
-% both target branches, independent of how close the default fixture gets:
-% an easy target stops early with the error zeroed ...
+% Test both exits directly, whatever the default run reaches.
+% An easy target stops early with the error zeroed ...
 problem_t = problem;
 problem_t.target_error = 1e3;
 rt = agsk_optimize(problem_t, struct('seed', 42));
 local_check_contract(rt, problem_t, 'agsk');
 local_assert(strcmp(rt.termination, 'target_error_reached') && rt.error == 0 && ...
     rt.nfes < problem_t.max_nfes, 'agsk: easy target must stop early with the error zeroed');
-% ... and a budget too small to reach 1e-8 exits on the budget with the raw error
+% ... and a budget too small to reach 1e-8 ends with the raw error.
 problem_b = local_sphere_problem(d, 2000);
 rb = agsk_optimize(problem_b, struct('seed', 42));
 local_check_contract(rb, problem_b, 'agsk');
@@ -66,8 +70,9 @@ local_assert(strcmp(rb.termination, 'max_evaluations') && rb.nfes == problem_b.m
     rb.error == rb.best_fitness - problem_b.optimum && rb.error ~= 0, ...
     'agsk: budget exit must consume the budget and report the raw (unzeroed) error');
 
-% population floor: the P = 0.05 senior partition needs NP >= 11, so the
-% smallest valid min_pop_size runs and anything below is rejected up front
+% Population floor: the P = 0.05 senior partition needs NP >= 11, so
+% min_pop_size = 11 runs and invalid sizes raise agsk_optimize:options
+% up front.
 r11 = agsk_optimize(local_sphere_problem(d, 3000), struct('seed', 7, 'min_pop_size', 11));
 local_check_contract(r11, local_sphere_problem(d, 3000), 'agsk');
 bad = {struct('seed', 7, 'min_pop_size', 10), struct('seed', 7, 'min_pop_size', 4), ...
@@ -87,7 +92,7 @@ end
 
 
 function problem = local_sphere_problem(d, max_nfes)
-%LOCAL_SPHERE_PROBLEM Interface-conformant sphere problem struct.
+%LOCAL_SPHERE_PROBLEM Sphere problem struct that follows the interface.
 problem = struct();
 problem.suite = 'sphere';
 problem.func_id = 1;
@@ -102,7 +107,7 @@ end
 
 
 function local_check_contract(r, problem, name)
-%LOCAL_CHECK_CONTRACT Assert the docs/reference/matlab_interface.md result fields.
+%LOCAL_CHECK_CONTRACT Check a result against docs/reference/matlab_interface.md.
 fields = {'optimizer', 'suite', 'func_id', 'dim', 'seed', 'best_x', ...
     'best_fitness', 'error', 'nfes', 'termination', 'convergence', ...
     'runtime_seconds', 'params', 'notes'};
@@ -141,8 +146,8 @@ bf = problem.evaluate(r.best_x);
 local_assert(abs(bf - r.best_fitness) <= 1e-12 * max(1, abs(bf)), ...
     sprintf('%s: best_x does not reproduce best_fitness', name));
 
-% error semantics (reference): zeroed only by the per-generation target
-% stop; a budget exit reports the raw error (no end-of-run zeroing)
+% Error rule (as in the reference): only the per-generation target stop
+% zeroes the error; a budget exit reports the raw error (no zeroing at the end).
 if isnan(problem.optimum)
     local_assert(isnan(r.error), sprintf('%s: error must be NaN for unknown optimum', name));
 else

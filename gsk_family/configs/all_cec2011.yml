@@ -3,6 +3,6 @@ suite: cec2011
 functions: all
 runs: 25
 seed: 20240620
-seed_policy: reference  # dt-gsk always runs the unified seed + threefry (its reference protocol)
+seed_policy: reference  # dt-gsk always uses the unified seed + threefry (its reference protocol)
 rand_generator: threefry
-max_evaluations: 0  # 0 = suite default (150,000 evaluations), verified as full protocol
+max_evaluations: 0  # 0 = suite default (150,000 evaluations); verified as the full protocol

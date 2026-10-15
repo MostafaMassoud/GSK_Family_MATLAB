@@ -23,7 +23,7 @@ senses of "correct" deliberately separate: benchmark **ports** are checked
 Validation runs at two layers.
 
 **C++ benchmark ports (exact, fixed-vector ground truth).** The CEC ports are
-standalone C++20 with no MATLAB, R, MEX, or Python at benchmark runtime. The
+standalone C++20 with no MATLAB, R, or MEX at benchmark runtime. The
 `ctest` suite covers:
 
 - the core library and RNG;
@@ -116,7 +116,7 @@ failure; only a seed mismatch fails. DT-GSK shares the seeds but, as a
 documented exception, samples its own initial population instead of the
 runner's `X0`.
 
-Compare a DT-GSK campaign run by run against the imported Python-reference
+Compare a DT-GSK campaign run by run against the imported reference
 evidence (MATLAB, Statistics and Machine Learning Toolbox, from the project
 root with `scripts` on the path):
 
@@ -150,20 +150,22 @@ were refreshed when DT-GSK was added as the seventh optimizer:
   snapshot: common helpers, the six optimizers of the time, the runner, and the
   bridge cross-check. It now has 13 tests, adding `test_dt_gsk_smoke.m`,
   `test_runner_resume.m` and `test_runner_fair_start.m`.
-- **DT-GSK** (added after that snapshot) was validated against its Python
-  reference implementation: a line-by-line port matched the unmodified Python
-  code on identical random numbers in all four dimension tiers and reproduces
-  the reference's golden values to `1e-13`, and the compact three-file version
-  shipped here reproduces that port bit for bit. The full CEC2017 campaign
-  against the imported reference results is recorded in
+- **DT-GSK** (added after that snapshot) was validated against its reference
+  implementation: a line-by-line port matched the unmodified reference
+  implementation on identical random numbers in all four dimension tiers and
+  reproduces the reference's golden values to `1e-13`, and the compact
+  three-file version shipped here reproduces that port bit for bit. On the
+  CEC2017 campaign (D10, D30 and D50 done; D100 still to run), all 87
+  functions agree with the imported reference runs (no significant rank-sum
+  difference; two differ only in Best). The campaign is recorded in
   [src/optimizers/dt-gsk/README.md](../../src/optimizers/dt-gsk/README.md),
   which holds the complete validation record.
 - An end-to-end `gsk_run --config configs/smoke.yml` runs MATLAB GSK on the
   ported CEC2017 benchmark through the bridge, writes the documented
   `summary`/`curves`/`gen_logs` tree, and `gsk_validate --compare` loads it and
   reports win/tie/loss against the imported references.
-- The language-contract checks (no `.py`/`.pyx`, no `cec2013.cpp`, no
-  `.m`/`.R`/`.c` under `cec_suite_cpp`) return nothing.
+- The language-contract checks (no source files in other languages, no
+  `cec2013.cpp`, no `.m`/`.R`/`.c` under `cec_suite_cpp`) return nothing.
 
 A reduced-budget `gsk_validate --compare` is a consistency and schema check, not
 a full-campaign equivalence claim -- see

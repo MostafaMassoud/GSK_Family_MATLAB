@@ -1,3 +1,6 @@
+// CEC2013-LSGO problem wrapper: exposes the F1..F15 classes through the
+// BenchmarkProblem interface (native D, bounds, optimum 0, size checks).
+
 #include "gskcec/benchmark/cec2013lsgo.hpp"
 
 #include "Header.h"
@@ -61,9 +64,9 @@ public:
         return 0.0;
     }
 
-    /// Evaluation mutates the suite's internal scratch buffers behind this
-    /// const interface (the pointee of impl_ is not const), so instances are
-    /// NOT thread-safe: never share one problem across threads.
+    /// Not thread-safe: evaluate() is const but changes the scratch buffers
+    /// inside *impl_ (the pointee is not const). Never share one problem
+    /// across threads.
     Real evaluate(std::span<const Real> x) const override {
         if (x.size() != static_cast<std::size_t>(impl_->getDimension())) {
             throw std::invalid_argument(
@@ -74,7 +77,7 @@ public:
     }
 
 private:
-    std::unique_ptr<Benchmarks> impl_; // scratch state mutates during evaluate()
+    std::unique_ptr<Benchmarks> impl_; // its scratch buffers change during evaluate()
 };
 
 } // namespace
@@ -94,8 +97,8 @@ int native_dimension(int function_id) {
         throw std::invalid_argument("cec2013lsgo: unsupported function id " +
                                     std::to_string(function_id) + " (supported: 1..15).");
     }
-    // F13/F14 use 905 because their 20 subcomponents (summing to 1000)
-    // overlap by 5; all other functions are 1000-dimensional.
+    // F13/F14: 20 subcomponents with sizes summing to 1000 overlap by 5,
+    // which leaves D = 905. All other functions have D = 1000.
     return (function_id == 13 || function_id == 14) ? 905 : 1000;
 }
 

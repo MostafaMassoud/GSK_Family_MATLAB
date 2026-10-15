@@ -1,4 +1,5 @@
-// gsk_list: enumerate benchmark suites, optimizers and imported references.
+// gsk_list: lists benchmark suites, optimizers and imported reference tables.
+// Exit code: 0 ok, 1 usage error, 2 any other error.
 
 #include "gskcec/benchmark/factory.hpp"
 #include "gskcec/benchmark/reference_results.hpp"

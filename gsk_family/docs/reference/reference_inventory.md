@@ -38,7 +38,7 @@ tables, and committed expected-value test data.
 | ATMALS-GSK | `src/optimizers/atmals-gsk/atmals_gsk_optimize.m` | Multi-parameter adaptation, roulette selection, and local-search logic. |
 | eGSK | `src/optimizers/egsk/egsk_optimize.m` | eGSK variant with late-stage refinement helpers. |
 | FDB-AGSK | `src/optimizers/fdb-agsk/fdb_agsk_optimize.m` | FDB case selection plus best/ranking/roulette scoring helpers. |
-| DT-GSK | `src/optimizers/dt-gsk/dt_gsk_optimize.m` | Dimension-Tiered GSK, ported from the DT-GSK reference implementation (Python, MIT license) v2.46, <https://github.com/MostafaMassoud/DT-GSK>; `pub` profile in `dt_gsk_config.m`, SGSM interaction graph in `dt_gsk_graph.m`. Port record and validation: `src/optimizers/dt-gsk/README.md`. |
+| DT-GSK | `src/optimizers/dt-gsk/dt_gsk_optimize.m` | Dimension-Tiered GSK, ported from the DT-GSK reference implementation v2.46 (MIT license), <https://github.com/MostafaMassoud/DT-GSK>; `pub` profile in `dt_gsk_config.m`, SGSM interaction graph in `dt_gsk_graph.m`. Port record and validation: `src/optimizers/dt-gsk/README.md`. |
 
 ## Benchmark Provenance
 
@@ -78,7 +78,7 @@ Current reference inventory:
   (`curves/`, `gen_logs/`, `evidence/`) are ignored by the loader.
 
 DT-GSK reference results (`<suite>/dt-gsk/`, 30 tables / 297 rows) were
-imported from the DT-GSK reference implementation (Python, MIT license, tag
+imported from the DT-GSK reference implementation (MIT license, tag
 `v2.46`). They were produced by that implementation, not by this toolkit, so
 agreement with them is cross-implementation evidence. Protocol: `pub` profile,
 unified seed `get_cec_seed(20240620, dim, func, run)`, Threefry substreams,

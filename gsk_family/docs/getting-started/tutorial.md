@@ -7,7 +7,7 @@
 > 1-3; MATLAB R2025b additionally for step 4 (the optimizer run). New to the
 > ideas? Read [explainer.md](explainer.md) first. **After reading:** you will
 > have produced and understood a complete result tree and be ready for
-> [user_guide.md](user_guide.md) and [runbook.md](runbook.md).
+> [user_guide.md](user_guide.md) and [command_reference.md](command_reference.md).
 
 This is a single end-to-end walkthrough for a newcomer. By the end you will
 have:
@@ -50,8 +50,8 @@ This project is developed with the **WinLibs MinGW-w64** GCC toolchain plus the
   The project was built with the winget package
   `BrechtSanders.WinLibs.POSIX.UCRT`.
 - Or reuse the **CMake that ships inside MATLAB**, at
-  `C:\path\to\MATLAB\R2025b\bin\win64\cmake\bin\cmake.exe` (e.g.
-  `C:\path\to\MATLAB\R2025b\bin\win64\cmake\bin\cmake.exe`).
+  `<matlabroot>\bin\win64\cmake\bin\cmake.exe` (for example
+  `C:\Program Files\MATLAB\R2025b\bin\win64\cmake\bin\cmake.exe`).
 
 **Pointing at your tools.** The instructions below call `cmake`, `g++`, and
 `matlab` by bare name, which works if they are on your `PATH`. If they are not,
@@ -140,7 +140,7 @@ dt-gsk
 ```
 
 These are the seven GSK-family optimizers; the first six are ports of MATLAB
-reference releases, and `dt-gsk` is a port of the Python DT-GSK reference
+reference releases, and `dt-gsk` is a port of the DT-GSK reference
 implementation.
 
 You can also summarize the imported published result tables you will later
@@ -317,7 +317,7 @@ default requested `rand_generator='threefry'`, and `use_parallel=false`.
 Reference mode records the effective generator in metadata; AGSK, APGSK,
 FDB-AGSK, eGSK, and ATMALS-GSK use legacy `seed`, while GSK uses `twister`.
 (DT-GSK is the exception: it always runs the unified seed with `threefry`,
-under every policy; see [runbook.md](runbook.md#37-dt-gsk).)
+under every policy; see [command_reference.md](command_reference.md#37-dt-gsk).)
 For new fair cross-family experiments, choose `seed_policy='unified'`; it uses
 one optimizer-independent seed schedule over `(D,function,run)`, shares the
 runner-generated initial population and post-initialization RNG state, and
@@ -461,8 +461,7 @@ Columns `Eval,BestError,Log10Error` for the **median run** of each
 (function, dimension): the best-so-far error after each generation versus
 evaluations spent. Plotting `BestError` against `Eval` gives the convergence
 curve described in [explainer.md](explainer.md) §5. (`Log10Error` is blank where
-the value is non-positive.) Open it in MATLAB, a spreadsheet, or any tool — the
-project ships no Python.
+the value is non-positive.) Open it in MATLAB, a spreadsheet, or any other tool.
 
 ### gen_logs\CheckpointErrors_gsk_F1_D10.csv — checkpoint table
 
@@ -599,7 +598,7 @@ is expected and not an error, for the same reduced-budget reason as above.
   ```
 - **DT-GSK.** The seventh optimizer runs on any of the five suites with
   `--optimizer dt-gsk` (it has reference tables on all of them).
-  [Runbook section 3.7](runbook.md#37-dt-gsk) covers its seeding exception and
+  [Command Reference section 3.7](command_reference.md#37-dt-gsk) covers its seeding exception and
   the run-by-run comparison with `scripts/compare_reference_runs.m`.
 - **MATLAB-only smoke tests.** To exercise the optimizers and runner without the
   MEX bridge (pure-MATLAB sphere problems), run:

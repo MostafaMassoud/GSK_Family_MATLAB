@@ -1,10 +1,13 @@
 function test_gsk_smoke()
 %TEST_GSK_SMOKE Smoke test for gsk_optimize on a pure-MATLAB sphere problem.
 %
-% Checks the docs/reference/matlab_interface.md result contract, that optimization
-% actually happened, budget accounting, convergence consistency,
-% seed-determinism, and the end-of-run target-error zeroing (both
-% branches). Raises error() on any failure.
+% Checks:
+%   - the result contract in docs/reference/matlab_interface.md;
+%   - best_fitness beats the median of a random population;
+%   - budget accounting and a consistent convergence trace;
+%   - the same seed reproduces the run;
+%   - both branches of the end-of-run target-error zeroing.
+% Raises an error when a check fails.
 
 d = 10;
 problem = local_sphere_problem(d, 8000);
@@ -12,8 +15,7 @@ problem = local_sphere_problem(d, 8000);
 r1 = gsk_optimize(problem, struct('seed', 42));
 local_check_contract(r1, problem, 'gsk');
 
-% optimization happened: best fitness clearly beats the median fitness of
-% a random population
+% Progress: best_fitness must beat the median fitness of a random population.
 rng(99, 'twister');
 rand_pop = repmat(problem.lb, 200, 1) + ...
     rand(200, d) .* repmat(problem.ub - problem.lb, 200, 1);
@@ -21,7 +23,7 @@ med = median(problem.evaluate(rand_pop));
 local_assert(isfinite(r1.best_fitness) && r1.best_fitness < med, ...
     'gsk: best_fitness must beat a random population median');
 
-% baseline GSK never stops early on the target (reference semantics)
+% Baseline GSK never stops early on the target, as in the reference.
 local_assert(strcmp(r1.termination, 'max_evaluations'), ...
     'gsk: termination must be max_evaluations');
 local_assert(r1.nfes == problem.max_nfes, ...
@@ -29,8 +31,8 @@ local_assert(r1.nfes == problem.max_nfes, ...
 local_assert(r1.error ~= 0, ...
     'gsk: fixture must leave the raw error above target (exercises the unzeroed branch)');
 
-% end-of-run zeroing branch: a target the run surely beats zeroes the error
-% but must not stop the run early
+% Zeroing branch: a target the run surely beats zeroes the final error,
+% but must not stop the run early.
 problem_t = problem;
 problem_t.target_error = 1e3;
 rt = gsk_optimize(problem_t, struct('seed', 42));
@@ -42,7 +44,7 @@ local_assert(strcmp(rt.termination, 'max_evaluations') && rt.nfes == problem_t.m
 local_assert(rt.best_fitness == r1.best_fitness, ...
     'gsk: target_error must not change the trajectory (it only zeroes the final error)');
 
-% determinism: same seed must reproduce everything bit-for-bit
+% Determinism: the same seed must reproduce the run bit for bit.
 r2 = gsk_optimize(problem, struct('seed', 42));
 local_assert(r2.best_fitness == r1.best_fitness, 'gsk: same seed, best_fitness differs');
 local_assert(r2.nfes == r1.nfes, 'gsk: same seed, nfes differs');
@@ -51,7 +53,7 @@ local_assert(isequal(r2.convergence.nfes, r1.convergence.nfes) && ...
     isequal(r2.convergence.best_fitness, r1.convergence.best_fitness), ...
     'gsk: same seed, convergence differs');
 
-% different seed must (almost surely) change the trajectory
+% A different seed must (almost surely) change the trajectory.
 r3 = gsk_optimize(problem, struct('seed', 43));
 local_assert(r3.best_fitness ~= r1.best_fitness, ...
     'gsk: different seed should change best_fitness');
@@ -60,7 +62,7 @@ end
 
 
 function problem = local_sphere_problem(d, max_nfes)
-%LOCAL_SPHERE_PROBLEM Interface-conformant sphere problem struct.
+%LOCAL_SPHERE_PROBLEM Sphere problem struct that follows the interface.
 problem = struct();
 problem.suite = 'sphere';
 problem.func_id = 1;
@@ -75,7 +77,7 @@ end
 
 
 function local_check_contract(r, problem, name)
-%LOCAL_CHECK_CONTRACT Assert the docs/reference/matlab_interface.md result fields.
+%LOCAL_CHECK_CONTRACT Check a result against docs/reference/matlab_interface.md.
 fields = {'optimizer', 'suite', 'func_id', 'dim', 'seed', 'best_x', ...
     'best_fitness', 'error', 'nfes', 'termination', 'convergence', ...
     'runtime_seconds', 'params', 'notes'};
@@ -96,7 +98,7 @@ local_assert(ischar(r.notes), sprintf('%s: notes must be char', name));
 local_assert(isstruct(r.params), sprintf('%s: params must be struct', name));
 local_assert(r.runtime_seconds >= 0, sprintf('%s: bad runtime', name));
 
-% convergence consistency
+% Convergence trace must be consistent.
 c = r.convergence;
 local_assert(isstruct(c) && isfield(c, 'nfes') && isfield(c, 'best_fitness'), ...
     sprintf('%s: convergence struct malformed', name));
@@ -111,13 +113,13 @@ local_assert(c.nfes(end) == r.nfes, ...
 local_assert(c.best_fitness(end) == r.best_fitness, ...
     sprintf('%s: last convergence best must equal best_fitness', name));
 
-% best_x must reproduce best_fitness on this deterministic problem
+% best_x must reproduce best_fitness (the problem is deterministic).
 bf = problem.evaluate(r.best_x);
 local_assert(abs(bf - r.best_fitness) <= 1e-12 * max(1, abs(bf)), ...
     sprintf('%s: best_x does not reproduce best_fitness', name));
 
-% error semantics: best_fitness - optimum, zeroed at the end of the run
-% when strictly below the target (GSK never stops early)
+% Error = best_fitness - optimum (NaN if the optimum is unknown), zeroed at
+% the end of the run when strictly below the target (GSK never stops early).
 if isnan(problem.optimum)
     local_assert(isnan(r.error), sprintf('%s: error must be NaN for unknown optimum', name));
 else

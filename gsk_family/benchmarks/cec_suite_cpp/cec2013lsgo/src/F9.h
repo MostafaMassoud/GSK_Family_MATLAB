@@ -7,9 +7,9 @@ namespace gskcec::cec2013lsgo {
 /// F9: 20-nonseparable Shifted and Rotated Rastrigin's Function,
 /// D = 1000, [-100, 100].
 ///
-/// Note: the reference code sets minX/maxX to -100/100 for F9 (the
-/// CEC2013 LSGO technical report lists [-5, 5]); the reference code wins
-/// here to keep parity with the published C++ implementation.
+/// The reference code sets these bounds; the CEC2013-LSGO technical report
+/// lists [-5, 5]. The reference code is followed, to match the published
+/// C++ implementation.
 class F9 : public Benchmarks {
 public:
     explicit F9(const std::filesystem::path& dataDir);

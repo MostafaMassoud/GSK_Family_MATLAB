@@ -326,7 +326,7 @@ steering, the plain [AGSK](agsk.md), [APGSK](apgsk.md), or [GSK](gsk.md) baselin
 are simpler. For comparison this optimizer sits alongside
 [ATMALS-GSK](atmals-gsk.md), [eGSK](egsk.md) and [DT-GSK](dt-gsk.md) in the
 family. See
-**[../getting-started/runbook.md](../getting-started/runbook.md)** to run it (pass
+**[../getting-started/command_reference.md](../getting-started/command_reference.md)** to run it (pass
 `options.fdb_case` to pick a case); interface contract:
 [matlab_interface.md](../reference/matlab_interface.md).
 

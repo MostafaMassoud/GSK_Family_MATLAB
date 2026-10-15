@@ -13,7 +13,7 @@ folder, under `src`, or under `src/benchmark/cec*`. Keep those artifacts inside
 `benchmarks/cec_suite_cpp`. Keep CEC C++ support code inside
 `benchmarks/cec_suite_cpp/cec_tools`.
 
-Do not add Python code, Python wrappers, or generated Cython bindings under
+Do not add non-C++ code, other-language wrappers, or generated bindings under
 `benchmarks`.
 
 ## Researcher mental model
@@ -23,7 +23,7 @@ Do not add Python code, Python wrappers, or generated Cython bindings under
 | `cec_suite_cpp/<suite>/src` | C++ source code for benchmark functions | Edit only when fixing or extending a benchmark port; rebuild and run CTest. |
 | `cec_suite_cpp/<suite>/input_data` | Shift, rotation, shuffle, and converted problem data | Treat as benchmark data; do not edit during optimizer experiments. |
 | `cec_suite_cpp/cec_tools` | Shared C++ APIs, CLIs, MEX bridge, tests | Edit for benchmark integration, validation, or tooling work. |
-| `cec_reference_results` | Imported published optimizer result tables plus curated `curves/`, `curves/graphs/`, and `gen_logs/` convergence assets; for DT-GSK, tables imported from its Python reference implementation, with per-run `evidence/` and `PROVENANCE.md` under `cec2017/dt-gsk/` | Read-only evidence for comparison, verification, and future convergence-graph generation. |
+| `cec_reference_results` | Imported published optimizer result tables plus curated `curves/`, `curves/graphs/`, and `gen_logs/` convergence assets; for DT-GSK, tables imported from its reference implementation, with per-run `evidence/` and `PROVENANCE.md` under `cec2017/dt-gsk/` | Read-only evidence for comparison, verification, and future convergence-graph generation. |
 | `../results` | Generated experiment outputs | Append/resume only; do not use as input reference data. |
 
 Example: if a CEC2017 run (`run_all.ps1 -Configs configs\all_cec2017.yml`)

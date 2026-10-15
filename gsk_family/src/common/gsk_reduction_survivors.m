@@ -3,13 +3,12 @@ function survivors = gsk_reduction_survivors(fitness, num_remove)
 %
 %   survivors = gsk_reduction_survivors(fitness, num_remove)
 %
-% Returns the row indices (column vector, in original row order) that
-% survive after removing the num_remove worst individuals by current
-% fitness.
+% Returns the row indices that survive after removing the num_remove worst
+% individuals by current fitness, as a column vector in original row order.
+% Draws no random numbers.
 %
-% Reference behavior transcribed from the population resizing loop in:
-%   historical source: agsk/agsk/AGSK-CODE-FINAL/Adaptive_GSK_ALI.m
-%   historical source: apgsk/apgsk/APGSK Code/Adaptive_GSK_ALI.m
+% Source: the population resizing loop in Adaptive_GSK_ALI.m
+% (agsk/agsk/AGSK-CODE-FINAL/ and apgsk/apgsk/APGSK Code/):
 %     for r = 1 : reduction_ind_num
 %         [valBest indBest] = sort(fitness, 'ascend');
 %         worst_ind = indBest(end);
@@ -17,12 +16,11 @@ function survivors = gsk_reduction_survivors(fitness, num_remove)
 %         fitness(worst_ind,:) = []; K(worst_ind,:) = [];
 %     end
 %
-% Equivalence: MATLAB sort is stable, so sequentially deleting the
-% last-ranked row removes exactly the last num_remove entries of the
-% initial stable ascending ordering (ties on the worst value are removed
-% from the highest original row index downwards, exactly as the reference
-% loop does), and row deletion preserves the relative order of survivors.
-% Consumes no random numbers.
+% Why one sort is equivalent: MATLAB sort is stable, so deleting the
+% last-ranked row num_remove times removes exactly the last num_remove
+% entries of the initial ascending order. Ties on the worst value go from
+% the highest original row index down, as in the reference loop, and row
+% deletion keeps the survivors in their relative order.
 
 np = numel(fitness);
 [~, indBest] = sort(fitness(:), 'ascend');

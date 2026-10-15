@@ -1,20 +1,22 @@
-// cec2013_tests.cpp -- validation harness for the standalone C++ port of
-// the standard CEC2013 suite (benchmarks/cec_suite_cpp/cec2013/src/cec2013_problem.cpp).
+// cec2013_tests.cpp -- tests for the standalone C++ port of the standard
+// CEC2013 suite (benchmarks/cec_suite_cpp/cec2013/src/cec2013_problem.cpp).
 //
-// No R installation exists, so external ground truth is unavailable. The
-// harness layers:
-//   1. Analytic check: f1 is shifted sphere plus bias, recomputed here
-//      independently from shift_data.txt (relative tolerance 1e-9).
-//   2. Optimum-at-shift: f(o) == bias for every function at every
-//      supported dimension, o being the first D values of shift_data.txt
-//      (tolerance 1e-6; see notes in the suite README for why all 28
-//      functions satisfy this by construction).
-//   3. Self-regression: evaluates functions 1..28 at dimensions 10/30/50
-//      on the 5 probe points in tests/data/points_D<dim>.txt. Writes
-//      tests/data/cec2013_regression.csv when absent; verifies against it
-//      (relative tolerance 1e-12) when present. The CSV is self-generated
-//      by this port -- a refactor guard, NOT external ground truth.
-//   4. Argument / data-root error handling and API surface checks.
+// No R installation is available, so there are no external reference
+// values. The test has four parts:
+//   1. Analytic check: f1 is a shifted sphere plus bias, recomputed here
+//      from shift_data.txt (relative tolerance 1e-9).
+//   2. Optimum at the shift: f(o) == bias for every function at every
+//      supported dimension, where o is the first D values of
+//      shift_data.txt (tolerance 1e-6; the suite README explains why all
+//      28 functions satisfy this by construction).
+//   3. Self-regression: evaluates functions 1..28 at D = 10/30/50 on the
+//      5 probe points in tests/data/points_D<dim>.txt. Writes
+//      tests/data/cec2013_regression.csv if it is missing, otherwise
+//      compares against it (relative tolerance 1e-12). The CSV comes from
+//      this port itself: it guards against regressions and is NOT an
+//      external reference.
+//   4. API and metadata checks; bad ids, dimensions and input sizes throw
+//      std::invalid_argument, a missing data root throws std::runtime_error.
 //
 // Usage: cec2013_tests [project_root]   (default ".")
 
@@ -93,9 +95,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path tests_data = root / "benchmarks" / "cec_suite_cpp" / "cec_tools" / "tests" / "data";
     const std::filesystem::path regression_csv = tests_data / "cec2013_regression.csv";
 
-    /* ------------------------------------------------------------ */
-    /* API surface                                                   */
-    /* ------------------------------------------------------------ */
+    // ---- API ----
     {
         const std::vector<int>& functions = gskcec::cec2013::supported_functions();
         check(functions.size() == 28, "supported_functions() lists 28 ids");
@@ -110,9 +110,7 @@ int main(int argc, char** argv) {
               "supported_dimensions() matches the R wrapper whitelist");
     }
 
-    /* ------------------------------------------------------------ */
-    /* Metadata                                                      */
-    /* ------------------------------------------------------------ */
+    // ---- Metadata ----
     for (int func = 1; func <= 28; ++func) {
         const auto problem = gskcec::cec2013::make_problem(func, 10, data_root);
         const std::string tag = "f" + std::to_string(func);
@@ -128,9 +126,7 @@ int main(int argc, char** argv) {
         check(box_ok, tag + " bounds are [-100,100]^D");
     }
 
-    /* ------------------------------------------------------------ */
-    /* Invalid arguments and missing data                            */
-    /* ------------------------------------------------------------ */
+    // ---- Invalid arguments and missing data ----
     {
         const auto expect_invalid = [&](int func, int dim, const std::string& label) {
             bool threw = false;
@@ -170,9 +166,7 @@ int main(int argc, char** argv) {
         check(size_threw, "evaluate() with wrong-size vector throws std::invalid_argument");
     }
 
-    /* ------------------------------------------------------------ */
-    /* Layer 1: analytic f1 (shifted sphere + bias)                  */
-    /* ------------------------------------------------------------ */
+    // ---- Part 1: analytic f1 (shifted sphere + bias) ----
     const gskcec::Vector shift_table = gskcec::load_values_file(data_root / "shift_data.txt");
     check(shift_table.size() >= 1000, "shift_data.txt holds at least 10*100 values");
 
@@ -202,9 +196,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    /* ------------------------------------------------------------ */
-    /* Layer 2: optimum-at-shift, every function x every dimension   */
-    /* ------------------------------------------------------------ */
+    // ---- Part 2: optimum at the shift, every function x every D ----
     for (const int dim : gskcec::cec2013::supported_dimensions()) {
         const std::size_t n = static_cast<std::size_t>(dim);
         const std::vector<double> shift(shift_table.begin(),
@@ -220,9 +212,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    /* ------------------------------------------------------------ */
-    /* Layer 3: self-regression CSV (generate when absent)           */
-    /* ------------------------------------------------------------ */
+    // ---- Part 3: self-regression CSV (written if missing) ----
     {
         std::vector<RegressionRow> rows;
         bool all_finite = true;

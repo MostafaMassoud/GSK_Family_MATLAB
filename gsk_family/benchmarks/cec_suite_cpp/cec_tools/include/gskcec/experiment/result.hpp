@@ -7,12 +7,14 @@
 
 namespace gskcec {
 
+/// One point of a convergence curve, recorded after @c nfes evaluations.
 struct ConvergencePoint {
     EvaluationCount nfes = 0;
     Real best_fitness = 0.0;
     Real error = 0.0;
 };
 
+/// Outcome of one optimizer run on one benchmark function.
 struct RunResult {
     std::string optimizer;
     std::string suite;

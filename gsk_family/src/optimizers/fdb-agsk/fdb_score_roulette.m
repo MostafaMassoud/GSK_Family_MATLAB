@@ -1,13 +1,15 @@
 function index = fdb_score_roulette(population, fitness)
-%FDB_SCORE_ROULETTE Faithful port of the FDB-AGSK roulette-score selector.
+%FDB_SCORE_ROULETTE Index drawn by roulette wheel over the FDB scores.
 %
-% Source (transcribed verbatim):
-%   historical source: FDB-AGSK reference RFDB_Func1.m
+%   index = fdb_score_roulette(population, fitness)
 %
-% Same Fitness-Distance Balance score as fdb_score_best (FDB_Func1), but
-% the returned index is drawn by roulette wheel over the scores instead of
-% argmax. The degenerate guard additionally checks for infinite fitness
-% sums and non-finite best vectors, exactly as written in the reference.
+% Faithful port of the FDB-AGSK reference RFDB_Func1.m (historical source).
+% population: NP x D; fitness: NP values (lower is better).
+% Same FDB score as fdb_score_best (FDB_Func1), but index is drawn with
+% probability proportional to the score (one rand draw), not the argmax.
+% index = randi(NP) instead when all fitness values are equal, when
+% sum(fitness) is +Inf, or when sum(best) is +Inf or NaN, as in the
+% reference.
 
 [~, bestIndex] = min(fitness);
 best = population(bestIndex, :);
@@ -23,9 +25,8 @@ if (min(fitness) == max(fitness)) || (sum(fitness) >= Inf) || ~(sum(best) < inf)
 
 else
 
-    % Manhattan distance to best + normalization, vectorized. sum(...,2) sums
-    % over dimensions in the same order as the original inner j-loop, so the
-    % scores are bit-identical to the loop version.
+    % Vectorized distance and normalization. sum(...,2) adds the dimensions
+    % in the same order as the original loop, so scores match bit for bit.
     distances = sum(abs(best - population), 2).';
     f = fitness(:).';
     minFitness = min(f); maxMinFitness = max(f) - minFitness;

@@ -20,7 +20,7 @@ benchmarks/cec_suite_cpp/              CEC C++ ports, input data, and support to
 benchmarks/cec_suite_cpp/cec_tools/    C++ CEC helper library, CLI tools, tests
 ```
 
-CEC benchmark implementations are standalone C++20 (no MATLAB/R/MEX/Python
+CEC benchmark implementations are standalone C++20 (no MATLAB/R/MEX
 at runtime). GSK-family optimizers remain MATLAB.
 
 ## Statistics conventions (all suites)
@@ -78,7 +78,7 @@ at runtime). GSK-family optimizers remain MATLAB.
 ## CEC2013LSGO
 
 - Source: `.../cec_suite_cpp/cec2013lsgo/` (separate large-scale suite; never
-  merged with standard CEC2013; Python/Cython artifacts excluded).
+  merged with standard CEC2013; only the C++ sources are kept).
 - Functions 1..15; native dimensions 1000 (905 for overlapping f13/f14);
   per-function domains from the code ([-100,100] / [-5,5] / [-32,32]).
 - Optimum 0 by construction (f12: optimum at xopt+1; f14: no single

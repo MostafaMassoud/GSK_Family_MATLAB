@@ -132,10 +132,10 @@ remove them:
 - .clang-format
 - .clang-tidy
 
-Python is not allowed ANYWHERE in this project. There is no Python anywhere in
-the tree. Do not add Python scripts, wrappers, generated Cython files, notebooks,
-or Python package dependencies. Tooling is MATLAB, C++20, PowerShell, CMake,
-Pandoc, and Doxygen only. (Citing the DT-GSK Python reference implementation as
+The project is MATLAB and C++ only (no other languages or generated bindings).
+Do not add scripts, wrappers, generated bindings, notebooks, or package
+dependencies in other languages. Tooling is MATLAB, C++20, PowerShell, CMake,
+Pandoc, and Doxygen only. (Citing the DT-GSK reference implementation as
 provenance is allowed; it is not part of this project.)
 
 ## Supported Algorithms
@@ -192,8 +192,8 @@ Reference-code mapping (subfolder -> current optimizer/material):
 - benchmarks -> CEC benchmark material
 
 DT-GSK is not in this corpus. Its source is the DT-GSK reference implementation
-(Python, MIT license, v2.46, https://github.com/MostafaMassoud/DT-GSK); use it
-the same way, as read-only evidence.
+v2.46 (MIT license, https://github.com/MostafaMassoud/DT-GSK); use it the same
+way, as read-only evidence.
 
 Do not edit, move, delete, or normalize files in the external reference corpus.
 Do not copy large reference files wholesale into the current project. Use it to
@@ -331,7 +331,8 @@ There are four accepted seed-policy labels grouped into three behavior families:
    Run the reference policy to reproduce the published CEC reference tables.
    dt-gsk is unified-only (is_unified_only in run_experiment.m): it gets the
    unified seed and threefry under EVERY policy, because its reference campaign
-   was produced that way (the Python reference's UNIFIED_ONLY_OPTIMIZERS).
+   was produced that way (the reference implementation's
+   UNIFIED_ONLY_OPTIMIZERS).
 
 3. native and derived: both honor the requested generator and use the diagnostic
    optimizer/suite-hashed seed via src/runners/derive_run_seed.m.
@@ -412,10 +413,10 @@ context:
 - Under the reference policy, GSK / AGSK / APGSK / FDB-AGSK reproduce the
   published CEC2017 tables closely; ATMALS-GSK and eGSK reference fidelity
   depends on their toolbox-dependent stages and historical clock-seeded origins.
-- DT-GSK references for all five suites are imported from its Python reference
-  (benchmarks/cec_reference_results/<suite>/dt-gsk/; per-run evidence and
-  PROVENANCE.md under cec2017/dt-gsk/). Its validation and CEC2017 campaign
-  results are recorded in src/optimizers/dt-gsk/README.md;
+- DT-GSK references for all five suites are imported from its reference
+  implementation (benchmarks/cec_reference_results/<suite>/dt-gsk/; per-run
+  evidence and PROVENANCE.md under cec2017/dt-gsk/). Its validation and CEC2017
+  campaign results are recorded in src/optimizers/dt-gsk/README.md;
   scripts/compare_reference_runs.m compares two per_run.csv sets per
   (dimension, function) cell (Wilcoxon rank-sum with Holm-adjusted p-values;
   needs the Statistics and Machine Learning Toolbox).
@@ -567,7 +568,7 @@ Per-optimizer deep checks and preserved quirks (verify each is intact):
   D >= 100), NP = 5*D with nonlinear population reduction, named Threefry
   substreams derived from options.seed (the global RNG is never touched), a
   runner X0 ignored by design; termination 'max_evaluations'. Its parity with
-  the Python reference is summarized in src/optimizers/dt-gsk/README.md.
+  the reference implementation is summarized in src/optimizers/dt-gsk/README.md.
 
 Performance opportunities to identify (propose, gate on risk):
 
@@ -753,8 +754,8 @@ LICENSES.md. The OLD flat docs/*.md paths are GONE; update any reference that
 still points at them. Current layout:
 
 - docs/index.md (landing page)
-- docs/getting-started/: explainer.md, tutorial.md, user_guide.md, runbook.md,
-  configuration.md, troubleshooting.md
+- docs/getting-started/: explainer.md, tutorial.md, user_guide.md,
+  command_reference.md, configuration.md, troubleshooting.md
 - docs/reference/: architecture.md, matlab_interface.md, api.md,
   module_dependencies.md, workflows.md, result_schema.md, seed_policy.md,
   benchmark_protocol.md, benchmark_mapping.md, diagrams.md,
@@ -770,6 +771,7 @@ still points at them. Current layout:
   documentation_review_prompt.md, INLINE_DOCUMENTATION_REVIEW_PROMPT.md,
   documentation_parity_prompt.md, llm_review_prompt.md
 - root LICENSES.md
+- root RUNBOOK.md (the beginner runbook)
 
 Documentation build: docs are built by scripts/build_docs.ps1 (PowerShell +
 Pandoc 3.8+ for the Markdown pages, with a built-in fallback renderer when
@@ -784,6 +786,7 @@ Update docs and inline comments so they match the current implementation.
 Prioritize:
 
 - README.md
+- RUNBOOK.md (the beginner runbook)
 - SKILL.md
 - docs/index.md
 - docs/reference/project_structure.md
@@ -799,7 +802,7 @@ Prioritize:
 - docs/research/performance.md
 - docs/research/reproducibility.md
 - docs/research/validation_report.md
-- docs/getting-started/runbook.md
+- docs/getting-started/command_reference.md
 - docs/getting-started/configuration.md
 - docs/algorithms/<slug>.md for all seven optimizers, and
   src/optimizers/dt-gsk/README.md (the DT-GSK validation record)
@@ -834,11 +837,13 @@ grounded.
 Run what is feasible locally and report anything skipped with a reason. Use the
 exact commands below (PowerShell-friendly; MinGW Makefiles generator).
 
-Language-contract / hygiene checks (confirm no Python anywhere; confirm no stray
-generated sources):
+Language-contract / hygiene checks (confirm the tree is MATLAB and C++ only, with
+no other-language sources, notebooks, or stray generated sources; every file
+extension listed should belong to MATLAB, C++, PowerShell, CMake, configs, data,
+or docs):
 
-    rg --files . | rg "\.(py|pyx|ipynb)$"
-    rg --files benchmarks | rg "\.(py|pyx|ipynb)$"
+    rg --files . | ForEach-Object { [IO.Path]::GetExtension($_) } | Sort-Object -Unique
+    rg --files benchmarks | ForEach-Object { [IO.Path]::GetExtension($_) } | Sort-Object -Unique
 
 C++ build and the thirteen ctest suites:
 

@@ -1,21 +1,27 @@
 classdef dt_gsk_graph < handle
 %DT_GSK_GRAPH Interaction graph of DT-GSK (success-graph structural memory, SGSM).
 %
+%   G = dt_gsk_graph(D)   creates an empty graph (handle object)
+%
+% Methods: update, extract_blocks, linkage_groups, ready, adaptive_threshold,
+% restart_decay, polish_basis.
+%
 % Used by the D >= 50 tiers. The graph learns which dimensions improve together:
 % every accepted move (trial - parent) adds the outer product of its normalised
 % |displacement|, weighted by its fitness improvement, to a symmetric D x D
-% co-improvement matrix, and all accumulators decay a little every generation.
+% co-improvement matrix, and all accumulators decay every generation.
 % Periodically the graph is cut into blocks of co-adapting dimensions, each with
-% a confidence score. Once the blocks are mature and confident enough, they
-% replace the random linkage groups of the blockwise junior/senior masks. The
-% eigenvectors of the signed co-movement matrix give the directions for the
-% final polish.
+% a confidence score. Once the blocks are mature and confident enough, part of
+% the blockwise junior/senior crossover rows use them instead of the random
+% linkage groups. The eigenvectors of the signed co-movement matrix give the
+% directions of the final polish. Dimension indices are 1-based.
 %
 % Reference: DT-GSK v2.46, https://github.com/MostafaMassoud/DT-GSK; Masoud,
-% Roshdy, Mohamed, Algorithms (MDPI), 2026.
-% Bit-exact with the reference: sums whose bits matter use np_sum (NumPy pairwise
-% summation) or explicit left-to-right loops, and ties are broken by stable sorts.
-% Dimension indices are 1-based.
+% Roshdy, Mohamed, Algorithms (MDPI), 2026. To match the reference
+% implementation bit for bit, sums whose bits matter use pairwise_sum (pairwise
+% summation, as in the reference) or explicit left-to-right loops, ties are
+% broken by stable sorts, block pairs follow its upper-triangle order and the
+% polish directions follow its eigenvalue order.
 %
 % Scope: only what the pub profile uses is implemented. The trailing generation
 % argument of extract_blocks and absolute-minimum argument of adaptive_threshold
@@ -43,8 +49,10 @@ classdef dt_gsk_graph < handle
 
         function update(G, X, imp, decay, lr, sw)
             % Decay all accumulators, then absorb the accepted moves X (n x D)
-            % with improvements imp (> 0). sw holds per-move weights ([] = 1);
-            % a weight of 0 drops the move (e.g. DE offspring).
+            % with improvements imp. sw holds per-move weights ([] = 1). A move
+            % is skipped unless 0 < imp < Inf and 0 < weight < Inf, so a weight
+            % of 0 drops it (e.g. DE offspring). Nothing is absorbed when
+            % lr <= 0.
             G.matrix = G.matrix * decay;
             G.signed_matrix = G.signed_matrix * decay;
             G.support = G.support * decay;
@@ -60,7 +68,7 @@ classdef dt_gsk_graph < handle
                 if ~(imp(i) > 0 && imp(i) < Inf && s > 0 && s < Inf), continue; end
                 idx = find(A(i, :) > 1e-15);              % dims the move touched
                 if isempty(idx), continue; end
-                denom = np_sum(A(i, idx));
+                denom = pairwise_sum(A(i, idx));
                 if ~(denom > 1e-15 && denom < Inf), continue; end
                 w = imp(i) * s;
                 va = A(i, idx) / denom;                   % |move| as a distribution
@@ -83,7 +91,8 @@ classdef dt_gsk_graph < handle
             % Re-cut the graph into blocks and score their confidence.
             D = size(G.matrix, 1);
             prev = G.blocks;
-            % Normalised graph (max edge 1); an empty graph gives no blocks.
+            % Normalised graph (max edge 1); an all-zero graph or a NaN or Inf
+            % edge gives no blocks.
             W = symmetrise(G.matrix, true);
             mx = max(W(:), [], 'includenan');
             groups = cell(1, 0);
@@ -131,9 +140,10 @@ classdef dt_gsk_graph < handle
                 [~, o] = sort(cellfun(@(b) b(1), groups));
                 groups = groups(o);
             end
-            % Block confidence = edge density x sqrt(raw signal x support signal)
-            % x (0.5 + 0.5 x stability); the three means run over the block's
-            % pairs, stability is the best Jaccard overlap with a previous block.
+            % Block confidence = rel x sqrt((1 - e^-raw) x (1 - e^-sup)) x
+            % (0.5 + 0.5 x stab): rel, raw and sup are the means of the
+            % normalised, raw and support weights over the block's pairs; stab
+            % is the best Jaccard overlap with a previous block.
             prev_of = zeros(1, D);                         % previous block of each dim
             for p = 1:numel(prev), prev_of(prev{p}) = p; end
             prev_size = cellfun(@numel, prev);
@@ -141,11 +151,13 @@ classdef dt_gsk_graph < handle
             conf = zeros(1, nb);
             for t = 1:nb
                 b = groups{t};
-                [r, c] = find(tril(true(numel(b)), -1));  % pairs c < r in NumPy's triu order
+                % Pairs (c, r) with c < r, row by row of the upper triangle: the
+                % pair order of the reference implementation.
+                [r, c] = find(tril(true(numel(b)), -1));
                 e = b(c) + (b(r) - 1) * D;                 % linear index of entry (b(c), b(r))
-                rel = np_sum(W(e)) / numel(e);
-                raw = np_sum(G.matrix(e)) / numel(e);      % >= 0
-                sup = np_sum(G.support(e)) / numel(e);     % >= 0
+                rel = pairwise_sum(W(e)) / numel(e);
+                raw = pairwise_sum(G.matrix(e)) / numel(e);      % >= 0
+                sup = pairwise_sum(G.support(e)) / numel(e);     % >= 0
                 in = prev_of(b);
                 stab = 0;
                 for p = in(in > 0)
@@ -158,8 +170,8 @@ classdef dt_gsk_graph < handle
             G.blocks = groups;
             G.nontrivial_dims = sum(sizes);
             if nb > 0
-                % Size-weighted mean confidence, discounted by the covered fraction.
-                G.overall_confidence = np_sum(conf .* sizes) / sum(sizes) * sqrt(G.nontrivial_dims / D);
+                % Size-weighted mean confidence x sqrt(covered fraction of dims).
+                G.overall_confidence = pairwise_sum(conf .* sizes) / sum(sizes) * sqrt(G.nontrivial_dims / D);
             else
                 G.overall_confidence = 0;
             end
@@ -192,20 +204,22 @@ classdef dt_gsk_graph < handle
                 return;
             end
             if window > 0 && window < n, h = h(end - window + 1:end); end
-            thr = max(floor_v, np_quantile(h, q));
+            thr = max(floor_v, linear_quantile(h, q));
         end
 
         function restart_decay(G, f)
-            % Shrink the accumulated evidence after a population restart.
+            % Weaken the evidence after a BSE escape: scale all accumulators by f.
             G.matrix = G.matrix * f;
             G.signed_matrix = G.signed_matrix * f;
             G.support = G.support * f;
         end
 
         function [basis, src] = polish_basis(G, D)
-            % Final-polish directions (one per row): eigenvectors of the signed
-            % matrix by descending |eigenvalue| (stable, from numpy's ascending
-            % order); coordinate axes when there is no signal. src names the choice.
+            % Final-polish directions, one per row: eigenvectors of the signed
+            % matrix sorted by descending |eigenvalue|, ties kept in ascending
+            % eigenvalue order (the order of the reference implementation).
+            % Coordinate axes when the matrix is all zero or the eigenvectors
+            % are not finite. src is 'sgsm_eig' or 'axes'.
             basis = eye(D);
             src = 'axes';
             S = G.signed_matrix;
@@ -247,8 +261,10 @@ while ~isempty(comp)
 end
 end
 
-function v = np_quantile(a, q)
-% np.quantile(a, q), default 'linear' method, bit-exact.
+function v = linear_quantile(a, q)
+% q-quantile of a with linear interpolation, computed as in the reference
+% implementation so it matches bit for bit (when the fractional position
+% t >= 0.5, it interpolates back from the upper value).
 a = sort(a);
 n = numel(a);
 h = q * (n - 1);
@@ -264,9 +280,11 @@ else
 end
 end
 
-function s = np_sum(a)
-% np.sum of a float64 vector, bit-exact: NumPy's pairwise summation
-% (sequential below 8 values, 8 running partial sums up to 128, halving above).
+function s = pairwise_sum(a)
+% Sum of a double vector by pairwise summation, as in the reference
+% implementation, so sums match bit for bit: sequential below 8 values,
+% 8 running partial sums up to 128 values, then halving (split at a
+% multiple of 8).
 n = numel(a);
 if n < 8
     s = 0;
@@ -280,6 +298,6 @@ elseif n <= 128
 else
     h = floor(n / 2);
     h = h - mod(h, 8);
-    s = np_sum(a(1:h)) + np_sum(a(h + 1:n));
+    s = pairwise_sum(a(1:h)) + pairwise_sum(a(h + 1:n));
 end
 end

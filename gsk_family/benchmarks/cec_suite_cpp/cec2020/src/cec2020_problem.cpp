@@ -1,33 +1,33 @@
-// Standalone C++20 port of the CEC2020 single-objective bound-constrained
-// benchmark suite (10 public functions, D in {5, 10, 15, 20}).
+// C++20 port of the CEC2020 single-objective bound-constrained benchmark
+// suite: 10 public functions, D in {5, 10, 15, 20}.
 //
-// Reference (sole source of behavioral truth):
-//   historical source: CEC2020 competition cec20_func.cpp
-//   (MATLAB MEX evaluator; an identical staged copy lives
-//   next to this file as cec20_func.cpp and is never compiled).
+// Reference: the CEC2020 competition cec20_func.cpp (a MATLAB MEX
+// evaluator). It is the only source of truth for behavior. An identical
+// copy sits next to this file as cec20_func.cpp; it is never compiled.
 //
-// Port notes
-//   * Public function ids 1..10 map to internal data-file ids via
-//     Func_num[] = {1, 2, 3, 7, 4, 16, 6, 22, 24, 25} exactly as in the
-//     reference. Data files are named by the INTERNAL id.
-//   * Only the code reachable through those 10 internal ids is ported
-//     (basic functions, hf01/hf05/hf06, cf02/cf04/cf05, cf_cal and the
-//     shift/rotate helpers). The remaining MEX cases are dead code here.
-//   * Numerics, loop order and the reference quirks are preserved:
-//       - public F4 (internal 7) evaluates grie_rosen with s_flag = 0 and
-//         r_flag = 0, i.e. the loaded shift/rotation data is NOT applied;
-//       - public F7 (internal 6, hf05) at D = 5 partitions into
-//         G_nx = {0, 1, 1, 1, 2}; the zero-width escaffer6 slice reads
-//         z[nx-1] == z[-1] in the MEX (out-of-bounds heap read). The port
-//         reproduces the recorded MEX behavior with a guard slot holding
-//         0.0 immediately before the z scratch buffer (see z_storage_);
-//       - composition shift files are consumed line-wise (first nx values
-//         of each of the 10 rows, remainder of the row skipped).
-//   * Per-instance RAII state, loaded once in the constructor. Mutable
-//     scratch buffers mirror the MEX globals y/z, therefore evaluate() is
-//     NOT thread-safe on a shared instance; use one instance per thread.
-//   * std::invalid_argument for bad ids/dimensions, std::runtime_error
-//     (naming the file) for missing/bad data.
+// Port notes:
+//   * Public ids 1..10 map to internal data-file ids through
+//     Func_num[] = {1, 2, 3, 7, 4, 16, 6, 22, 24, 25}, as in the reference.
+//     Data files are named by the INTERNAL id.
+//   * Only code reachable from those 10 internal ids is ported: the basic
+//     functions, hf01/hf05/hf06, cf02/cf04/cf05, cf_cal and the
+//     shift/rotate helpers. The other MEX cases are unused by this suite.
+//   * Numerics, loop order and these reference quirks are kept:
+//       - public F4 (internal 7) calls grie_rosen with s_flag = 0 and
+//         r_flag = 0, so the loaded shift/rotation data is NOT applied;
+//       - public F7 (internal 6, hf05) at D = 5 splits into
+//         G_nx = {0, 1, 1, 1, 2}. The zero-width escaffer6 slice reads
+//         z[nx-1] == z[-1], an out-of-bounds heap read in the MEX. The port
+//         reproduces the recorded MEX result with a 0.0 guard slot just
+//         before the z scratch buffer (see z_storage_);
+//       - composition shift files are read row by row: the first nx values
+//         of each of the 10 rows; the rest of each row is skipped.
+//   * Each instance owns its data (RAII), loaded once in the constructor.
+//     Mutable scratch buffers play the role of the MEX globals y/z, so
+//     evaluate() is NOT thread-safe on a shared instance; use one instance
+//     per thread.
+//   * Errors: std::invalid_argument for a bad id or dimension;
+//     std::runtime_error (naming the file) for missing or bad data.
 
 #include "gskcec/benchmark/cec2020.hpp"
 
@@ -60,22 +60,24 @@ constexpr double kInf = 1.0e99; // INF in the reference
 constexpr double kE = 2.7182818284590452353602874713526625;
 constexpr double kPi = 3.1415926535897932384626433832795029;
 
-// Reference: int Func_num[] = {1,2,3,7,4,16,6,22,24,25}; (cec20_test_func)
+// Internal id for each public id (index = public id - 1). Same as
+// Func_num[] in the reference cec20_test_func.
 constexpr int kInternalId[10] = {1, 2, 3, 7, 4, 16, 6, 22, 24, 25};
 
-// AGSK reference optimum vector (Adaptive_GSK_ALI.m, line 39). Verified to
-// equal the per-case bias the MEX adds for each reachable internal id.
+// Optimum value per public id: the AGSK reference vector
+// (Adaptive_GSK_ALI.m, line 39). It equals the bias the MEX adds for each
+// reachable internal id.
 constexpr double kOptimum[10] = {100.0,  1100.0, 700.0,  1900.0, 1700.0,
                                  1600.0, 2100.0, 2200.0, 2400.0, 2500.0};
 
-// The MEX loader always reads 10 shift rows / 10 rotation blocks for
-// composition functions (int cf_num = 10 in cec20_test_func).
+// The MEX loader always reads 10 shift rows and 10 rotation blocks for a
+// composition function (cf_num = 10 in cec20_test_func).
 constexpr int kLoaderCfNum = 10;
 
-// Scratch buffers standing in for the MEX globals y and z (and the local
-// tmpx malloc in bi_rastrigin). z points one past a guard slot that holds
-// 0.0 so that the reference's z[-1] read (hf05 at D=5, see header comment)
-// stays in-bounds and deterministic.
+// Scratch buffers that stand in for the MEX globals y and z (and the local
+// tmpx malloc in bi_rastrigin). z points one past a 0.0 guard slot, so the
+// reference's z[-1] read (hf05 at D = 5, see file header) stays in bounds
+// and deterministic.
 struct Scratch {
     double* y;
     double* z;
@@ -97,7 +99,8 @@ void rotatefunc(const double* x, double* xrot, int nx, const double* Mr) {
     }
 }
 
-/* shift and rotate (uses sc.y as the intermediate buffer like the global y) */
+/* Shift by Os (if s_flag == 1), scale by sh_rate, then rotate by Mr (if
+   r_flag == 1). sc.y is the intermediate buffer, like the MEX global y. */
 void sr_func(const double* x, double* sr_x, int nx, const double* Os, const double* Mr,
              double sh_rate, int s_flag, int r_flag, Scratch& sc) {
     double* y = sc.y;
@@ -128,13 +131,13 @@ void sr_func(const double* x, double* sr_x, int nx, const double* Os, const doub
     }
 }
 
-/* Bent_Cigar */
+/* Bent Cigar */
 void bent_cigar_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                      int s_flag, int r_flag, Scratch& sc) {
     double* z = sc.z;
     sr_func(x, z, nx, Os, Mr, 1.0, s_flag, r_flag, sc);
-    // pow(10.0, 6.0) is loop-invariant; hoist it (== 1000000.0 exactly, so the
-    // per-dimension products stay bit-identical to the reference).
+    // pow(10.0, 6.0) is exactly 1e6, so computing it once outside the loop
+    // keeps every product bit-identical to the reference.
     const double c6 = pow(10.0, 6.0);
     f[0] = z[0] * z[0];
     for (int i = 1; i < nx; i++) {
@@ -147,7 +150,7 @@ void discus_func(const double* x, double* f, int nx, const double* Os, const dou
                  int s_flag, int r_flag, Scratch& sc) {
     double* z = sc.z;
     sr_func(x, z, nx, Os, Mr, 1.0, s_flag, r_flag, sc);
-    // pow(10.0, 6.0) == 1000000.0 exactly; compute once (bit-identical).
+    // pow(10.0, 6.0) is exactly 1e6; computing it once is bit-identical.
     const double c6 = pow(10.0, 6.0);
     f[0] = c6 * z[0] * z[0];
     for (int i = 1; i < nx; i++) {
@@ -155,11 +158,10 @@ void discus_func(const double* x, double* f, int nx, const double* Os, const dou
     }
 }
 
-// Returns the per-i ellipsoidal coefficients pow(10.0, 6.0*i/(nx-1)), cached
-// per distinct nx. ellips_func is reused at hybrid/composition sub-dimensions
-// (hf01, hf05, cf04), so distinct nx values occur. Bit-identical: the cached
-// values are the exact pow results. thread_local matches the documented
-// "one problem instance per thread" contract.
+// Returns the ellipsoidal coefficients pow(10.0, 6.0*i/(nx-1)), i = 0..nx-1,
+// cached per nx. ellips_func also runs on the hf01/hf05 slices and inside
+// cf04, so several nx values occur. The cache holds the exact pow results, so output
+// is bit-identical. thread_local fits the "one instance per thread" rule.
 const double* ellips_coef(int nx) {
     thread_local std::vector<std::vector<double>> cache;
     const auto n = static_cast<std::size_t>(nx);
@@ -188,7 +190,7 @@ void ellips_func(const double* x, double* f, int nx, const double* Os, const dou
     }
 }
 
-/* Rosenbrock's */
+/* Rosenbrock */
 void rosenbrock_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                      int s_flag, int r_flag, Scratch& sc) {
     double* z = sc.z;
@@ -204,7 +206,7 @@ void rosenbrock_func(const double* x, double* f, int nx, const double* Os, const
     }
 }
 
-/* Ackley's */
+/* Ackley */
 void ackley_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                  int s_flag, int r_flag, Scratch& sc) {
     double* z = sc.z;
@@ -220,7 +222,7 @@ void ackley_func(const double* x, double* f, int nx, const double* Os, const dou
     f[0] = kE - 20.0 * exp(sum1) - exp(sum2) + 20.0;
 }
 
-/* Griewank's */
+/* Griewank */
 void griewank_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                    int s_flag, int r_flag, Scratch& sc) {
     double* z = sc.z;
@@ -234,7 +236,7 @@ void griewank_func(const double* x, double* f, int nx, const double* Os, const d
     f[0] = 1.0 + s / 4000.0 - p;
 }
 
-/* Rastrigin's */
+/* Rastrigin */
 void rastrigin_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                     int s_flag, int r_flag, Scratch& sc) {
     double* z = sc.z;
@@ -245,7 +247,7 @@ void rastrigin_func(const double* x, double* f, int nx, const double* Os, const 
     }
 }
 
-/* Schwefel's */
+/* Schwefel */
 void schwefel_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                    int s_flag, int r_flag, Scratch& sc) {
     double* z = sc.z;
@@ -269,7 +271,7 @@ void schwefel_func(const double* x, double* f, int nx, const double* Os, const d
     f[0] += 4.189828872724338e+002 * nx;
 }
 
-/* Lunacek Bi_rastrigin Function */
+/* Lunacek bi-Rastrigin */
 void bi_rastrigin_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                        int s_flag, int r_flag, Scratch& sc) {
     double* y = sc.y;
@@ -359,9 +361,9 @@ void grie_rosen_func(const double* x, double* f, int nx, const double* Os, const
 }
 
 /* Expanded Schaffer's F6.
-   When nx == 0 (hf05 zero-width slice at D=5) the loop is skipped and the
-   wrap-around term reads z[nx-1] == z[-1]: in the MEX that is an
-   out-of-bounds heap read; here it lands on the 0.0 guard slot. */
+   With nx == 0 (the zero-width hf05 slice at D = 5) the loop is skipped and
+   the wrap-around term reads z[nx-1] == z[-1]. In the MEX that is an
+   out-of-bounds heap read; here it reads the 0.0 guard slot. */
 void escaffer6_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                     int s_flag, int r_flag, Scratch& sc) {
     double* z = sc.z;
@@ -409,12 +411,13 @@ void hgbat_func(const double* x, double* f, int nx, const double* Os, const doub
         r2 += z[i] * z[i];
         sum_z += z[i];
     }
-    // pow(r2,2.0) -> r2*r2 and pow(sum_z,2.0) -> sum_z*sum_z (GROUP B, <=1 ULP).
+    // r2*r2 and sum_z*sum_z replace the reference pow(r2, 2.0) and
+    // pow(sum_z, 2.0) (<= 1 ULP apart).
     f[0] = pow(fabs(r2 * r2 - sum_z * sum_z), 2 * alpha) + (0.5 * r2 + sum_z) / nx + 0.5;
 }
 
-/* Hybrid Function 1 (internal 4; F17/hf01 in CEC2014).
-   NOTE: the partition loop starts at i = 1; G_nx[0] takes the remainder. */
+/* Hybrid Function 1 (internal 4, public F5; F17/hf01 in CEC2014).
+   The partition loop starts at i = 1, so G_nx[0] takes the remainder. */
 void hf01(const double* x, double* f, int nx, const double* Os, const double* Mr,
           const int* S, int s_flag, int r_flag, Scratch& sc) {
     double* y = sc.y;
@@ -450,9 +453,9 @@ void hf01(const double* x, double* f, int nx, const double* Os, const double* Mr
     }
 }
 
-/* Hybrid Function 5 (internal 6; F21/hf05 in CEC2014).
-   NOTE: the partition loop starts at i = 1; G_nx[0] takes the remainder.
-   At D = 5 this yields G_nx = {0, 1, 1, 1, 2} (zero-width escaffer6). */
+/* Hybrid Function 5 (internal 6, public F7; F21/hf05 in CEC2014).
+   The partition loop starts at i = 1, so G_nx[0] takes the remainder.
+   At D = 5 this gives G_nx = {0, 1, 1, 1, 2} (zero-width escaffer6 slice). */
 void hf05(const double* x, double* f, int nx, const double* Os, const double* Mr,
           const int* S, int s_flag, int r_flag, Scratch& sc) {
     double* y = sc.y;
@@ -490,9 +493,9 @@ void hf05(const double* x, double* f, int nx, const double* Os, const double* Mr
     }
 }
 
-/* Hybrid Function 6 (internal 16; hf06 in CEC2014).
-   NOTE: unlike hf01/hf05 the partition loop starts at i = 0 and the LAST
-   group takes the remainder. */
+/* Hybrid Function 6 (internal 16, public F6; hf06 in CEC2014).
+   Unlike hf01/hf05, the partition loop starts at i = 0 and the LAST group
+   takes the remainder. */
 void hf06(const double* x, double* f, int nx, const double* Os, const double* Mr,
           const int* S, int s_flag, int r_flag, Scratch& sc) {
     double* y = sc.y;
@@ -529,22 +532,27 @@ void hf06(const double* x, double* f, int nx, const double* Os, const double* Mr
     }
 }
 
-/* Composition weight aggregation (cf_cal in the reference). */
+/* Composition weighting (cf_cal in the reference). Adds bias[i] to fit[i]
+   in place. With d2 = squared distance from x to shift row i, the weight is
+   w[i] = exp(-d2 / (2 * nx * delta[i]^2)) / sqrt(d2), or INF when d2 == 0.
+   f[0] is the weighted mean of fit; if every weight is 0, all components
+   get equal weight. */
 void cf_cal(const double* x, double* f, int nx, const double* Os, const double* delta,
             const double* bias, double* fit, int cf_num) {
-    double w[kLoaderCfNum]; // reference mallocs cf_num doubles; cf_num <= 10
+    double w[kLoaderCfNum]; // cf_num <= 10; the reference mallocs cf_num doubles
     double w_max = 0, w_sum = 0;
     for (int i = 0; i < cf_num; i++) {
         fit[i] += bias[i];
         w[i] = 0;
         for (int j = 0; j < nx; j++) {
-            // pow(diff, 2.0) -> diff*diff (GROUP B, <=1 ULP). Per-term rewrite;
-            // the accumulation order of w[i] is unchanged.
+            // diff*diff replaces the reference pow(diff, 2.0) (<= 1 ULP apart);
+            // w[i] is summed in the same order.
             const double diff = x[j] - Os[i * nx + j];
             w[i] += diff * diff;
         }
         if (w[i] != 0) {
-            // pow(1/w,0.5) -> sqrt(1/w); pow(delta,2.0) -> delta*delta (GROUP B).
+            // sqrt(1/w) and delta*delta replace the reference pow(1/w, 0.5)
+            // and pow(delta, 2.0) (<= 1 ULP apart).
             w[i] = sqrt(1.0 / w[i]) * exp(-w[i] / 2.0 / nx / (delta[i] * delta[i]));
         } else {
             w[i] = kInf;
@@ -568,7 +576,7 @@ void cf_cal(const double* x, double* f, int nx, const double* Os, const double* 
     }
 }
 
-/* Composition Function 2 (internal 22) */
+/* Composition Function 2 (internal 22, public F8) */
 void cf02(const double* x, double* f, int nx, const double* Os, const double* Mr,
           int r_flag, Scratch& sc) {
     const int cf_num = 3;
@@ -583,7 +591,7 @@ void cf02(const double* x, double* f, int nx, const double* Os, const double* Mr
     cf_cal(x, f, nx, Os, delta, bias, fit, cf_num);
 }
 
-/* Composition Function 4 (internal 24) */
+/* Composition Function 4 (internal 24, public F9) */
 void cf04(const double* x, double* f, int nx, const double* Os, const double* Mr,
           int r_flag, Scratch& sc) {
     const int cf_num = 4;
@@ -601,7 +609,7 @@ void cf04(const double* x, double* f, int nx, const double* Os, const double* Mr
     cf_cal(x, f, nx, Os, delta, bias, fit, cf_num);
 }
 
-/* Composition Function 5 (internal 25) */
+/* Composition Function 5 (internal 25, public F10) */
 void cf05(const double* x, double* f, int nx, const double* Os, const double* Mr,
           int r_flag, Scratch& sc) {
     const int cf_num = 5;
@@ -641,23 +649,24 @@ public:
         const int nx = nx_;
         const std::string id = std::to_string(internal_id_);
         const std::string dim = std::to_string(nx);
-        // Reference loader branch: func_num < 20 loads one rotation block and
-        // one shift row; func_num >= 20 (compositions) loads cf_num = 10 of each.
+        // As in the reference loader: internal id < 20 loads one rotation
+        // block and one shift row; id >= 20 (compositions) loads 10 of each.
         const bool composition = internal_id_ >= 20;
 
-        /* Load Matrix M (M_<id>_D<D>.txt). The MEX reads exactly nx*nx
-           (or 10*nx*nx) values; extra trailing values would be ignored. */
+        /* Rotation matrix M (M_<id>_D<D>.txt): the first nx*nx values
+           (10*nx*nx for compositions), as the MEX reads them; extra values
+           are ignored. */
         const std::filesystem::path m_path = data_root / ("M_" + id + "_D" + dim + ".txt");
         const std::size_t m_count = composition
             ? static_cast<std::size_t>(kLoaderCfNum) * nx * nx
             : static_cast<std::size_t>(nx) * nx;
         rotation_ = load_values_file(m_path, m_count);
 
-        /* Load shift data (shift_data_<id>.txt). Single functions: the first
-           nx values of the file. Compositions: the first nx values of EACH of
-           the 10 rows (the MEX reads nx values per row, then skips the rest
-           of the line). Rows are uniform width in the shipped data, so the
-           row stride is total / 10. */
+        /* Shift data (shift_data_<id>.txt). Single functions: the first nx
+           values. Compositions: the first nx values of EACH of the 10 rows
+           (the MEX reads nx values per row and skips the rest of the line).
+           All rows in the shipped data have the same width, so the row
+           stride is total / 10. */
         const std::filesystem::path shift_path = data_root / ("shift_data_" + id + ".txt");
         if (!composition) {
             shift_ = load_values_file(shift_path, static_cast<std::size_t>(nx));
@@ -684,14 +693,13 @@ public:
             }
         }
 
-        /* Shuffle data (shuffle_data_<id>_D<D>.txt). Only internal ids
-           4, 6 and 16 consume it (reference condition: func_num==4 ||
-           func_num==6 || 11..20), but the CEC2020 data distribution defines
-           per-dimension availability through these files for EVERY internal
-           id: ids 1 and 22 ship no D5/D15 shuffle files, which is exactly
-           why the reference protocol (and the MEX ground truth) excludes
-           those combinations. Availability therefore stays data-driven:
-           the file must exist for every (function, dimension). */
+        /* Shuffle data (shuffle_data_<id>_D<D>.txt), 1-based indices. Only
+           internal ids 4, 6 and 16 use it (reference condition: func_num == 4
+           || func_num == 6 || 11..20). The file must still exist for EVERY
+           (function, dimension): the CEC2020 data defines which dimensions
+           are available through these files. Internal ids 1 and 22 (public
+           F1 and F8) ship no D5/D15 shuffle files, which is why the reference
+           protocol and the MEX ground truth leave those cases out. */
         const std::filesystem::path shuffle_path =
             data_root / ("shuffle_data_" + id + "_D" + dim + ".txt");
         require_file(shuffle_path);
@@ -712,8 +720,8 @@ public:
         }
 
         y_.assign(static_cast<std::size_t>(nx), 0.0);
-        // One guard slot BEFORE the z buffer: the reference reads z[-1] for
-        // the zero-width escaffer6 slice of hf05 at D=5 (see header comment).
+        // One 0.0 guard slot BEFORE the z buffer: the reference reads z[-1]
+        // in the zero-width escaffer6 slice of hf05 at D = 5 (see file header).
         z_storage_.assign(static_cast<std::size_t>(nx) + 1, 0.0);
         tmpx_.assign(static_cast<std::size_t>(nx), 0.0);
     }
@@ -730,7 +738,9 @@ public:
 
     Real optimum() const override { return kOptimum[public_id_ - 1]; }
 
-    /// Not thread-safe: shares the mutable y/z scratch buffers across calls.
+    /// Returns f(x) with the bias added. Throws std::invalid_argument when x
+    /// does not have length D.
+    /// Not thread-safe: every call reuses the mutable y/z scratch buffers.
     Real evaluate(std::span<const Real> x) const override {
         if (x.size() != static_cast<std::size_t>(nx_)) {
             throw std::invalid_argument("CEC2020 evaluate expected dimension " +
@@ -744,8 +754,8 @@ public:
         const int* SS = shuffle_.empty() ? nullptr : shuffle_.data();
         const int nx = nx_;
         double f = 0.0;
-        // Per-case bias constants transcribed from the reference switch; they
-        // equal the AGSK optimum vector (kOptimum), which the tests verify.
+        // Bias constants copied from the reference switch. They equal the AGSK
+        // optimum vector (kOptimum); the tests check this.
         switch (internal_id_) {
         case 1: // public F1: Bent Cigar
             bent_cigar_func(px, &f, nx, Os, Mr, 1, 1, sc);
@@ -759,7 +769,7 @@ public:
             bi_rastrigin_func(px, &f, nx, Os, Mr, 1, 1, sc);
             f += 700.0;
             break;
-        case 7: // public F4: Griewank-Rosenbrock, UNSHIFTED/UNROTATED (flags 0,0)
+        case 7: // public F4: Griewank-Rosenbrock, NOT shifted or rotated (flags 0, 0)
             grie_rosen_func(px, &f, nx, Os, Mr, 0, 0, sc);
             f += 1900.0;
             break;
@@ -800,9 +810,9 @@ private:
     int nx_ = 0;
     Vector shift_;             // nx values, or 10*nx for compositions
     Vector rotation_;          // nx*nx values, or 10*nx*nx for compositions
-    std::vector<int> shuffle_; // nx indices for internal ids 4/6/16, else empty
-    // Scratch buffers standing in for the MEX globals (mutable: evaluate()
-    // is const but reuses them; NOT thread-safe on a shared instance).
+    std::vector<int> shuffle_; // nx 1-based indices (internal ids 4/6/16) or empty
+    // Scratch buffers that stand in for the MEX globals. They are mutable
+    // because const evaluate() reuses them; NOT thread-safe when shared.
     mutable Vector y_;
     mutable Vector z_storage_; // [0] is the z[-1] guard slot; z = data() + 1
     mutable Vector tmpx_;
@@ -827,7 +837,7 @@ const std::vector<int>& supported_dimensions() {
 }
 
 long long budget_for_dimension(int dimension) {
-    // AGSK CEC2020 reference protocol (Adaptive_GSK_ALI.m, lines 18-27).
+    // max_nfes per D: AGSK CEC2020 protocol (Adaptive_GSK_ALI.m, lines 18-27).
     switch (dimension) {
     case 5:
         return 50000LL;

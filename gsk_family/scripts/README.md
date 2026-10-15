@@ -1,14 +1,13 @@
 # scripts
 
-Helper tooling in PowerShell and MATLAB only (no Python, per the project
-contract).
+Helper tooling in PowerShell and MATLAB only.
 
 | Script | Language | Purpose |
 |---|---|---|
 | `build_mex_bridge.ps1` | PowerShell | Build the optional `gskcec_eval` MEX bridge (MATLAB -> ported C++ benchmarks) with a MinGW-w64 C++20 toolchain into `build/mex/`, linked fully static (no MinGW runtime DLL needed at load time). |
 | `analyze_results.m` | MATLAB | Toolbox-free statistics + figures over `results/`: per-function generated-vs-reference comparison, Friedman ranks, Wilcoxon signed-rank vs the references, and boxplot/convergence PDFs. |
-| `compare_reference_runs.m` | MATLAB | Per-(dimension, function) comparison of two `per_run.csv` sets (e.g. a MATLAB DT-GSK campaign vs the imported Python reference runs): Best/Median/Mean, order-of-magnitude agreement, two-sided Wilcoxon rank-sum at `alpha`, paired signed-rank when the seeds match, Holm-adjusted p-values. Needs the Statistics and Machine Learning Toolbox. |
-| `build_docs.ps1` | PowerShell | Generate the HTML documentation site + runbook (Pandoc/Doxygen, no Python) into `docs/html/`. |
+| `compare_reference_runs.m` | MATLAB | Per-(dimension, function) comparison of two `per_run.csv` sets (e.g. a MATLAB DT-GSK campaign vs the imported reference runs): Best/Median/Mean, order-of-magnitude agreement, two-sided Wilcoxon rank-sum at `alpha`, paired signed-rank when the seeds match, Holm-adjusted p-values. Needs the Statistics and Machine Learning Toolbox. |
+| `build_docs.ps1` | PowerShell | Generate the HTML documentation site, including the runbook and the Command Reference (Pandoc/Doxygen), into `docs/html/`. |
 | `run_all.ps1` | PowerShell | Build/test wrapper plus batch driver for one or more `configs/*.yml` experiments through `gsk_run` (defaults to `configs/smoke.yml`; seed policy and generator come from each config, falling back to `gsk_run`'s reference + threefry; pass `-SeedPolicy`/`-RandGenerator` only to override every config; use `-Full` for the full standard set). |
 
 Rebuild the C++ CLIs with `cmake --build build -j` after editing C++ sources,
@@ -84,9 +83,11 @@ report = compare_reference_runs('results/_run_all/dt-gsk/cec2017', ...
 
 Each of the two inputs is a `per_run.csv` file or a folder holding
 `summary/per_run.csv` or `per_run.csv`; options are `alpha` (0.05), `decades`
-(1), `zero_tol` (1e-8), `out` (CSV path for the per-cell table) and `verbose`. For every (dimension, function) cell in both sets it reports
+(1), `zero_tol` (1e-8), `sig_digits` (11: both sides are rounded to the
+reference file's precision first), `out` (CSV path for the per-cell table) and
+`verbose`. For every (dimension, function) cell in both sets it reports
 Best/Median/Mean of the per-run errors (raw objectives when there is no
-optimum), and the cell verdict is `MATCH` when Median and Mean agree within
+optimum), and the cell verdict is `MATCH` when Best, Median and Mean agree within
 `decades` (default 1) orders of magnitude and the two-sided rank-sum test does
 not reject at `alpha`, else `DIFFERS`. Duplicate run rows keep the last one
 (resume history). The summary line also gives the Holm-adjusted count, since

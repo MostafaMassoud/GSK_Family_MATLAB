@@ -5,7 +5,8 @@
 namespace gskcec::cec2013lsgo {
 
 /// F10: 20-nonseparable Shifted and Rotated Ackley's Function,
-/// D = 1000, [-32, 32].
+/// D = 1000, [-5, 5] as set in the reference code (the technical report
+/// lists [-32, 32]).
 class F10 : public Benchmarks {
 public:
     explicit F10(const std::filesystem::path& dataDir);

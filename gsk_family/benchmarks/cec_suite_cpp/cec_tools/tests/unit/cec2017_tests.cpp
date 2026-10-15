@@ -1,15 +1,15 @@
 // cec2017_tests.cpp
 //
-// Validation harness for the standalone CEC2017 port
-// (benchmarks/cec_suite_cpp/cec2017/src/cec2017_problem.cpp) against ground
-// truth produced by the original reference MEX evaluator.
+// Tests for the standalone CEC2017 port
+// (benchmarks/cec_suite_cpp/cec2017/src/cec2017_problem.cpp) against
+// reference values from the original MEX evaluator.
 //
 // Usage: cec2017_tests [project_root]   (default ".")
 //   data root     = <root>/benchmarks/cec_suite_cpp/cec2017/input_data
 //   expected data = <root>/benchmarks/cec_suite_cpp/cec_tools/tests/data/
 //
-// Plain main() in the style of core_tests.cpp, but with a check() helper
-// that prints the failing message and exits 1 instead of using <cassert>.
+// A plain main() like core_tests.cpp, but check() prints the failing
+// message and exits 1 instead of using <cassert>.
 
 #include "gskcec/benchmark/cec2017.hpp"
 #include "gskcec/benchmark/data_loading.hpp"
@@ -64,9 +64,7 @@ int main(int argc, char** argv) {
     check(dimensions == std::vector<int>({10, 30, 50, 100}),
           "supported_dimensions() must be {10, 30, 50, 100}");
 
-    // ------------------------------------------------------------------
-    // 1) Construct every (function, dimension) problem; verify metadata.
-    // ------------------------------------------------------------------
+    // ---- 1) Build every (function, dimension) problem; check metadata ----
     std::map<std::pair<int, int>, std::unique_ptr<gskcec::BenchmarkProblem>> problems;
     for (int f : functions) {
         for (int d : dimensions) {
@@ -89,13 +87,11 @@ int main(int argc, char** argv) {
     }
     std::cout << "metadata OK for 30 functions x 4 dimensions\n";
 
-    // ------------------------------------------------------------------
-    // 2) f(shift_vector) == 100*f sanity for representative basic
-    //    functions. The shift vector is the global optimum for f1 and
-    //    f3..f8, f10. F9 (Levy) is a documented reference quirk: its
-    //    formula uses w = 1 + (z - 1)/4, so at z = 0 (i.e. x = shift) the
-    //    value is NOT the bias; we assert the analytic quirk value instead.
-    // ------------------------------------------------------------------
+    // ---- 2) f(shift vector) == 100*f for representative basic functions ----
+    // The shift vector is the global optimum for f1, f3..f8 and f10.
+    // F9 (Levy) is a known quirk of the reference code: it uses
+    // w = 1 + (z - 1)/4, so at z = 0 (x = shift) the value is NOT the bias.
+    // The test checks the analytic quirk value instead.
     for (int f : {1, 3, 4, 5, 6, 7, 8, 10}) {
         const Vector shift =
             gskcec::load_values_file(data_root / ("shift_data_" + std::to_string(f) + ".txt"));
@@ -131,10 +127,9 @@ int main(int argc, char** argv) {
     }
     std::cout << "shift-vector sanity OK (f1, f3..f10)\n";
 
-    // ------------------------------------------------------------------
-    // 3) Compare against every row of cec2017_expected.csv (ground truth
-    //    from the original reference MEX): |got - exp| <= 1e-10*max(1,|exp|).
-    // ------------------------------------------------------------------
+    // ---- 3) Compare with every row of cec2017_expected.csv ----
+    // Reference values come from the original MEX evaluator; each row must
+    // satisfy |got - exp| <= 1e-10 * max(1, |exp|).
     const fs::path csv_path = tests_data / "cec2017_expected.csv";
     if (!fs::exists(csv_path)) {
         std::cout << "SKIP expected-value comparison (" << csv_path.string() << " missing)\n";
@@ -189,9 +184,7 @@ int main(int argc, char** argv) {
                     rows, max_rel, max_f, max_d, max_p);
     }
 
-    // ------------------------------------------------------------------
-    // 4) Error handling.
-    // ------------------------------------------------------------------
+    // ---- 4) Error handling ----
     const auto throws_invalid_argument = [&data_root](int f, int d) {
         try {
             (void)gskcec::cec2017::make_problem(f, d, data_root);

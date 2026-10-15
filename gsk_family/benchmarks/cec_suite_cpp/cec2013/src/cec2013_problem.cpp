@@ -1,46 +1,42 @@
-// cec2013_problem.cpp -- standalone C++20 port of the standard CEC2013
+// cec2013_problem.cpp -- C++20 port of the standard CEC2013
 // single-objective benchmark suite (28 functions).
 //
 // Ported from the CEC2013 R package:
-//   historical source:
-//     src/test_func.c   ("CEC13 Test Function Suite", Jane Jing Liang,
-//                        last modified 27 Jan 2013 -- the 28 function
-//                        implementations transcribed below)
-//     src/cec2013.c     (R bridge; defines the calling convention, the
-//                        data directory layout and the global buffers)
-//     R/cec2013.R       (argument validation: function ids 1..28 and
-//                        dimensions {2,5,10,20,30,40,50,60,70,80,90,100})
+//   src/test_func.c  "CEC13 Test Function Suite" (Jane Jing Liang, last
+//                    modified 27 Jan 2013): the 28 functions below.
+//   src/cec2013.c    R bridge: calling convention, data directory layout
+//                    and global buffers.
+//   R/cec2013.R      argument checks: function ids 1..28 and dimensions
+//                    {2,5,10,20,30,40,50,60,70,80,90,100}.
 //
-// R-isms (R.h, error(), R_CheckUserInterrupt(), lazily re-initialised
-// globals) are replaced by C++ exceptions and per-instance RAII state.
-// Numerics, constants, biases and transformation order are preserved
-// verbatim, including reference quirks, which are deliberately NOT fixed:
-//
-//   * asyfunc(src, dst) assigns dst[i] only when src[i] > 0; non-positive
-//     components keep whatever an EARLIER pipeline stage left in dst
-//     (e.g. the pre-rotation shifted vector), bypassing the preceding
-//     stage as well. Affects f3, f7, f8, f9, f12, f13, f20 and rotated
-//     composition members.
-//   * grie_rosen_func (f19, and component 0 of cf08/f28) computes the
-//     rotation into z and then overwrites it with the UNROTATED y + 1
-//     ("z[i]=y[i]+1" in the reference), so the rotation has no effect.
+// R-specific parts (R.h, error(), R_CheckUserInterrupt(), lazily
+// re-initialised globals) become C++ exceptions and per-instance state.
+// Formulas, constants, biases and transformation order match the reference
+// exactly. These reference quirks are kept on purpose so results match:
+//   * asyfunc(src, dst) writes dst[i] only when src[i] > 0. Other entries
+//     keep what an EARLIER stage left in dst (e.g. the shifted vector
+//     before rotation), so for them the stage before asyfunc is skipped
+//     too. Affects f3, f7, f8, f9, f12, f13, f20 and rotated composition
+//     members.
+//   * grie_rosen_func (f19, and component 0 of cf08/f28) rotates into z,
+//     then overwrites z with the UNROTATED y + 1 ("z[i]=y[i]+1"), so the
+//     rotation has no effect.
 //   * dif_powers_func uses the integer-division exponent 2 + 4*i/(nx-1).
-//   * schwefel_func scales by 1000/100 evaluated in integer arithmetic
-//     (== 10) and its optimum constants leave a ~1e-12*D residual at the
+//   * schwefel_func scales by 1000/100 in integer arithmetic (== 10), and
+//     its optimum constants leave a residual of about 1e-12*D at the
 //     shifted optimum.
-//   * oszfunc keeps xx across loop iterations (xx = 0 initialised once);
-//     only reachable multiplied by sx == 0, hence no observable effect.
-//   * The x_bound global and the EPS macro of the reference are never
-//     used by the computation and are dropped.
+//   * oszfunc sets xx = 0 once and keeps it across iterations. A stale xx
+//     is only ever multiplied by sx == 0, so it has no visible effect.
+//   * The unused x_bound global and EPS macro of the reference are dropped.
 //
-// Data files (loaded once in the constructor, mirroring test_func.c):
-//   M_D<dim>.txt    : 10 rotation matrices, dim x dim, row-major, flat.
-//   shift_data.txt  : flat prefix of 10*dim values (the file stores a
-//                     10 x 100 table; the reference reads it flat).
+// Data files (loaded once in the constructor, as in test_func.c):
+//   M_D<dim>.txt    10 rotation matrices, dim x dim each, row-major, flat.
+//   shift_data.txt  the first 10*dim values, read flat (the file stores a
+//                   10 x 100 table).
 //
-// Thread safety: evaluate() reuses mutable per-instance scratch buffers
-// (the y/z globals of the reference) and is therefore NOT thread-safe on
-// a shared instance. Use one problem instance per thread.
+// Thread safety: evaluate() reuses per-instance scratch buffers (the y/z
+// globals of the reference), so it is NOT thread-safe on a shared
+// instance. Use one problem instance per thread.
 
 #include "gskcec/benchmark/cec2013.hpp"
 
@@ -64,29 +60,27 @@ constexpr double kInf = 1.0e99;                              // INF in test_func
 constexpr double kE = 2.7182818284590452353602874713526625;  // E in test_func.c
 constexpr double kPi = 3.1415926535897932384626433832795029; // PI in test_func.c
 
-// cf_num in the loader section of test_func.c: number of rotation matrices
-// read from M_D<dim>.txt and of shift rows read from shift_data.txt.
+// cf_num in the loader of test_func.c: number of rotation matrices read
+// from M_D<dim>.txt and of shift rows read from shift_data.txt.
 constexpr int kTableCount = 10;
 
-// Function biases added by the test_func() dispatcher (f1..f14 use
-// -1400..-100, f15..f28 use 100..1400). kBias[function_id - 1].
+// Bias that test_func() adds to each function value: f1..f14 use
+// -1400..-100, f15..f28 use 100..1400. Index: kBias[function_id - 1].
 constexpr double kBias[28] = {
     -1400.0, -1300.0, -1200.0, -1100.0, -1000.0, -900.0, -800.0,
     -700.0,  -600.0,  -500.0,  -400.0,  -300.0,  -200.0, -100.0,
     100.0,   200.0,   300.0,   400.0,   500.0,   600.0,  700.0,
     800.0,   900.0,   1000.0,  1100.0,  1200.0,  1300.0, 1400.0};
 
-// Replacement for the y/z/tmpx work arrays of the reference (y and z are
-// globals there; tmpx is malloc'd per call inside bi_rastrigin_func).
+// The y, z and tmpx work arrays of the reference (y and z are globals
+// there; tmpx is malloc'd on each bi_rastrigin_func call).
 struct Scratch {
     double* y;
     double* z;
     double* tmpx;
 };
 
-/* ------------------------------------------------------------------ */
-/* Transformation helpers (verbatim ports of test_func.c)              */
-/* ------------------------------------------------------------------ */
+// ---- Transformation helpers (ported as-is from test_func.c) ----
 
 void shiftfunc(const double* x, double* xshift, int nx, const double* Os) {
     for (int i = 0; i < nx; i++) {
@@ -103,8 +97,8 @@ void rotatefunc(const double* x, double* xrot, int nx, const double* Mr) {
     }
 }
 
-// Reference quirk preserved: entries with x[i] <= 0 are NOT assigned, so
-// xasy keeps the stale content left by an earlier pipeline stage.
+// Reference quirk, kept: entries with x[i] <= 0 are NOT written, so xasy
+// keeps the stale values an earlier stage left there.
 void asyfunc(const double* x, double* xasy, int nx, double beta) {
     for (int i = 0; i < nx; i++) {
         if (x[i] > 0)
@@ -114,7 +108,7 @@ void asyfunc(const double* x, double* xasy, int nx, double beta) {
 
 void oszfunc(const double* x, double* xosz, int nx) {
     int sx;
-    double c1, c2, xx = 0; // xx persists across iterations, as in the reference
+    double c1, c2, xx = 0; // xx is kept across iterations, as in the reference
     for (int i = 0; i < nx; i++) {
         if (i == 0 || i == nx - 1) {
             if (x[i] != 0)
@@ -138,9 +132,7 @@ void oszfunc(const double* x, double* xosz, int nx) {
     }
 }
 
-/* ------------------------------------------------------------------ */
-/* Basic functions (verbatim ports of test_func.c)                     */
-/* ------------------------------------------------------------------ */
+// ---- Basic functions (ported as-is from test_func.c) ----
 
 void sphere_func(const double* x, double* f, int nx, const double* Os,
                  const double* Mr, int r_flag, const Scratch& s) { /* Sphere */
@@ -158,10 +150,11 @@ void sphere_func(const double* x, double* f, int nx, const double* Os,
     }
 }
 
-// Returns the per-i ellipsoidal coefficients std::pow(10.0, 6.0*i/(nx-1)),
-// cached per distinct nx. Pure function of (i, nx) -> the cached values are
-// the exact std::pow results, so callers stay bit-identical to the reference.
-// thread_local: one cache per thread, matching the per-thread instance model.
+// Returns the ellipsoidal coefficients std::pow(10.0, 6.0*i/(nx-1)) for
+// i = 0..nx-1, cached per nx. They depend only on (i, nx) and the cache
+// holds the exact std::pow results, so values match the reference bit for
+// bit. thread_local: one cache per thread, matching the rule of one
+// problem instance per thread.
 const double* ellips_coef(int nx) {
     thread_local std::vector<std::vector<double>> cache;
     const auto n = static_cast<std::size_t>(nx);
@@ -190,11 +183,9 @@ void ellips_func(const double* x, double* f, int nx, const double* Os,
             z[i] = y[i];
     oszfunc(z, y, nx);
     f[0] = 0.0;
-    // The coefficient std::pow(10.0, 6.0*i/(nx-1)) is a pure function of i and
-    // nx; cache it per distinct nx (the function is also reused at hybrid/
-    // composition sub-dimensions). Bit-identical: the same std::pow values are
-    // stored once instead of recomputed each evaluation. thread_local matches
-    // the documented "one problem instance per thread" contract.
+    // Coefficients std::pow(10.0, 6.0*i/(nx-1)) come from the per-nx cache
+    // (see ellips_coef): the same values, computed once instead of on every
+    // evaluation.
     const double* coef = ellips_coef(nx);
     for (int i = 0; i < nx; i++) {
         f[0] += coef[i] * y[i] * y[i];
@@ -219,8 +210,8 @@ void bent_cigar_func(const double* x, double* f, int nx, const double* Os,
         for (int i = 0; i < nx; i++)
             z[i] = y[i];
 
-    // std::pow(10.0, 6.0) is loop-invariant; hoist it (== 1000000.0 exactly,
-    // so the per-dimension products are bit-identical to the reference).
+    // std::pow(10.0, 6.0) == 1000000.0 exactly; computed once before the
+    // loop, so the products match the reference bit for bit.
     const double c6 = std::pow(10.0, 6.0);
     f[0] = z[0] * z[0];
     for (int i = 1; i < nx; i++) {
@@ -240,7 +231,7 @@ void discus_func(const double* x, double* f, int nx, const double* Os,
             z[i] = y[i];
     oszfunc(z, y, nx);
 
-    // std::pow(10.0, 6.0) == 1000000.0 exactly; compute once (bit-identical).
+    // std::pow(10.0, 6.0) == 1000000.0 exactly; computed once (same values).
     const double c6 = std::pow(10.0, 6.0);
     f[0] = c6 * y[0] * y[0];
     for (int i = 1; i < nx; i++) {
@@ -260,7 +251,7 @@ void dif_powers_func(const double* x, double* f, int nx, const double* Os,
             z[i] = y[i];
     f[0] = 0.0;
     for (int i = 0; i < nx; i++) {
-        // Reference quirk preserved: 2 + 4*i/(nx-1) is INTEGER division.
+        // Reference quirk, kept: 2 + 4*i/(nx-1) uses INTEGER division.
         const int exponent = 2 + 4 * i / (nx - 1);
         f[0] += std::pow(std::fabs(z[i]), static_cast<double>(exponent));
     }
@@ -272,12 +263,12 @@ void rosenbrock_func(const double* x, double* f, int nx, const double* Os,
     double* y = s.y;
     double* z = s.z;
     double tmp1, tmp2;
-    shiftfunc(x, y, nx, Os); // shift
+    shiftfunc(x, y, nx, Os);
     for (int i = 0; i < nx; i++) { // shrink to the original search range
         y[i] = y[i] * 2.048 / 100;
     }
     if (r_flag == 1)
-        rotatefunc(y, z, nx, Mr); // rotate
+        rotatefunc(y, z, nx, Mr);
     else
         for (int i = 0; i < nx; i++)
             z[i] = y[i];
@@ -385,10 +376,9 @@ void weierstrass_func(const double* x, double* f, int nx, const double* Os,
     a = 0.5;
     b = 3.0;
     k_max = 20;
-    // std::pow(a,j) and std::pow(b,j) depend only on j; precompute once instead
-    // of nx*(k_max+1) times. Bit-identical: the cached values are the exact
-    // std::pow results and the summation order of sum/sum2 is unchanged
-    // (mirrors the cec2017 weierstrass hoist).
+    // std::pow(a, j) and std::pow(b, j) depend only on j, so compute them
+    // once instead of nx*(k_max+1) times. Same values and the same order of
+    // the sum/sum2 additions, so results match the reference bit for bit.
     double aj[21];
     double bj[21];
     for (int j = 0; j <= k_max; j++) {
@@ -585,9 +575,8 @@ void katsuura_func(const double* x, double* f, int nx, const double* Os,
         for (int i = 0; i < nx; i++)
             y[i] = z[i];
 
-    // std::pow(2.0, j) depends only on j; precompute once instead of nx*32
-    // times. Bit-identical: the same std::pow(2.0, j) values, just not
-    // recomputed (mirrors the cec2017 katsuura hoist).
+    // std::pow(2.0, j) depends only on j, so compute it once instead of nx*32
+    // times. Same values, so results match the reference bit for bit.
     double pow2[33];
     for (int j = 1; j <= 32; j++) {
         pow2[j] = std::pow(2.0, static_cast<double>(j));
@@ -683,8 +672,8 @@ void grie_rosen_func(const double* x, double* f, int nx, const double* Os,
         for (int i = 0; i < nx; i++)
             z[i] = y[i];
 
-    // Reference quirk preserved: "z[i]=y[i]+1" overwrites the rotation
-    // result with the UNROTATED vector, so the rotation above is dead.
+    // Reference quirk, kept: "z[i]=y[i]+1" overwrites the rotated z with
+    // the UNROTATED y, so the rotation above has no effect.
     for (int i = 0; i < nx; i++) { // shift to origin
         z[i] = y[i] + 1;
     }
@@ -734,9 +723,7 @@ void escaffer6_func(const double* x, double* f, int nx, const double* Os,
     f[0] += 0.5 + (temp1 - 0.5) / (temp2 * temp2);
 }
 
-/* ------------------------------------------------------------------ */
-/* Composition machinery (verbatim ports of test_func.c)               */
-/* ------------------------------------------------------------------ */
+// ---- Composition functions (ported as-is from test_func.c) ----
 
 void cf_cal(const double* x, double* f, int nx, const double* Os,
             const double* delta, const double* bias, double* fit, int cf_num) {
@@ -746,13 +733,14 @@ void cf_cal(const double* x, double* f, int nx, const double* Os,
         fit[i] += bias[i];
         w[i] = 0;
         for (int j = 0; j < nx; j++) {
-            // pow(diff, 2.0) -> diff*diff (GROUP B, <=1 ULP). Per-term rewrite;
-            // the accumulation order of w[i] is unchanged.
+            // diff*diff instead of the reference pow(diff, 2.0) (<= 1 ULP
+            // apart); terms are added to w[i] in the reference order.
             const double diff = x[j] - Os[i * nx + j];
             w[i] += diff * diff;
         }
         if (w[i] != 0)
-            // pow(1/w,0.5) -> sqrt(1/w); pow(delta,2.0) -> delta*delta (GROUP B).
+            // sqrt(1/w) and delta*delta instead of the reference pow(1/w, 0.5)
+            // and pow(delta, 2.0) (<= 1 ULP apart).
             w[i] = std::sqrt(1.0 / w[i]) * std::exp(-w[i] / 2.0 / nx / (delta[i] * delta[i]));
         else
             w[i] = kInf;
@@ -937,9 +925,7 @@ void cf08(const double* x, double* f, int nx, const double* Os,
     cf_cal(x, f, nx, Os, delta, bias, fit, cf_num);
 }
 
-/* ------------------------------------------------------------------ */
-/* Problem wrapper                                                     */
-/* ------------------------------------------------------------------ */
+// ---- Problem wrapper ----
 
 class Cec2013Problem final : public BenchmarkProblem {
 public:
@@ -957,11 +943,11 @@ public:
                 " (allowed: 2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100).");
         }
 
-        // test_func.c reads exactly cf_num*nx*nx values from M_D<nx>.txt and
-        // cf_num*nx values from shift_data.txt (cf_num == 10), ignoring any
-        // surplus. shift_data.txt is read FLAT: for nx < 100 the composition
-        // shift rows are consecutive nx-value slices of the flattened
-        // 10 x 100 table, not per-line prefixes (reference behaviour).
+        // As in test_func.c: read exactly cf_num*nx*nx values from
+        // M_D<nx>.txt and cf_num*nx values from shift_data.txt (cf_num == 10);
+        // extra values are ignored. shift_data.txt is read FLAT: for nx < 100
+        // the composition shift rows are consecutive nx-value slices of the
+        // flattened 10 x 100 table, not the first nx values of each line.
         const auto n = static_cast<std::size_t>(nx_);
         const auto tables = static_cast<std::size_t>(kTableCount);
         rotations_ = load_values_file(data_root / ("M_D" + std::to_string(nx_) + ".txt"),
@@ -999,9 +985,9 @@ public:
         const int nx = nx_;
         double f = 0.0;
 
-        // Dispatch and r_flag values transcribed from test_func() in
-        // test_func.c; the per-case bias addition is applied after the
-        // switch via kBias (same literals, same final operation).
+        // Cases and r_flag values as in test_func() of test_func.c. The
+        // reference adds the bias inside each case; here kBias is added once
+        // after the switch (same values, same last operation).
         switch (function_id_) {
         case 1:
             sphere_func(xs, &f, nx, Os, Mr, 0, s);
@@ -1123,7 +1109,7 @@ const std::vector<int>& supported_functions() {
 }
 
 const std::vector<int>& supported_dimensions() {
-    // Dimension whitelist of the reference R wrapper (R/cec2013.R).
+    // Allowed dimensions, as in the reference R wrapper (R/cec2013.R).
     static const std::vector<int> dimensions = {2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
     return dimensions;
 }

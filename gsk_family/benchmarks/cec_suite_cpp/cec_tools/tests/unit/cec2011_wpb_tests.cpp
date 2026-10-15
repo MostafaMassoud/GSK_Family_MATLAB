@@ -1,18 +1,18 @@
-// cec2011_wpb_tests.cpp -- validation harness for CEC2011 work package B
-// (problems 9 and 11-20; benchmarks/cec_suite_cpp/cec2011/src/cec2011_problems_b.cpp).
+// cec2011_wpb_tests.cpp -- tests for CEC2011 work package B: problems 9
+// and 11-20 (benchmarks/cec_suite_cpp/cec2011/src/cec2011_problems_b.cpp).
 //
-// Ground truth is the MATLAB reference itself:
-//   1. Bounds: tests/data/cec2011_bounds.txt was exported by MATLAB from
-//      define_boundaries.m; the C++ bounds must match EXACTLY (bitwise),
-//      including problem 9 whose bounds are COMPUTED from the EBE data.
-//   2. Probes: tests/data/cec2011_points_F<fn>.txt holds the 3 probe rows
-//      (mid, q1, q3 over the native bounds); tests/data/cec2011_expected.csv
-//      holds Calc_Fitx_2011 values (including wrapper rounding and the
-//      NaN->0 rule). Gate: relative 1e-12.
-//   3. Cross-check: problem 18 and problem 20 must return IDENTICAL values
+// Reference values come from the MATLAB code itself:
+//   1. Bounds: tests/data/cec2011_bounds.txt, exported by MATLAB from
+//      define_boundaries.m. The C++ bounds must match bit for bit, including
+//      problem 9, whose bounds are computed from the EBE data.
+//   2. Probes: tests/data/cec2011_points_F<fn>.txt holds 3 probe rows
+//      (mid, q1, q3 of the native bounds); tests/data/cec2011_expected.csv
+//      holds the Calc_Fitx_2011 values (with wrapper rounding and the
+//      NaN -> 0 rule). Limit: relative 1e-12.
+//   3. Cross-check: problems 18 and 20 must return identical values
 //      (fn_HT_ELD_Case_3 weights its POZ penalty by 0).
-//   4. API: wrong evaluate() size throws std::invalid_argument; function
-//      ids outside the package (1, 10, 21) throw std::invalid_argument.
+//   4. API: a wrong evaluate() input size and ids outside the package
+//      (1, 10, 21) throw std::invalid_argument.
 //
 // Usage: cec2011_wpb_tests [project_root]   (default ".")
 
@@ -56,7 +56,7 @@ double rel_deviation(double actual, double expected) {
     return std::fabs(actual - expected) / scale;
 }
 
-// The work-package ids and their native dimensions (define_boundaries.m).
+// Work package B ids and their native dimensions (define_boundaries.m).
 const std::vector<std::pair<int, int>> kPackage = {
     {9, 126}, {11, 120}, {12, 240}, {13, 6},  {14, 13}, {15, 15},
     {16, 40}, {17, 140}, {18, 96},  {19, 96}, {20, 96}};
@@ -66,8 +66,8 @@ struct BoundsRow {
     std::vector<double> upper;
 };
 
-// cec2011_bounds.txt: '#' comment lines, then per problem a "fn n" line,
-// one lower-bound row and one upper-bound row.
+// cec2011_bounds.txt: '#' comment lines, then for each problem a "fn n"
+// line, one lower-bound row and one upper-bound row.
 std::map<int, BoundsRow> load_bounds_table(const std::filesystem::path& path) {
     std::ifstream in(path);
     check(static_cast<bool>(in), "bounds file readable: " + path.string());
@@ -158,9 +158,7 @@ int main(int argc, char** argv) {
     const std::map<std::pair<int, int>, double> expected =
         load_expected(tests_data / "cec2011_expected.csv");
 
-    /* ------------------------------------------------------------ */
-    /* Metadata + exact bounds + reference probes per problem        */
-    /* ------------------------------------------------------------ */
+    // ---- Metadata, exact bounds and reference probes per problem ----
     std::map<int, double> max_rel_dev;
     std::map<int, std::vector<double>> probe_values; // for the P18==P20 check
 
@@ -175,8 +173,8 @@ int main(int argc, char** argv) {
                   std::to_string(problem->dimension()) + ")");
         check(std::isnan(problem->optimum()), tag + " optimum() is quiet NaN");
 
-        // Bounds: EXACT (bitwise) match against the MATLAB export, including
-        // problem 9 whose bounds are computed from the EBE input data and
+        // Bounds must match the MATLAB export bit for bit, including
+        // problem 9 (bounds computed from the EBE input data) and
         // problem 12's zero-width unit-10 range (Pmin == Pmax == 55).
         const auto bounds_it = bounds_table.find(fn);
         check(bounds_it != bounds_table.end(), tag + " present in bounds table");
@@ -195,7 +193,7 @@ int main(int argc, char** argv) {
             check(upper_ok, tag + " upper bounds match define_boundaries exactly");
         }
 
-        // Probes vs MATLAB Calc_Fitx_2011 values at relative 1e-12.
+        // Probes vs MATLAB Calc_Fitx_2011 values, relative tolerance 1e-12.
         const auto probes =
             load_probes(tests_data / ("cec2011_points_F" + std::to_string(fn) + ".txt"), dim);
         double worst = 0.0;
@@ -219,9 +217,7 @@ int main(int argc, char** argv) {
         max_rel_dev[fn] = worst;
     }
 
-    /* ------------------------------------------------------------ */
-    /* P18 == P20 exactly (case 3 weights its POZ penalty by zero)   */
-    /* ------------------------------------------------------------ */
+    // ---- P18 == P20 exactly (case 3 weights its POZ penalty by 0) ----
     {
         const auto& f18 = probe_values[18];
         const auto& f20 = probe_values[20];
@@ -233,9 +229,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    /* ------------------------------------------------------------ */
-    /* Error handling                                                */
-    /* ------------------------------------------------------------ */
+    // ---- Error handling ----
     {
         const auto problem = gskcec::cec2011::detail::make_problem_wpb(13, data_root);
         bool size_threw = false;
@@ -261,9 +255,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    /* ------------------------------------------------------------ */
-    /* Report                                                        */
-    /* ------------------------------------------------------------ */
+    // ---- Report ----
     std::cout << "max relative deviation vs MATLAB per problem:\n";
     for (const auto& [fn, dev] : max_rel_dev) {
         std::cout << "  f" << fn << ": " << format_value(dev) << "\n";

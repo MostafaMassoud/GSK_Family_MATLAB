@@ -1,9 +1,12 @@
 function test_runner_sphere()
 %TEST_RUNNER_SPHERE End-to-end runner smoke on the pure-MATLAB sphere suite.
 %
-% Exercises run_experiment without the MEX bridge: the CEC-competition output
-% layout (summary/curves/gen_logs) is produced, follows docs/reference/result_schema.md,
-% and rerunning with the same seed is byte-identical for the numeric content.
+% Runs run_experiment without the MEX bridge and checks that:
+%   - the CEC-competition output layout (summary/curves/gen_logs) is
+%     written and follows docs/reference/result_schema.md;
+%   - a rerun with the same seed gives byte-identical numeric content;
+%   - resume keeps existing output and appends only the missing runs;
+%   - output inside benchmarks/cec_reference_results is refused.
 
 here = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(here));
@@ -30,7 +33,7 @@ svals = strsplit(char(srows(2)), ',');
 assert(str2double(svals{1}) == 1, 'summary function id');
 assert(str2double(svals{2}) <= str2double(svals{5}), 'summary best <= worst');
 
-% Full per-run schema (with seeds) preserved under summary/per_run.csv.
+% Full per-run table (with seeds) in summary/per_run.csv.
 per_run = fullfile(summary_dir, 'per_run.csv');
 assert(isfile(per_run), 'per_run.csv missing');
 prows = readlines(per_run);
@@ -45,7 +48,7 @@ assert(any(strcmp(first{13}, {'threefry', 'twister'})), 'per_run rand_generator 
 assert(sprintf('%.17g', str2double(first{7})) == string(first{7}), 'best_fitness not round-trip');
 per_run_before_resume = fileread(per_run);
 
-% environment.json (metadata).
+% environment.json holds the run metadata.
 env = jsondecode(fileread(fullfile(summary_dir, 'environment.json')));
 assert(strcmp(env.optimizer, 'gsk') && strcmp(env.suite, 'sphere'), 'environment content');
 assert(env.base_seed == 4242 && ~isempty(env.seed_policy), 'environment seed policy');
@@ -58,9 +61,9 @@ crows = readlines(chk);
 assert(startsWith(crows(1), 'Run,Seed,E'), 'checkpoint header');
 assert(numel(crows) >= 3, 'expected 2 checkpoint rows');
 
-% Determinism: rerun and compare the numeric artifacts byte-for-byte
-% (environment.json has a timestamp; per_run.csv has runtime - both excluded
-% or stripped).
+% Determinism: rerun and compare the numeric outputs byte for byte.
+% environment.json (has a timestamp) is skipped; per_run.csv is compared
+% without its runtime column.
 out2 = [out_dir '_b'];
 if exist(out2, 'dir'); rmdir(out2, 's'); end
 run_experiment('optimizer', 'gsk', 'suite', 'sphere', 'functions', 1, ...
@@ -73,7 +76,7 @@ for k = 1:numel(det)
     b = fileread(fullfile(out2, det{k}));
     assert(strcmp(a, b), '%s not deterministic across reruns', det{k});
 end
-% per_run.csv minus the runtime_seconds column (field 11 of 13).
+% Compare per_run.csv without runtime_seconds (field 11 of 13).
 strip_runtime = @(txt) regexprep(txt, '^((?:[^,\r\n]*,){10})[^,\r\n]*', '$1', 'lineanchors');
 a = strip_runtime(fileread(per_run));
 b = strip_runtime(fileread(fullfile(out2, 'summary', 'per_run.csv')));
@@ -81,9 +84,9 @@ assert(~contains(a, 'runtime_seconds') && contains(a, ',max_nfes,rand_generator'
        'runtime column strip misaligned');
 assert(strcmp(a, b), 'per_run.csv not deterministic across reruns');
 
-% Resume/add behavior: an existing output tree is never deleted. Rerunning with
-% a larger requested run count appends only the missing run and archives
-% refreshed fixed-name artifacts.
+% Resume: an existing output tree is never deleted. Rerunning with more runs
+% appends only the missing run and moves each fixed-name file it refreshes
+% to <folder>/_archive (checked here for summary/).
 run_experiment('optimizer', 'gsk', 'suite', 'sphere', 'functions', 1, ...
                'dimensions', 10, 'runs', 3, 'base_seed', 4242, 'max_nfes', 4000, ...
                'project_root', project_root, 'output_dir', out_dir, 'overwrite', false);
@@ -102,9 +105,10 @@ chk_rows_after = chk_rows_after(strlength(strtrim(chk_rows_after)) > 0);
 assert(numel(chk_rows_after) == 4, 'resume should append checkpoint row for run 3');
 assert(isfolder(fullfile(summary_dir, '_archive')), 'resume archive folder missing');
 
-% Generated output is refused inside the imported reference tree on every run
-% (not only with overwrite=true), before any directory is created - for an
-% absolute output_dir and for one relative to the current folder.
+% Output inside the imported reference tree is refused on every run (not
+% only with overwrite=true) with run_experiment:outputUnsafe, before any
+% folder is created. Tested with an absolute output_dir and with one
+% relative to the current folder.
 ref_root = fullfile(project_root, 'benchmarks', 'cec_reference_results');
 guard_leaf = sprintf('_runner_guard_test_%d', feature('getpid'));
 guard_args = {'optimizer', 'gsk', 'suite', 'sphere', 'functions', 1, 'dimensions', 2, ...

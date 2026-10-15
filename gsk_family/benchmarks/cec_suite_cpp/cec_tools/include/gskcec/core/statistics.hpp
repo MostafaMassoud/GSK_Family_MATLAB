@@ -9,6 +9,8 @@
 
 namespace gskcec {
 
+/// Best (minimum), median, mean, worst (maximum) and sample SD of a set of
+/// values.
 struct SummaryStatistics {
     Real best = 0.0;
     Real median = 0.0;
@@ -36,6 +38,7 @@ inline Real median(Vector values) {
     return values[mid];
 }
 
+/// Sample standard deviation (divides by n - 1); 0 for fewer than 2 values.
 inline Real sample_standard_deviation(const Vector& values) {
     if (values.size() < 2) {
         return 0.0;
@@ -49,6 +52,8 @@ inline Real sample_standard_deviation(const Vector& values) {
     return std::sqrt(ss / static_cast<Real>(values.size() - 1));
 }
 
+/// Computes SummaryStatistics for @p values.
+/// @throws std::invalid_argument for empty input or a non-finite value.
 inline SummaryStatistics summarize(Vector values) {
     if (values.empty()) {
         throw std::invalid_argument("Cannot summarize empty values.");

@@ -7,7 +7,7 @@
 > below. **After using it** the reviewer should produce severity-ranked findings,
 > narrowly scoped fixes, verification evidence, and remaining risks.
 
-This prompt is the MATLAB/C++ counterpart of the Python project's
+This prompt is the MATLAB/C++ counterpart of the sibling project's
 `REVIEW_PROMPT.md`, adapted to this repository's current implementation. Use it
 for an end-to-end pass across source code, C++ tooling, MATLAB runners,
 benchmarks, configs, tests, documentation, build files, and generated-artifact
@@ -22,7 +22,7 @@ Related prompts in this folder:
 - [INLINE_DOCUMENTATION_REVIEW_PROMPT.md](INLINE_DOCUMENTATION_REVIEW_PROMPT.md)
   - MATLAB comments, help text, C++ Doxygen, script comments, and config notes.
 - [documentation_parity_prompt.md](documentation_parity_prompt.md) - keep this
-  documentation set structurally aligned with the sibling Python project while
+  documentation set structurally aligned with the sibling project while
   preserving MATLAB/C++ facts.
 - [llm_review_prompt.md](llm_review_prompt.md) - legacy-compatible broad review
   prompt retained for existing links.
@@ -123,9 +123,9 @@ Root-file policy:
 
 Toolchain policy:
 
-- Do not add Python to this MATLAB/C++ project. The supported toolchain is
-  MATLAB, C++20, CMake, MinGW Makefiles on Windows, PowerShell, Pandoc, and
-  Doxygen.
+- The project is MATLAB and C++ only (no other languages or generated
+  bindings). The supported toolchain is MATLAB, C++20, CMake, MinGW Makefiles
+  on Windows, PowerShell, Pandoc, and Doxygen.
 - Documentation is built by `scripts/build_docs.ps1`; do not hand-edit
   `docs/html/`.
 - CEC/MEX code is built through CMake and `scripts/build_mex_bridge.ps1`.
@@ -191,7 +191,7 @@ Seed policies:
   - `agsk`, `apgsk`, `fdb-agsk`: `D*func*run`
   - `dt-gsk` is unified-only (`is_unified_only` in `run_experiment.m`): it is
     scheduled with the unified seed and `threefry` under every `seed_policy`,
-    mirroring the Python reference's `UNIFIED_ONLY_OPTIMIZERS`.
+    mirroring the reference implementation's `UNIFIED_ONLY_OPTIMIZERS`.
 - Under reference mode, AGSK/APGSK/FDB-AGSK/eGSK/ATMALS-GSK use legacy `seed`;
   GSK uses `twister`. Under unified mode the effective generator is
   threefry when available, otherwise twister.
@@ -290,8 +290,8 @@ Phase 4 - Performance and scalability:
 
 Phase 5 - Documentation and prompts:
 
-- Check README, SKILL, configs README, scripts README, every docs page, every
-  prompt page, and generated HTML freshness.
+- Check README, RUNBOOK (the beginner runbook), SKILL, configs README, scripts
+  README, every docs page, every prompt page, and generated HTML freshness.
 - Update source Markdown first, rebuild HTML with `scripts/build_docs.ps1`, and
   never hand-edit `docs/html/`.
 - Ensure all command examples reflect current overwrite, write_graphs, seed,

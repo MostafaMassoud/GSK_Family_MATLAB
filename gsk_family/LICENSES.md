@@ -3,8 +3,8 @@
 This project keeps a single provenance and license record for the committed
 MATLAB/C++ implementation, imported benchmark data, and imported reference
 result tables. CEC benchmark implementations in this project are C++. GSK-family
-optimizer implementations are MATLAB. Python code, generated Cython
-bindings, and Python wrappers are excluded.
+optimizer implementations are MATLAB. Implementations and wrappers in other
+languages, and generated language bindings, are excluded.
 
 ## Project author and algorithm citations
 
@@ -27,7 +27,7 @@ with their original papers when used in research.
 | eGSK | Jawad, M. A.; Roshdy, H. S. M.; Mohamed, A. W. "Enhanced Gaining-Sharing Knowledge-based algorithm." *Results in Control and Optimization*, 19, 100542, 2025. DOI: [10.1016/j.rico.2025.100542](https://doi.org/10.1016/j.rico.2025.100542). |
 | FDB-AGSK | Bakir, H.; Duman, S.; Guvenc, U.; Kahraman, H. T. "Improved adaptive gaining-sharing knowledge algorithm with FDB-based guiding mechanism for optimization of optimal reactive power flow problem." *Electrical Engineering*, 105, 3121-3160, 2023. DOI: [10.1007/s00202-023-01803-9](https://doi.org/10.1007/s00202-023-01803-9). |
 | FDB selection method | Kahraman, H. T.; Aras, S.; Gedikli, E. "Fitness-distance balance (FDB): a new selection method for meta-heuristic search algorithms." *Knowledge-Based Systems*, 190, 105169, 2020. DOI: [10.1016/j.knosys.2019.105169](https://doi.org/10.1016/j.knosys.2019.105169). |
-| DT-GSK | Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm." *Algorithms* (MDPI), 2026 (accepted, in production; DOI pending). Reference implementation: DT-GSK v2.46 (Python, MIT license), <https://github.com/MostafaMassoud/DT-GSK>. |
+| DT-GSK | Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm." *Algorithms* (MDPI), 2026 (accepted, in production; DOI pending). Reference implementation: DT-GSK v2.46 (MIT license), <https://github.com/MostafaMassoud/DT-GSK>. |
 
 ## Imported data and tables
 
@@ -59,8 +59,8 @@ with their original papers when used in research.
   P. N. Suganthan, A. G. Hernandez-Diaz).
 - **CEC2013LSGO** (`.../cec2013lsgo/src/`): adapted in place from the
   reference large-scale suite C++ (X. Li, K. Tang, M. N. Omidvar, Z. Yang,
-  K. Qin; distributed via the PyPI `cec2013lsgo` package whose
-  Python/Cython binding glue was removed). The original `README.rst` is
+  K. Qin; distributed via the `cec2013lsgo` package; only the C++ sources
+  are kept). The original `README.rst` is
   preserved; per-file headers retain their origin notes.
 - **CEC2011** (`.../cec2011/src/cec2011_problem*.cpp`): ported from the
   CEC2011 real-world optimization MATLAB package (S. Das and
@@ -73,11 +73,12 @@ with their original papers when used in research.
   keep short provenance breadcrumbs; behavioral details are recorded in
   `docs/reference/porting_notes.md`.
 - **DT-GSK MATLAB optimizer** (`src/optimizers/dt-gsk/`): ported to MATLAB from
-  the DT-GSK reference implementation (Python, MIT license) v2.46,
+  the DT-GSK reference implementation v2.46 (MIT license),
   <https://github.com/MostafaMassoud/DT-GSK> (tag `v2.46`, commit
   `64c70bb54125c9361b821939802ee4810fb7af50`), by Mostafa Elsayed Masoud,
-  Heba Sayed Mohamed Roshdy, and Ali Wagdy Mohamed. No Python code is included;
-  the port and its validation are recorded in `src/optimizers/dt-gsk/README.md`.
+  Heba Sayed Mohamed Roshdy, and Ali Wagdy Mohamed. No reference-implementation
+  code is included; the port and its validation are recorded in
+  `src/optimizers/dt-gsk/README.md`.
   Upstream notice:
 
   ```text
@@ -150,12 +151,12 @@ violation of its terms.
 | Component | Origin (per provenance above) | Upstream license / status | Obligation it imposes on the combined work |
 |---|---|---|---|
 | **CEC2013 standard suite** (`cec_suite_cpp/cec2013`) | Converted from the `cec2013` R package (Zambrano-Bigiarini & Gonzalez-Fernandez; original C by J. J. Liang) | **GPL (>= 3)** - explicit in the package `DESCRIPTION` | **Copyleft: forces GPL-3.0-or-later on the whole distribution.** This is the binding constraint. Preserve the package `DESCRIPTION`/`NAMESPACE`/`NEWS` and the upstream copyright/author attribution. |
-| **CEC2013LSGO suite** (`cec_suite_cpp/cec2013lsgo`) | Adapted from the C++ test suite distributed via the PyPI `cec2013lsgo` package; underlying suite by Li, Tang, Omidvar, Yang, Qin (Python/Cython glue removed) | No explicit OSI license in the shipped `README.rst`; the upstream PyPI packaging is commonly MIT, but the bundled README states only a **citation requirement** (cite the CEC2013 LSGO technical report) | Citation requirement; preserve the `README.rst` and per-file origin headers. A permissive/MIT upstream is GPL-compatible, so it can be redistributed inside a GPL-3.0 combined work. |
+| **CEC2013LSGO suite** (`cec_suite_cpp/cec2013lsgo`) | Adapted from the C++ test suite of the `cec2013lsgo` package (only the C++ sources are kept); underlying suite by Li, Tang, Omidvar, Yang, Qin | No explicit OSI license in the shipped `README.rst`; the upstream packaging is commonly MIT, but the bundled README states only a **citation requirement** (cite the CEC2013 LSGO technical report) | Citation requirement; preserve the `README.rst` and per-file origin headers. A permissive/MIT upstream is GPL-compatible, so it can be redistributed inside a GPL-3.0 combined work. |
 | **CEC2017 suite** (`cec_suite_cpp/cec2017`) | Ported from `cec17_func.cpp` (CEC2017 competition code; Awad, Ali, Suganthan et al.) | Competition/academic code; no explicit OSI license shipped | Academic-use / attribution. Compatible with redistribution inside a GPL-3.0 work; preserve the original `readme.txt` and provenance copy. |
 | **CEC2020 suite** (`cec_suite_cpp/cec2020`) | Ported from `cec20_func.cpp` (CEC2020 competition code; Yue, Price, Suganthan et al.) | Competition/academic code; no explicit OSI license shipped | Same as CEC2017. |
 | **CEC2011 suite** (`cec_suite_cpp/cec2011`) | Ported from the CEC2011 real-world MATLAB package (Das & Suganthan); trajectory problems derive from ESA GTOP `mga_dsm` MATLAB | Competition/academic code; ESA GTOP code is academic/research | Academic-use / attribution. The `ode45`-replica note (behavioral constants only, no MathWorks source copied) is documented above and does not add a license obligation. |
 | **GSK-family MATLAB optimizers** (`src/optimizers`, except `dt-gsk`) | Organized from the reference implementations of Ali Wagdy Mohamed and co-authors (GSK, AGSK, APGSK, ATMALS-GSK, eGSK, FDB-AGSK) | Author reference code; no explicit OSI license accompanied the archives | Attribution to the original authors (given in headers and the paper Acknowledgements). Placing them under the project GPL-3.0-or-later is consistent with the authorship context; **confirm with the original authors** that GPL redistribution of their reference-derived code is acceptable. |
-| **DT-GSK MATLAB optimizer** (`src/optimizers/dt-gsk`) | Ported to MATLAB from the DT-GSK reference implementation (Python) v2.46 by Masoud, Roshdy, and Mohamed | **MIT** - explicit `LICENSE` in the reference repository | Permissive and GPL-compatible: the MATLAB port is part of this project under GPL-3.0-or-later. Keep the upstream copyright and permission notice (reproduced above) and cite the DT-GSK paper. |
+| **DT-GSK MATLAB optimizer** (`src/optimizers/dt-gsk`) | Ported to MATLAB from the DT-GSK reference implementation v2.46 by Masoud, Roshdy, and Mohamed | **MIT** - explicit `LICENSE` in the reference repository | Permissive and GPL-compatible: the MATLAB port is part of this project under GPL-3.0-or-later. Keep the upstream copyright and permission notice (reproduced above) and cite the DT-GSK paper. |
 | **Imported reference tables** (`benchmarks/cec_reference_results`) | Published result tables copied verbatim (read-only comparison data); the `dt-gsk` tables and CEC2017 per-run evidence come from the MIT-licensed DT-GSK repository | Data/tables (facts), not program code | None material; these are comparison data, not licensable program code. Kept read-only. |
 | **Project-original code** (CLI tools, `gskcec` core, tests, runners, build, scripts, documentation) | Written for this project by Mostafa Masoud (`moustafa.masoud@gmail.com`) | The author's own work | Freely licensable by the author; placed under GPL-3.0-or-later to match the combined work. |
 

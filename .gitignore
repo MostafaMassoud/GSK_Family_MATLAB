@@ -1,0 +1,21 @@
+# Repository-wide ignore rules. Project-specific rules (build trees, results,
+# generated docs) are in gsk_family/.gitignore.
+
+# MATLAB
+*.asv
+*.autosave
+*.mex*
+slprj/
+codegen/
+matlab_crash_dump.*
+
+# Editors and tools
+.vscode/
+.idea/
+*.code-workspace
+compile_commands.json
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

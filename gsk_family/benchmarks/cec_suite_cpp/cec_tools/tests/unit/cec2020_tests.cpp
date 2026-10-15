@@ -1,10 +1,10 @@
 // Unit tests for the standalone CEC2020 port (cec2020_problem.cpp).
 //
-// Validates every row of the MEX-generated ground truth
+// Checks the port against every row of the MEX-generated reference values in
 //   benchmarks/cec_suite_cpp/cec_tools/tests/data/cec2020_expected.csv
-// (probe points from points_D<D>.txt) against the port, plus the public API
-// contract: optimum vector, budgets, bounds, supported lists, error types
-// and data-driven availability.
+// (probe points from points_D<D>.txt), plus the public API: optimum vector,
+// budgets, bounds, supported lists, error types, and which (function, D)
+// combos the data files support.
 //
 // Usage: cec2020_tests [project_root]   (default ".")
 
@@ -128,10 +128,10 @@ int main(int argc, char** argv) {
         }
     }
 
-    // --- Data-driven availability: combos absent from the reference data ---
-    // Internal ids 1 (public 1) and 22 (public 8) ship no D5/D15 shuffle
-    // files, so the reference protocol has no ground truth there and the
-    // constructor must throw std::runtime_error naming the missing file.
+    // --- Combos missing from the reference data ----------------------------
+    // Internal ids 1 (public 1) and 22 (public 8) have no D5/D15 shuffle
+    // files, so the reference has no values there and the constructor must
+    // throw std::runtime_error naming the missing file.
     {
         const std::vector<std::pair<int, int>> missing{{1, 5}, {1, 15}, {8, 5}, {8, 15}};
         const std::vector<std::string> file_names{
@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
         check(bounds_ok, combo_name(func, 10) + " bounds are [-100, 100]^D");
     }
 
-    // --- Wrong-size evaluate throws, determinism across instances ----------
+    // --- Wrong-size evaluate throws; separate instances agree -------------
     {
         auto problem = cec2020::make_problem(1, 10, data_root);
         bool threw = false;
@@ -204,7 +204,8 @@ int main(int argc, char** argv) {
               "two instances produce bit-identical values");
     }
 
-    // --- Ground truth: every CSV row vs the original MEX -------------------
+    // --- Reference values: every CSV row vs the original MEX ---------------
+    // Each row must satisfy |got - exp| <= 1e-10 * max(1, |exp|).
     const std::vector<ExpectedRow> rows = read_expected_csv(tests_data / "cec2020_expected.csv");
     check(rows.size() == 180, "expected CSV holds 180 rows (got " +
                                   std::to_string(rows.size()) + ")");

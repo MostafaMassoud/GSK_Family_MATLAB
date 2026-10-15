@@ -22,8 +22,9 @@ All five suites are ported to standalone C++20 and validated against committed
 ground-truth data (see `docs/reference/porting_notes.md`). Provenance is summarized in
 the suite headers and `docs/reference/reference_inventory.md`.
 
-Do not place MATLAB/R/C-only/Python/Cython files here (the language-contract
-check forbids `*.m`, `*.R`, `*.c`, `*.py`, `*.pyx` under `cec_suite_cpp`), and do
+Do not place MATLAB/R/C-only files, other-language wrappers or generated
+bindings here (the language-contract check forbids `*.m`, `*.R` and `*.c` under
+`cec_suite_cpp`, and other-language or generated binding files anywhere), and do
 not put GSK optimizer code here - that lives under `src/`.
 
 ## Change-impact checklist

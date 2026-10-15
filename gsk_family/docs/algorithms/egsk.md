@@ -367,7 +367,7 @@ variant — [AGSK](agsk.md), [APGSK](apgsk.md), [FDB-AGSK](fdb-agsk.md), or
 [ATMALS-GSK](atmals-gsk.md) — may explore better. The other local-search variant
 uses memory-based perturbation instead of SQP — see [ATMALS-GSK](atmals-gsk.md).
 All of these share the junior/senior core documented in [GSK](gsk.md). See
-**[../getting-started/runbook.md](../getting-started/runbook.md)** to run it
+**[../getting-started/command_reference.md](../getting-started/command_reference.md)** to run it
 (install/enable the Optimization Toolbox for reference-mode runs); interface
 contract: [matlab_interface.md](../reference/matlab_interface.md).
 

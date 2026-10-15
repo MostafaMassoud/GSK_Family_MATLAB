@@ -139,7 +139,7 @@ light setup; from 20, 50 and 100 knobs upward it switches on more machinery —
 for example learning which knobs tend to improve together, a careful final
 polishing pass, and budget-aware restarts for the largest problems. It starts
 from `5 × D` candidates and always spends the whole budget. Unlike the others,
-it was ported from its authors' Python reference implementation rather than a
+it was ported from its authors' reference implementation rather than a
 MATLAB release, and was checked against that code (details on the
 [DT-GSK page](../algorithms/dt-gsk.md) and in
 `src/optimizers/dt-gsk/README.md`).
@@ -215,7 +215,7 @@ self-contained** one. Concretely:
 1. **Standalone C++ ports of the benchmarks, validated bit-for-bit against the
    originals.** The CEC functions were originally distributed as MATLAB **MEX**
    files (compiled C++ called from MATLAB) and R packages. Here they are
-   re-implemented as plain **C++20** that needs no MATLAB, no R, and no Python
+   re-implemented as plain **C++20** that needs no MATLAB and no R
    to run. Each port is checked against the *original* reference implementation
    at fixed probe points: the largest disagreement observed across the CEC2017
    suite is about `4.8e-15` (i.e. identical to ~15 significant digits). The same
@@ -225,7 +225,7 @@ self-contained** one. Concretely:
 2. **Seven GSK-family optimizers in MATLAB**, each a faithful port of a
    published reference, each citing the exact source it came from:
    `gsk`, `agsk`, `apgsk`, `atmals-gsk`, `egsk`, `fdb-agsk` (MATLAB reference
-   releases) and `dt-gsk` (the Python DT-GSK reference implementation).
+   releases) and `dt-gsk` (the DT-GSK reference implementation).
 3. **Automatic verification against published results.** Every experiment run is
    *automatically* compared to the same optimizer's published reference table,
    and a verdict — **CONSISTENT** or **DEVIATES** — is written next to the
@@ -236,9 +236,10 @@ self-contained** one. Concretely:
    every run seed so results can be regenerated exactly. ATMALS-GSK reference
    mode uses the deterministic legacy `seed` generator as a controlled
    replacement for its historical wall-clock driver.
-5. **No Python, anywhere.** Not in the benchmarks, not in the tooling, not even
-   in the documentation build. The languages are C++, MATLAB, PowerShell, and
-   CMake. This is a hard project rule, not an accident.
+5. **MATLAB and C++ only.** No other languages or generated bindings - not in
+   the benchmarks, not in the tooling, not even in the documentation build. The
+   only other tools are PowerShell scripts and CMake. This is a hard project
+   rule, not an accident.
 
 Two distinct meanings of "correct" are kept carefully apart, and you will see
 this distinction throughout:
@@ -265,7 +266,7 @@ only the reference statement of the same table (no runner calls it). See also
 
 | Optimizer | CEC2011 | CEC2013 | CEC2013LSGO | CEC2017 | CEC2020 |
 |---|:---:|:---:|:---:|:---:|:---:|
-| **gsk** | Y | (ext) | (ext) | Y | (ext) |
+| **gsk** | Y | (ref) | (ext) | Y | (ext) |
 | **agsk** | Y | (ext) | (ext) | Y | **Y** |
 | **apgsk** | Y | (ext) | (ext) | Y | (ext) |
 | **atmals-gsk** | Y | (ext) | (ext) | Y | (ext) |
@@ -275,7 +276,8 @@ only the reference statement of the same table (no runner calls it). See also
 
 Reading: all seven optimizers form the default matrix on **CEC2017** and
 **CEC2011**; **AGSK** additionally runs the **CEC2020** reproduction. CEC2013
-and CEC2013LSGO are validation/extension suites you can run on request.
+and CEC2013LSGO are validation/extension suites you can run on request (GSK's
+imported CEC2013 table covers D10/30/50 only).
 **DT-GSK**'s reference campaigns covered all five suites, so each of its runs,
 in or outside the default matrix, has an imported table to compare against.
 Any pairing the reference sources never ran is labeled an extension, not a

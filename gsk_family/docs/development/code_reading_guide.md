@@ -39,7 +39,7 @@ file and links the input/output contract (`docs/reference/matlab_interface.md`).
 GSK is the simplest; the other six are variations next to it.
 
 **"What does a port of a non-MATLAB reference look like?"** Open
-`src/optimizers/dt-gsk/`, ported from the Python DT-GSK reference
+`src/optimizers/dt-gsk/`, ported from the DT-GSK reference
 implementation (v2.46, MIT license). Start with `README.md` (dimension tiers,
 seeding exception, validation record) and `docs/algorithms/dt-gsk.md`, then
 `dt_gsk_config.m` (every setting of

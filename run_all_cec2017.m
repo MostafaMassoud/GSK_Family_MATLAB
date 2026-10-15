@@ -1,48 +1,50 @@
-% run_all_cec2017.m
-% =========================================================================
-% Run the GSK-family optimizer(s) on the CEC2017 suite.
+%RUN_ALL_CEC2017 Run GSK-family optimizers on the CEC2017 suite.
 %
-% HOW TO USE
-%   1. Open this file in MATLAB (it sits next to the  gsk_family/  folder).
+% How to use:
+%   1. Open this file in MATLAB (it sits next to the gsk_family/ folder).
 %   2. Press the green Run button (click "Change Folder" if MATLAB asks).
-%   3. Each function prints one results row; a results table and a
-%      Reference-GSK comparison print per dimension. The full report is also
-%      saved to results/_run_all/<opt>/cec2017/summary/<opt>_D<d>_log_*.txt
+%   3. Each function prints one results row, then a results table and a
+%      comparison with the optimizer's reference results for each dimension.
+%      The full report is also saved to
+%      results/_run_all/<opt>/cec2017/summary/<opt>_D<d>_log_*.txt
 %      (per-run detail in <opt>_D<d>_runs_log_*.txt).
 %
-% CEC2017 notes: F2 is auto-excluded for all optimizers (unstable; not in the
-% reference tables). This launcher defaults to seed_policy='unified' for new
-% fair cross-family experiments: every optimizer receives the same
-% (D,function,run) seed and the effective RNG is threefry when the installed
-% MATLAB supports it, otherwise twister. For published-table reproduction,
-% change seed_policy to 'reference' (GSK/ATMALS-GSK/eGSK:
-% runner default seed + 9973*func + run - 1; AGSK/APGSK/FDB-AGSK: D*func*run).
-% DT-GSK runs the unified seed + threefry under every seed_policy (its
-% reference protocol) and samples its own NP = 5*D initial population (it
-% ignores the runner X0).
-% Edit the CONFIG block to change optimizer(s), functions, dimensions, runs.
-% =========================================================================
+% CEC2017 notes:
+%   - F2 is excluded automatically for all optimizers (unstable; not in the
+%     reference tables).
+%   - The default seed_policy is 'unified', for fair comparisons across the
+%     family: every optimizer gets the same seed for each (D, function, run),
+%     and the RNG is threefry when this MATLAB supports it, else twister.
+%   - To reproduce published tables, set seed_policy = 'reference':
+%       GSK, ATMALS-GSK, eGSK: runner default seed + 9973*func + run - 1
+%       AGSK, APGSK, FDB-AGSK: D*func*run
+%   - DT-GSK uses the unified seed and threefry under every seed_policy (its
+%     reference protocol), and samples its own NP = 5*D initial population
+%     (it ignores the runner X0).
+%   - Edit the CONFIG block to change optimizers, functions, dimensions and
+%     runs.
 
 %% ------------------------------ CONFIG ----------------------------------
 
 optimizers = {'gsk'};
 %optimizers = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk', 'dt-gsk'};
 
-functions   = [1:30];             % F2 is auto-excluded -> 29 functions run
+functions   = [1:30];             % F2 is excluded automatically, so 29 functions run
 dimensions  = [10];   % CEC2017 standard dims are [10 30 50 100]; this runs D10 only
 runs        = 51;               % independent runs per function
 max_nfes    = 0;                % 0 = suite default (10000 * D)
-% Base seed is centralized in gsk_family/src/runners/run_experiment.m.
+% The base seed is set in gsk_family/src/runners/run_experiment.m.
 % seed_policy:
-%   'unified'   -> same seed + same runner-generated X0 + same post-X0 RNG
-%                  state per (D,function,run); threefry if available, else twister
-%   'reference' -> published-table reproduction; per-optimizer reference rules
-%   'native'/'derived' -> optimizer/suite-hashed diagnostic schedules
+%   'unified'   -> for each (D, function, run), every optimizer gets the same
+%                  seed, the same runner-made X0 and the same RNG state after
+%                  X0; threefry if available, else twister
+%   'reference' -> reproduce published tables with each optimizer's own rules
+%   'native'/'derived' -> diagnostic seed schedules hashed per optimizer/suite
 seed_policy = 'unified';
 rand_generator = 'threefry';
-use_parallel = true;           % true = parfor run loop; false = serial baseline (no worker-path failures)
+use_parallel = true;           % true = parfor over runs; false = serial baseline (no worker-path failures)
 write_graphs = false;          % false = keep numeric curves/gen_logs, skip slow PNG rendering
-overwrite = true;              % true = archive previous result tree and start a clean run
+overwrite = true;              % true = archive the previous result tree and start clean
 % -------------------------------------------------------------------------
 
 suite = 'cec2017';
@@ -55,9 +57,9 @@ if ~isfolder(src_dir)
 end
 addpath(genpath(src_dir));                      % optimizers, runners, helpers
 rehash;
-clear run_experiment gskcec_make_problem;       % reload updated runner helpers in long MATLAB sessions
-% Prerequisite: CEC suites require the C++ gskcec_eval MEX bridge.
-% Build first; see build.txt and gsk_family/build.txt for commands.
+clear run_experiment gskcec_make_problem;       % pick up runner edits in long MATLAB sessions
+% The CEC suites need the C++ MEX bridge gskcec_eval. Build it first
+% (RUNBOOK.md section 3; commands also in build.txt).
 gskcec_require_mex(root, 'run_all_cec2017');
 
 fprintf('\n==================== run_all (CEC2017) ====================\n');
@@ -86,8 +88,8 @@ for i = 1:numel(optimizers)
     end
 end
 if strcmpi(seed_policy, 'unified')
-    % Confirms the files written by successful optimizers really used identical
-    % seeds for each (D,function,run); catches accidental policy drift.
+    % Check that the passed optimizers recorded the same seed for each
+    % (D, function, run) in seed_schedule.csv; catches seed-policy drift.
     verify_unified_seed_schedule(fullfile(root, 'results', '_run_all'), passed_optimizers, suite);
 end
 

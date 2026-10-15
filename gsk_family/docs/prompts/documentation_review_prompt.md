@@ -8,9 +8,10 @@ into the agent.
 This prompt is aligned with the current repository layout and the current docs
 taxonomy:
 
-- `SKILL.md`, `README.md`, `CHANGELOG.md`, `LICENSES.md`, `CITATION.cff`, and
-  `codemeta.json` live at the `gsk_family` root. `LICENSES.md` is the single
-  license and provenance record (there is no separate root `LICENSE` file).
+- `SKILL.md`, `README.md`, `RUNBOOK.md` (the beginner runbook), `CHANGELOG.md`,
+  `LICENSES.md`, `CITATION.cff`, and `codemeta.json` live at the `gsk_family`
+  root. `LICENSES.md` is the single license and provenance record (there is no
+  separate root `LICENSE` file).
 - Documentation sources live under `docs/` in a five-folder taxonomy:
   `getting-started/`, `reference/`, `algorithms/`, `development/`, `research/`,
   plus `prompts/`. The old flat `docs/*.md` files are gone; do not cite them.
@@ -61,7 +62,7 @@ contract and the docs taxonomy you must keep consistent.
 
 Root and entry points:
 
- 1. README.md
+ 1. README.md, then RUNBOOK.md (the beginner runbook)
  2. SKILL.md
  3. CHANGELOG.md
  4. LICENSES.md
@@ -91,7 +92,7 @@ Getting started, research, and one algorithm page (for the 10-section skeleton):
 22. docs/getting-started/explainer.md
 23. docs/getting-started/tutorial.md
 24. docs/getting-started/user_guide.md
-25. docs/getting-started/runbook.md
+25. docs/getting-started/command_reference.md
 26. docs/getting-started/configuration.md
 27. docs/getting-started/troubleshooting.md
 28. docs/research/researcher_handbook.md
@@ -166,7 +167,9 @@ Do not reintroduce:
   at the docs root are gone; the real pages are under the subfolders)
 - old reference-table folder names or old root-level CEC tooling folders
 - a separate root LICENSE file
-- Python scripts, Python wrappers, Cython files, or Python package dependencies
+- scripts, wrappers, generated bindings, or package dependencies in other
+  languages (the project is MATLAB and C++ only; helper scripts are PowerShell
+  or MATLAB)
 
 Keep conventional root files unless the user explicitly decides otherwise:
 
@@ -187,8 +190,8 @@ Every documentation page lives in exactly one of these folders. Verify cross-lin
 point at the real path and that no page references a retired flat path.
 
 - docs/index.md, docs/index.html (redirect)
-- docs/getting-started/{explainer, tutorial, user_guide, runbook, configuration,
-  troubleshooting}.md
+- docs/getting-started/{explainer, tutorial, user_guide, command_reference,
+  configuration, troubleshooting}.md
 - docs/reference/{architecture, matlab_interface, api, module_dependencies,
   workflows, result_schema, seed_policy, benchmark_protocol, benchmark_mapping,
   diagrams, project_structure, reference_inventory, porting_notes,
@@ -202,6 +205,7 @@ point at the real path and that no page references a retired flat path.
   INLINE_DOCUMENTATION_REVIEW_PROMPT, llm_review_prompt,
   documentation_review_prompt, documentation_parity_prompt}.md
 - root LICENSES.md (rendered into the Reference group)
+- root RUNBOOK.md (the beginner runbook)
 - docs/Doxyfile (drives the C++ API pages under docs/html/api/)
 
 Page-opening convention (check this on EVERY page):
@@ -306,7 +310,7 @@ Reference-mode per-optimizer seeds:
 - For GSK, ATMALS-GSK, and eGSK:   seed = base_seed + 9973*func + run - 1
 - For AGSK, APGSK, and FDB-AGSK:   seed = D*func*run
 - For DT-GSK: the unified seed under every seed policy (it is unified-only,
-  mirroring its Python reference's UNIFIED_ONLY_OPTIMIZERS)
+  mirroring its reference implementation's UNIFIED_ONLY_OPTIMIZERS)
 
 Under reference mode, AGSK, APGSK, FDB-AGSK, eGSK, and ATMALS-GSK use the
 deterministic legacy integer seed; GSK uses twister. Under unified mode every
@@ -359,7 +363,8 @@ implementation.
 
 Review all documentation-bearing project files, including:
 
-- root Markdown and metadata files (README.md, SKILL.md, CHANGELOG.md, LICENSES.md)
+- root Markdown and metadata files (README.md, RUNBOOK.md, SKILL.md, CHANGELOG.md,
+  LICENSES.md)
 - every page under docs/, across all six folders plus docs/index.md and the
   docs/index.html redirect
 - all README files (configs/README.md, scripts/README.md, and any
@@ -472,7 +477,7 @@ affects reproducibility, benchmark correctness, or reference compatibility.
 
 Review every Markdown source, including:
 
-- README.md, SKILL.md, CHANGELOG.md, LICENSES.md
+- README.md, RUNBOOK.md, SKILL.md, CHANGELOG.md, LICENSES.md
 - docs/index.md
 - docs/getting-started/*.md
 - docs/reference/*.md
@@ -622,11 +627,13 @@ set. Fix mojibake and Unicode replacement characters. Search for common mojibake
 markers and replacement characters, but do not commit those markers into the
 documentation as literal examples.
 
-This project has no Python. No page, comment, or script note may claim or imply
-that any part of this project uses Python, a Python wrapper, Cython, or a Python
-dependency. The build is Python-free. Citing the DT-GSK Python reference
-implementation (MIT) as the provenance of the MATLAB port is allowed; it is not
-part of this project.
+This project is MATLAB and C++ only (no other languages or generated bindings;
+helper scripts, including the docs build, are PowerShell or MATLAB). No page,
+comment, or script note may claim or imply that any part of this project uses
+any other language, a language wrapper, generated bindings, or a package
+dependency from another language. Citing the DT-GSK reference implementation
+(MIT) as the provenance of the MATLAB port is allowed; it is not part of this
+project.
 
 ## Consistency Matrix
 
@@ -654,7 +661,8 @@ status).
 - imported reference evidence location (benchmarks/cec_reference_results, read-only)
 - the CEC2017 F2 exclusion (stated identically everywhere)
 - the ATMALS-GSK abs(best - optimum) convention on CEC2017
-- the no-Python contract (no page makes a Python claim about this project)
+- the MATLAB-and-C++-only contract (no page claims this project uses another
+  language)
 - the no-removed-reference-folder contract
 
 ## Stale Content Search
@@ -669,7 +677,8 @@ At minimum, search active source files and remove or justify matches for:
 - retired root prompt file names (the prompts live only under docs/prompts/)
 - old benchmark or result folder names and old root-level CEC tooling paths
 - deleted helper-script names
-- any "python", "cython", or Python-dependency mention applied to this project
+- any claim that this project uses another language, generated bindings, or a
+  package dependency from another language
 - fake placeholder domains and Unicode replacement markers
 - obsolete planning phrases such as unfinished future-port notes that contradict
   the current protocol
@@ -697,7 +706,7 @@ the report.
 
 Run what is feasible locally and report anything skipped with a reason.
 
-Documentation build (no Python required):
+Documentation build:
 
     powershell -File scripts\build_docs.ps1 -Clean
 
@@ -708,10 +717,9 @@ Generated-site existence checks:
 
 Stale-token grep over both source and generated HTML (fix the source, then
 rebuild; do not edit docs/html). Search for retired flat docs paths, old folder
-names, placeholder domains, Python mentions, and mojibake, for example:
+names, placeholder domains, other-language claims, and mojibake, for example:
 
     rg -n "docs/(architecture|api|seed_policy|benchmark_protocol|glossary)\.md" docs
-    rg -ni "python|cython" README.md SKILL.md docs
     rg -n "results/_run_all" docs
 
 Broken relative-link check on the generated HTML (every href to a local .html
@@ -757,7 +765,8 @@ Use P0/P1/P2/P3 severity for findings:
 
 - P0: documentation can cause incorrect science, broken reproducibility, or
   invalid benchmark results (for example, a wrong seed formula, a wrong budget, a
-  page that includes F2 in a default comparison, or a false Python claim).
+  page that includes F2 in a default comparison, or a false claim that the
+  project uses another language).
 - P1: documentation likely causes failed runs or serious misunderstanding (for
   example, a broken run command, a dead cross-link to a retired flat path, or a
   page missing its mandatory callout).
@@ -781,5 +790,5 @@ taxonomy.
 The final project should have synchronized documentation across code comments,
 Markdown, generated HTML, scripts, configuration files, and metadata, with the
 seed policy, evaluation budgets, result paths, the CEC2017 F2 exclusion, and the
-no-Python contract reading identically on every page.
+MATLAB-and-C++-only contract reading identically on every page.
 ```

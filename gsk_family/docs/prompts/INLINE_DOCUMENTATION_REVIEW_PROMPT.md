@@ -57,9 +57,11 @@ Also include the root MATLAB launchers one level up:
    - MATLAB function names use underscores where required;
    - benchmark path is `benchmarks/cec_suite_cpp`;
    - reference-result path is `benchmarks/cec_reference_results`.
-9. Do not add Python examples, Python scripts, or Python-specific terminology to
-   this MATLAB/C++ project. Comments that cite the DT-GSK Python reference
-   implementation as provenance (its names, tests, or version) are allowed.
+9. The project is MATLAB and C++ only (no other languages or generated
+   bindings; helper scripts are PowerShell or MATLAB): do not add examples,
+   scripts, or terminology from other languages.
+   Comments that cite the DT-GSK reference implementation as provenance (its
+   names, tests, or version) are allowed.
 10. Every revised comment should help a future maintainer avoid a mistake.
 
 ===============================================================================

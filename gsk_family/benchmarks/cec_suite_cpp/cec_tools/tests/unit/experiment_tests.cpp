@@ -1,5 +1,6 @@
-// Tests for the experiment config parser and the results-vs-reference
-// comparison helpers.
+// Tests for the experiment config parser, seed parsing, the reduced-protocol
+// rule, and the helpers that load summaries, compare them with reference
+// tables and give the post-run verification verdict.
 
 #include "gskcec/experiment/comparison.hpp"
 #include "gskcec/experiment/config.hpp"
@@ -127,7 +128,8 @@ int main(int argc, char** argv) {
         write_file(empty_dims, "optimizers: [gsk]\nsuite: cec2017\ndimensions: []\n");
         check(throws([&] { gskcec::load_experiment_config(empty_dims); }), "dimensions: [] rejected");
 
-        // data_root can never take effect (MATLAB has no such input): rejected.
+        // data_root is rejected: MATLAB has no such input, so it could never
+        // take effect.
         const fs::path data_root = tmp / "data_root.yml";
         write_file(data_root, "optimizers: [gsk]\nsuite: cec2017\ndata_root: benchmarks/cec_suite_cpp\n");
         check(throws([&] { gskcec::load_experiment_config(data_root); }), "data_root rejected explicitly");
@@ -196,8 +198,8 @@ int main(int argc, char** argv) {
             check(!throws([&] { gskcec::load_experiment_config(configs / name); }),
                   std::string("shipped config parses: ") + name);
         }
-        // The full campaigns must be verified as full protocol (gross check
-        // is a hard failure); only the smoke config is reduced.
+        // The full campaign configs must count as full protocol (a gross
+        // deviation is then a hard failure); only smoke.yml is reduced.
         for (const char* name : {"all_cec2017.yml", "all_cec2011.yml", "agsk_cec2020.yml"}) {
             const auto cfg = gskcec::load_experiment_config(configs / name);
             check(!gskcec::is_reduced_protocol(cfg.runs, cfg.max_evaluations),
@@ -219,8 +221,9 @@ int main(int argc, char** argv) {
         // The dimensionless rollup and per_run.csv must be ignored by the loader.
         write_file(summary / "gsk_cec2017.csv", "Function,Best,Median,Mean,Worst,SD\n1,1,1,1,1,1\n");
         write_file(summary / "per_run.csv", "optimizer,suite,function\ngsk,cec2017,1\n");
-        // Archived history (overwrite=true tree moves, per-file refreshes)
-        // must not be ingested as extra runs when walking a results root.
+        // Archived results (_overwrite_archive trees moved by overwrite=true,
+        // summary/_archive copies from per-file refreshes) must not be loaded
+        // as extra runs when scanning a results root.
         const std::string arch_table = "Function,Best,Median,Mean,Worst,SD\n9,9,9,9,9,9\n";
         write_file(tmp / "results" / "gsk" / "_overwrite_archive" / "cec2017_2026-06-27_17.49.03" /
                        "summary" / "gsk_cec2017_D10.csv",
@@ -253,7 +256,7 @@ int main(int argc, char** argv) {
         check(fs::exists(out_csv), "comparison csv written");
     }
 
-    // --- Post-run verification verdict (Mandate 1.1c) -------------------
+    // --- Post-run verification verdict ----------------------------------
     {
         const fs::path refs = tmp / "vrefs";
         write_file(refs / "cec2017" / "gsk" / "gsk_cec2017_D10.csv",
@@ -281,9 +284,9 @@ int main(int argc, char** argv) {
         auto v_nan = gskcec::classify_run(gskcec::load_summaries(nanrun), refs, false);
         check(v_nan.verdict == "DEVIATES", "non-finite mean -> DEVIATES");
 
-        // Negative error on a known-optimum suite -> DEVIATES (beat optimum).
-        // The mean stays within range of the 1e-7 reference, so only the sign
-        // check can fire (not the gross check).
+        // Negative error on a suite with a known optimum -> DEVIATES (it beats
+        // the optimum). The mean stays close to the 1e-7 reference, so only
+        // the sign check fails, not the gross check.
         const fs::path negrun = tmp / "vneg";
         write_file(negrun / "gsk" / "cec2017" / "summary" / "gsk_cec2017_D10.csv",
                    hdr + "1,-5.0e+00,2.0e-08,3.0e-08,4.0e-08,1.0e-08\n");
@@ -358,7 +361,7 @@ int main(int argc, char** argv) {
               "mixed dir: verdict names every optimizer and suite");
 
         // cec2011 has no known optimum: a negative raw objective is NOT a sign failure.
-        // Native dim in the filename (D6); the reference is dimensionless.
+        // The summary file name has the native D (D6); the reference has no D.
         write_file(refs / "cec2011" / "gsk" / "gsk_cec2011.csv",
                    hdr + "1,-1.0e+01,-5.0e+00,-5.0e+00,0.0e+00,3.0e+00\n");
         const fs::path c11 = tmp / "vc11";

@@ -10,7 +10,7 @@
 
 Every diagram depicts the MATLAB + C++ reality: GSK-family algorithms in MATLAB
 (`src/`), CEC benchmarks as standalone C++20 ports (`benchmarks/`), and the
-optional MEX bridge that joins them. There is no Python in the project. Each node
+optional MEX bridge that joins them. Each node
 uses an `id["label"]` declaration, with special-character labels quoted, so the
 charts parse cleanly under Mermaid.
 

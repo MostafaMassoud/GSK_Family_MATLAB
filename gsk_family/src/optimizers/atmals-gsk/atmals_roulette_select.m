@@ -1,13 +1,12 @@
 function i = atmals_roulette_select(PR)
 %ATMALS_ROULETTE_SELECT Faithful port of the ATMALS-GSK roulette wheel.
 %
-% Source (transcribed verbatim):
-%   historical source: atmalsgsk/atmalsgsk/cec2017/RouletteWheelSelection.m
-%   (byte-identical copy: .../cec2011/RouletteWheelSelection.m)
+%   i = atmals_roulette_select(PR) normalizes the weights PR and returns the
+%   index of the slot hit by a single rand draw. The caller passes Prob.^RP
+%   (probability table raised to the power RP), as in ATMALS_GSK.m.
 %
-% The caller passes Prob.^RP (the probability table raised to the RP
-% exponent), exactly as in ATMALS_GSK.m. The sort([c r]) / find(c==r)
-% construction locates the roulette slot of the single rand draw.
+%   historical source: atmalsgsk/atmalsgsk/cec2017/RouletteWheelSelection.m
+%   (byte-identical copy in .../cec2011/). Transcribed verbatim.
 
 r = rand;
 
@@ -15,6 +14,7 @@ PR = PR / sum(PR);
 
 c = cumsum(PR);
 
+% Insert r into the sorted cumulative sums; its position is the slot.
 c = sort([c r]);
 
 i = find(c == r, 1, 'first');

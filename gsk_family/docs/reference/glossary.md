@@ -40,7 +40,7 @@ protocol rules, see [benchmark_protocol.md](benchmark_protocol.md).
   ranking. Five selectable cases; default `fdb_case = 1`.
   `src/optimizers/fdb-agsk/`.
 - **DT-GSK — Dimension-Tiered GSK.** The seventh optimizer, a MATLAB port of
-  the DT-GSK reference implementation (Python, MIT license) v2.46. It keeps the
+  the DT-GSK reference implementation v2.46 (MIT license). It keeps the
   GSK junior/senior operators and switches its control machinery (ACE, ARGP,
   NLPSR, BSE, SGSM, TERRA and local refinement, below) on by **dimension
   tier**. It starts from `NP = 5 × D`, always uses the full budget, and is
@@ -177,7 +177,7 @@ protocol rules, see [benchmark_protocol.md](benchmark_protocol.md).
   "Wilcoxon-style" win/tie/loss tally against the reference.
 - **Wilcoxon rank-sum test and Holm adjustment.** The unpaired two-sample test
   that `scripts/compare_reference_runs.m` applies per (dimension, function) cell
-  to two sets of runs (e.g. a MATLAB DT-GSK campaign and the imported Python
+  to two sets of runs (e.g. a MATLAB DT-GSK campaign and the imported
   reference runs); Holm's step-down method adjusts its p-values for the number
   of cells compared.
 - **Friedman (test / ranking).** A non-parametric test that ranks **several**
@@ -210,13 +210,12 @@ protocol rules, see [benchmark_protocol.md](benchmark_protocol.md).
 - **CTest.** CMake's test runner; `ctest --test-dir build --output-on-failure`
   runs the C++ unit tests and prints failing-test output.
 - **Doxygen.** The documentation generator for the C++ public API headers
-  (`doxygen docs/Doxyfile`); see [api.md](api.md). The project uses **no** Python
-  documentation tooling.
+  (`doxygen docs/Doxyfile`); see [api.md](api.md).
 - **Graphviz / dot.** An optional graph-drawing tool Doxygen can call to render
   call graphs. If `dot` is not installed, the API docs still build (set
   `HAVE_DOT=NO`).
 
-## The three CLI tools
+## The CLI tools
 
 - **`gsk_list`.** Enumerates the benchmark suites (with their functions and
   dimensions), the seven optimizers, and the imported reference tables.
@@ -227,3 +226,5 @@ protocol rules, see [benchmark_protocol.md](benchmark_protocol.md).
 - **`gsk_run`.** Orchestrates an experiment: validates the request, drives MATLAB
   to run the optimizer(s), and automatically verifies each run (opt out with
   `--no-verify`).
+- **`gsk_bench`.** Times raw benchmark `evaluate()` throughput on
+  representative cells (see [performance.md](../research/performance.md)).

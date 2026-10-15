@@ -1,20 +1,32 @@
 function result = dt_gsk_optimize(problem, options)
-%DT_GSK_OPTIMIZE DT-GSK: Dimension-Tiered Gaining-Sharing Knowledge-based
-%optimization (minimisation).
+%DT_GSK_OPTIMIZE Dimension-Tiered Gaining-Sharing Knowledge (DT-GSK) minimizer.
+%
+%   result = dt_gsk_optimize(problem, options)
+%
+% Inputs and output follow docs/reference/matlab_interface.md. problem needs
+% dim (D), lb and ub (scalar or D-vector), max_nfes, evaluate (n x D rows in,
+% n values out), optimum and target_error (NaN = unused), suite and func_id.
+% options.seed (non-negative integer) is required. The run always uses the
+% full budget (nfes ends at max_nfes, termination 'max_evaluations'); the
+% convergence trace is the best-so-far value after each generation.
+% Errors: dt_gsk_optimize:options (no seed, unsupported rand_generator),
+% dt_gsk_optimize:problem (dim or max_nfes <= 0), dt_gsk:valueError
+% (negative seed).
 %
 % DT-GSK keeps the GSK junior/senior knowledge-sharing operators and adds:
-%   * ACE, an adaptive configuration engine that draws (KF, KR, Kexp) per
-%     individual from a small pool and learns the pool probabilities from the
-%     fitness changes they produce (ARGP freezes entries that stop working);
-%   * nonlinear population size reduction (NLPSR) from 5*D to n_min;
-%   * linkage-aware crossover: some rows take whole blocks of dimensions;
-%   * BSE, a budget-safe escape (Cauchy kicks and archive-seeded partial
-%     restarts) plus a deep-stall full restart;
+%   * ACE, an adaptive configuration engine: each individual draws (KF, KR,
+%     Kexp) from a small pool whose probabilities learn from the fitness
+%     changes they produce; ARGP freezes entries that stop working;
+%   * nonlinear population size reduction (NLPSR) from NP = 5*D to n_min;
+%   * linkage-aware crossover (D >= 10): some rows take whole blocks of
+%     dimensions;
+%   * BSE, a budget-safe escape (Cauchy kicks, then archive-seeded partial
+%     restarts), plus a deep-stall full restart;
 %   * deterministic refinement: coordinate local search on the elites and,
-%     for D >= 50, a final compass polish.
-% The mechanisms and their settings are fixed by the dimension tier of the
-% published 'pub' profile (dt_gsk_config.m):
-%   D < 20        single ACE memory, stagnation-triggered BSE
+%     for D >= 50, one final compass polish.
+% The dimension tier of the published 'pub' profile (dt_gsk_config.m) fixes
+% which mechanisms run and their settings:
+%   D < 20        single ACE memory, BSE triggered by stagnation alone
 %   20 <= D < 50  top/bottom ACE memories, DE/rand/1 pool entry, KR floor,
 %                 'triple' BSE trigger (stagnation + low acceptance + low diversity)
 %   D >= 50       + learned linkage from the success graph (SGSM, dt_gsk_graph.m),
@@ -23,30 +35,28 @@ function result = dt_gsk_optimize(problem, options)
 %                 late-acceptance clipping (A1), frozen-streak KR broadening (A2),
 %                 learned/random linkage mixing (FC4); no DE entry
 %
-% Reference software and paper: DT-GSK v2.46,
-% https://github.com/MostafaMassoud/DT-GSK; Masoud, Roshdy, Mohamed,
-% "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and
-% Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization
-% Algorithm", Algorithms (MDPI), 2026. The draw order and the order of the
-% floating-point operations (sequential and NumPy pairwise sums, stable
-% sorts) follow the reference, so a seed reproduces its runs exactly.
+% Seeding: every random draw comes from a named Threefry substream of
+% options.seed (init, core, ace, div, bse, arch, link, de, basin), so one
+% subsystem never shifts another's draws. The global RNG is never touched.
+% DT-GSK samples its own initial population (fair-start exception: a runner
+% X0 is ignored). options.rand_generator must be 'threefry', empty, 'auto'
+% or 'default'.
 %
-% Seeding: every random draw comes from one of the named Threefry substreams
-% derived from options.seed (init, core, ace, div, bse, arch, link, de,
-% basin), so one subsystem never shifts another's draws. DT-GSK samples its
-% own initial population (fair-start exception: a runner X0 is ignored) and
-% never touches the global RNG. options.rand_generator must be 'threefry'
-% (or empty/'auto'/'default').
+% Reference: DT-GSK v2.46 (MIT license),
+% https://github.com/MostafaMassoud/DT-GSK; Masoud, Roshdy, Mohamed, "DT-GSK:
+% Dimension-Tiered Adaptive Configuration Selection and Deterministic
+% Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm",
+% Algorithms (MDPI), 2026. The draw order and the order of floating-point
+% operations (sequential vs pairwise sums, stable sorts, argmin tie rules)
+% follow the reference implementation, so runs track it closely; MATLAB
+% rounds Threefry draws to doubles slightly differently (at most 2^-53 per
+% uniform), see README.md.
 %
-% Scope: only the pub profile is implemented. Not included: options that no
-% pub tier selects (LHS/oversampled initialisation, Nelder-Mead/subspace
-% local search, event-triggered local search, state-driven DE policy,
-% hysteresis module gate, coverage-weighted ACE, per-half ARGP memories,
-% linkage reliability probes), research hooks and telemetry/generation logs.
-%
-% Interface: result = dt_gsk_optimize(problem, options); see
-% docs/reference/matlab_interface.md. The run always uses the full budget;
-% the convergence trace is the best-so-far value after each generation.
+% Scope: only the pub profile is implemented. Left out: options that no pub
+% tier selects (LHS/oversampled initialisation, Nelder-Mead/subspace local
+% search, event-triggered local search, state-driven DE policy, hysteresis
+% module gate, coverage-weighted ACE, per-half ARGP memories, linkage
+% reliability probes), research hooks and telemetry/generation logs.
 
 start_time = tic;
 
@@ -71,9 +81,10 @@ fobj = problem.evaluate;
 cfg = dt_gsk_config(D);
 
 %% Random substreams
-% The child seed of a stream is fixed by its position k in the reference
-% list init(0) core(1) ace(2) kexp(3) div(4) bse(5) arch(6) link(7) de(8)
-% control(9) flow(10) basin(11) trust(12); unused streams are not created.
+% init uses the seed itself; every other stream gets a child seed fixed by
+% its position k in the reference list init(0) core(1) ace(2) kexp(3) div(4)
+% bse(5) arch(6) link(7) de(8) control(9) flow(10) basin(11) trust(12).
+% Streams that are never drawn from are not created.
 seed = fix(double(options.seed));
 if seed < 0
     error('dt_gsk:valueError', 'Seed must be a non-negative integer, got %g.', seed);
@@ -131,8 +142,9 @@ acc_hist = zeros(1, 0);        % acceptance rate over the last signal_window gen
 div_hist = init_rad;           % population radius over the same window
 restarts = 0;
 cooldown_until = 0;
-% Span normalisers of the archive (x .* inv_span) and basin (x ./ bspan) distances:
-% the two zero-span guards round differently, so both forms are kept.
+% Span normalisers of the archive (x .* inv_span) and basin (x ./ bspan)
+% distances. The two forms round and guard zero spans differently; both are
+% kept so results match the reference implementation.
 inv_span = 1 ./ span;
 inv_span(span <= 0) = 0;
 arch = archive_add(zeros(0, D), best_x, best_f, inv_span, inv_sqrt_d, cfg);
@@ -203,8 +215,8 @@ while nfes < max_nfes
     top_frac = n_top / NP;
     bot_frac = 1 - top_frac;
     [Rg1, Rg2, Rg3] = junior_sources(order, rs_core);
-    % Senior sources: best / middle / worst groups. With split_senior and low
-    % recent acceptance, the bottom half draws from wider groups (same draws).
+    % Senior sources from the best / middle / worst groups. With split_senior
+    % and low recent acceptance, the bottom half uses wider groups (same r1-r3).
     r1 = rand(rs_core, 1, NP);
     r2 = rand(rs_core, 1, NP);
     r3 = rand(rs_core, 1, NP);
@@ -232,7 +244,7 @@ while nfes < max_nfes
     if a2_window > 0           % A2 broadening window is open
         KR = min(max(KR * cfg.a2_factor, 0), 1);
     end
-    % Junior share of the dimensions, ceil(D*(1-frac)^Kexp)/D: junior early, senior late
+    % Junior share of dims, ceil(D*(1-frac)^Kexp)/D: high early, low late
     p_jun = ceil(D * (1 - frac) .^ kexp) / D;
 
     %% Linkage groups: random blocks, or learned SGSM blocks once the graph is mature
@@ -266,7 +278,7 @@ while nfes < max_nfes
         end
     end
 
-    % Module gate: escapes stay enabled while ACE favours module entries
+    % Module gate: BSE needs ACE mass >= module_gate on the module entries
     if cfg.ace_top_bottom
         mass = top_frac * seqsum(Kw_top(modules)) + bot_frac * seqsum(Kw_bot(modules));
     else
@@ -281,7 +293,7 @@ while nfes < max_nfes
     ui = pop;
     ui(DJ) = vj(DJ);
     ui(DS) = vs(DS);           % senior wins where both masks are set
-    % Every trial changes at least one coordinate (random dim, junior or senior)
+    % An empty-mask row takes one random dim: junior with prob p_jun, else senior
     miss = find(~(any(DJ, 2) | any(DS, 2)));
     if ~isempty(miss)
         n = numel(miss);
@@ -320,7 +332,7 @@ while nfes < max_nfes
     child(1:n_child) = y;
     improved = child <= fit;
     improved(n_child + 1:end) = false;
-    % A1: late in the run, while acceptance is high but progress tiny, demand a relative gain
+    % A1 (late, high acceptance, tiny progress): accept only a relative gain
     if cfg.a1 && logdrop_streak >= cfg.a1_streak && frac >= cfg.a1_tau && ...
             mean0(acc_hist) >= cfg.a1_acc_high
         improved = child < fit - cfg.a1_eps * abs(fit);   % false for unevaluated rows (Inf)
@@ -349,7 +361,7 @@ while nfes < max_nfes
     if cfg.sgsm && frac_sel >= cfg.ig_warmup
         if mod(gen, cfg.ig_update_period) == 0
             if cfg.ig_max_samples > 0 && numel(gain_pos) > cfg.ig_max_samples
-                [~, o] = sort(-gain_pos);      % keep the largest improvements
+                [~, o] = sort(-gain_pos);      % keep the largest gains (stable on ties)
                 o = o(1:cfg.ig_max_samples);
                 moves = moves(o, :);
                 gain_pos = gain_pos(o);
@@ -419,7 +431,7 @@ while nfes < max_nfes
     rate(n_s > 0) = sum(argp_succ(:, n_s > 0), 1) ./ n_s(n_s > 0);
     if frac_sel >= cfg.argp_warmup
         n_free = sum(~frozen);
-        for k = 1:M            % freeze in pool order, keeping at least two entries
+        for k = 1:M            % freeze in pool order; keep at least two entries free
             if frozen(k)
                 continue
             end
@@ -431,7 +443,7 @@ while nfes < max_nfes
                 n_free = n_free - 1;
             end
         end
-        frozen(frozen & n_s > 0 & rate >= cfg.argp_threshold) = false;   % recovered entries
+        frozen(frozen & n_s > 0 & rate >= cfg.argp_threshold) = false;   % unfreeze recovered entries
         if any(frozen)         % frozen entries keep p_min, the others share the rest
             free = ~frozen;
             Kw(free) = Kw(free) * ((1 - sum(frozen) * cfg.ace_min_prob) / sum(Kw(free)));
@@ -460,8 +472,9 @@ while nfes < max_nfes
         [~, ranked] = sort(fit);
         n_keep = min(max(1, floor(cfg.bse_freeze_frac * NP + 0.5)), NP - 1);
         rpool = ranked(n_keep + 1:end);          % non-elite rows, best to worst
-        % Cauchy kick: heavy-tailed moves of the worst rows, kept when not worse
-        % (n >= 1: at least one non-elite row and budget left before bse_stop)
+        % Cauchy kick: heavy-tailed moves of the worst rows, kept when not worse.
+        % n >= 1: n_keep <= NP-1 leaves a non-elite row and frac_sel < bse_stop
+        % leaves budget.
         n = min([max(1, floor(cfg.cauchy_frac * NP + 0.5)), numel(rpool), max_nfes - nfes]);
         ic = rpool(end - n + 1:end);
         z = tan(pi * (min(max(rand(rs_div, n, D), 1e-15), 1 - 1e-15) - 0.5));
@@ -479,8 +492,9 @@ while nfes < max_nfes
             stag = best_f;
             escape = false;
         end
-        % Partial restart of the worst rows: archive elites with jitter, or
-        % fresh points (the most novel w.r.t. known basins when basin memory is on)
+        % Partial restart of the worst rows: jittered archive members, or fresh
+        % uniform points; with basin memory, the fresh points are the most novel
+        % of basin_pool_mult times as many candidates.
         if escape
             n = min(max(1, floor(cfg.bse_restart_frac * NP + 0.5)), numel(rpool));
             ir = rpool(end - n + 1:end);
@@ -540,17 +554,18 @@ while nfes < max_nfes
     frac_ls = nfes / max_nfes;
     if frac_ls >= cfg.ls_start && ls_used < ls_cap && nfes < max_nfes && mod(gen, cfg.ls_period) == 0 && ...
             gen >= ls_restart_block_until && gen >= ls_block_until && ...
-            (~cfg.budget_policy || frac_sel >= cfg.terra_ls_start)   % TERRA: pre-escape fraction
+            (~cfg.budget_policy || frac_sel >= cfg.terra_ls_start)   % TERRA: pre-BSE budget fraction
         n_ls = min(max_nfes - nfes, ls_cap - ls_used);
         n_el = min(cfg.ls_elites, NP);
         [~, o] = sort(fit);
         elites = o(1:n_el);
         scale = max(std(pop, 1, 1), ls_min_step);
         [~, coord] = sort(-scale);               % widest coordinates first
-        % step shrinks linearly from 1x to 0.25x between ls_start and the end of the budget
+        % Step factor: 1 at ls_start, falling linearly to 0.25 at budget end
         step_decay = max(0.25, 1 - 0.75 * max(0, min(1, (frac_ls - cfg.ls_start) / max(1e-12, 1 - cfg.ls_start))));
-        % Elite e is probed at +step (row 2e-1), then -step (row 2e), along its own
-        % rotating coordinate; an elite with step 0 (fixed variable, lb == ub) is skipped.
+        % Elite e is probed at +step (row 2e-1), then -step (row 2e), along its
+        % own rotating coordinate; an elite whose step is 0 (lb == ub) or Inf is
+        % skipped.
         X = repelem(pop(elites, :), 2, 1);
         probe = true(2 * n_el, 1);
         for e = 1:n_el
@@ -606,7 +621,8 @@ while nfes < max_nfes
         end
     end
 
-    % Local-search moves also teach the graph (down-weighted; ls_start > ig_warmup)
+    % Local-search moves also teach the graph, down-weighted and without extra
+    % decay (no warmup check: ls_start > ig_warmup)
     if cfg.sgsm && ~isempty(ls_gain)
         update(G, ls_moves, ls_gain, 1.0, cfg.ig_lr, repmat(cfg.ig_ls_weight, 1, numel(ls_gain)));
         if G.updates > 0
@@ -686,8 +702,8 @@ end
 
 %% ------------------------------------------------------------------------
 function [y, nfes] = evaluate(fobj, X, nfes, max_nfes)
-% Evaluate the leading rows of X that still fit in the budget (every caller
-% leaves at least one evaluation).
+% Evaluate the leading rows of X that still fit in the budget; y is a column.
+% Every caller leaves at least one evaluation.
 n = min(size(X, 1), max_nfes - nfes);
 if n < size(X, 1)
     X = X(1:n, :);
@@ -697,7 +713,8 @@ nfes = nfes + n;
 end
 
 function i = argmin(v)
-% First minimum; a NaN wins (NumPy argmin).
+% Index of the first minimum; the first NaN wins, as in the reference
+% implementation.
 i = find(isnan(v), 1);
 if isempty(i)
     [~, i] = min(v);
@@ -705,7 +722,7 @@ end
 end
 
 function s = seqsum(v)
-% Left-to-right sum (the reference's summation order).
+% Left-to-right sum, the summation order of the reference implementation.
 s = 0;
 for k = 1:numel(v)
     s = s + v(k);
@@ -746,7 +763,8 @@ end
 end
 
 function rad = pop_radius(pop, span)
-% Mean distance to the centroid divided by ||span|| (sequential sums), in [0, 1].
+% Mean distance to the centroid over ||span||, clipped to [0, 1]. All sums
+% are sequential (cumsum), as in the reference implementation.
 n = size(pop, 1);
 if n <= 1
     rad = 0;
@@ -763,8 +781,8 @@ end
 
 function [R1, R2, R3] = junior_sources(order, rs)
 % Junior sources: the rank neighbours (better R1, worse R2; the best and the
-% worst use the two next ones) and a random third individual, the first valid
-% entry of a pre-drawn candidate pool (NP x 32 draws).
+% worst use their two nearest ranks) and a random third R3, the first entry of
+% a pre-drawn NP x 32 candidate pool that differs from self, R1 and R2.
 NP = numel(order);
 cand = draw_int(rs, NP, [NP 32]);
 pos = zeros(NP, 1);
@@ -797,9 +815,13 @@ R3 = order(NP - n + min(max(ceil(r3(:) * n), 1), n));
 end
 
 function [vj, vs] = gsk_donors(pop, fit, KF, Rg1, Rg2, Rg3, R1, R2, R3, lb, ub)
-% GSK junior and senior donor vectors with midpoint bound repair:
-%   junior: x + KF*(x_R1 - x_R2 + x_R3 - x)  if x is worse than x_R3, else x + KF*(x_R1 - x_R2 + x - x_R3)
-%   senior: x + KF*(x_p - x_w + x_m - x)     if x is worse than x_m,  else x + KF*(x_p - x_w + x - x_m)
+% GSK junior and senior donor vectors, with midpoint bound repair:
+%   junior: x + KF*(x_Rg1 - x_Rg2 + x_Rg3 - x)  if x is worse than x_Rg3,
+%           x + KF*(x_Rg1 - x_Rg2 + x - x_Rg3)  otherwise
+%   senior: x + KF*(x_p - x_w + x_m - x)  if x is worse than x_m,
+%           x + KF*(x_p - x_w + x - x_m)  otherwise
+% with x_p, x_m, x_w = x_R1, x_R2, x_R3. Terms are added left to right in the
+% order shown.
 d = pop(Rg1, :) - pop(Rg2, :);
 b = fit > fit(Rg3);
 d(b, :) = d(b, :) + pop(Rg3(b), :) - pop(b, :);
@@ -813,11 +835,11 @@ vs = bound(pop + KF .* d, pop, lb, ub);
 end
 
 function [DJ, DS, rows1, rows2] = crossover_masks(rs_core, rs_link, p_jun, KR, D, groups, groups2, mix, p_primary)
-% Junior (DJ) / senior (DS) crossover masks. Scalar rows decide every
-% dimension separately (junior with prob p_jun, kept with prob KR). With
-% linkage, a 'mix' share of rows decides per group of dimensions instead;
-% when learned groups exist, a p_primary share of those rows uses them
-% (rows1) and the rest the random groups (rows2).
+% Junior (DJ) / senior (DS) crossover masks, NP x D. Scalar rows decide each
+% dimension separately: junior with prob p_jun, else senior, and taken from
+% the donor with prob KR. With linkage, a 'mix' share of rows decides per
+% group of dimensions instead; when learned groups exist, a p_primary share
+% of those rows uses them (rows1) and the rest the random groups (rows2).
 NP = numel(p_jun);
 rows1 = zeros(0, 1);
 rows2 = zeros(0, 1);
@@ -847,7 +869,8 @@ end
 end
 
 function [DJ, DS] = scalar_masks(rs, p_jun, KR, D)
-% Per-dimension masks from one fused draw of 3*n*D uniforms.
+% Per-dimension masks from one draw of 3*n*D uniforms, used in order for the
+% junior/senior choice, the junior KR gate and the senior KR gate.
 n = numel(p_jun);
 r = rand(rs, 1, 3 * n * D);
 jun = reshape(r(1:n * D), n, D) <= p_jun;
@@ -856,7 +879,8 @@ DS = ~jun & (reshape(r(2 * n * D + 1:end), n, D) <= KR);
 end
 
 function [DJ, DS] = block_masks(rs, rows, groups, p_jun, KR, DJ, DS)
-% Blockwise masks: per (row, group) one junior/senior draw and one KR gate.
+% Blockwise masks: per (row, group) one junior/senior draw and one KR gate
+% (all junior/senior draws first, then all gates).
 if isempty(rows)
     return
 end
@@ -869,7 +893,8 @@ end
 end
 
 function groups = random_groups(D, b, rs)
-% Random partition of 1..D into blocks of b (one permutation, D draws).
+% Random partition of 1..D into sorted blocks of b (the last may be shorter),
+% from one permutation (D draws).
 [~, perm] = sort(rand(rs, 1, D));
 groups = cell(1, ceil(D / b));
 for g = 1:numel(groups)
@@ -887,15 +912,18 @@ end
 end
 
 function s = ace_sample(rs, p, n)
-% Roulette-wheel draw of n pool entries (left-closed CDF bins).
+% Roulette-wheel draw of n pool entries (n x 1): a uniform r picks the first
+% entry k with r <= c(k), where c = cumsum(p) with c(end) forced to 1.
 c = cumsum(p);
 c(end) = 1;
 s = 1 + sum(rand(rs, 1, n).' > c(1:end - 1), 2);
 end
 
 function Kw = ace_update(Kw, omega, cfg)
-% Blend the probabilities towards the share of the total fitness decrease
-% each entry produced (only the improving entries when the total rose).
+% Blend the probabilities (rate ace_lr) towards the share of the total
+% fitness decrease each entry produced; omega holds the summed fitness
+% change per entry. When the total rose, only the improving entries count;
+% a zero or non-finite total only re-projects Kw.
 s = seqsum(omega);
 if ~isfinite(s) || s == 0
     Kw = project_probs(Kw, cfg.ace_min_prob);
@@ -935,8 +963,9 @@ out = out / seqsum(out);
 end
 
 function A = archive_add(A, X, F, inv_span, inv_sqrt_d, cfg)
-% Elite archive: a candidate joins only if its normalised distance to every
-% member is >= arch_dist; when full it replaces the nearest member.
+% Elite archive: a candidate with finite fitness joins only if its normalised
+% distance to every member is >= arch_dist; when full it replaces the nearest
+% member. Distances use sequential sums.
 for k = 1:size(X, 1)
     if ~isfinite(F(k))
         continue
@@ -995,14 +1024,17 @@ end
 end
 
 function d = basin_dist(C, x, bspan)
-% Normalised L2 distances (NumPy pairwise row sums) from x to the rows of C.
+% Normalised L2 distances from x to the rows of C, with pairwise row sums as
+% in the reference implementation.
 Z = (C - x) ./ bspan;
-d = sqrt(np_rowsum(Z .* Z)) / sqrt(numel(x));
+d = sqrt(pairwise_rowsum(Z .* Z)) / sqrt(numel(x));
 end
 
-function s = np_rowsum(A)
-% NumPy pairwise sum of every row: 8 running sums up to 128 columns, halving
-% above (n >= 64 here, since basin memory runs only for D >= 100).
+function s = pairwise_rowsum(A)
+% Pairwise sum of every row, as in the reference implementation, so sums
+% match bit for bit: 8 running sums up to 128 columns, then halving (split
+% at a multiple of 8). No branch for n < 8 is needed: n >= 64 here, since
+% basin memory runs only for D >= 100.
 n = size(A, 2);
 if n <= 128
     m = n - mod(n, 8);
@@ -1017,14 +1049,17 @@ if n <= 128
 else
     h = floor(n / 2);
     h = h - mod(h, 8);
-    s = np_rowsum(A(:, 1:h)) + np_rowsum(A(:, h + 1:n));
+    s = pairwise_rowsum(A(:, 1:h)) + pairwise_rowsum(A(:, h + 1:n));
 end
 end
 
 function [x, fx, nfes] = compass(fobj, x, fx, basis, lb, ub, span, nfes, max_nfes, cap, step_frac, min_frac)
-% Compass search: probe x +/- step along one basis row at a time; a success
-% moves there and grows the step (x1.3), a failure moves to the next
-% direction, a full failed sweep halves the step. cap <= remaining budget.
+% Compass search: probe x +/- step along one basis row at a time, clipped to
+% [lb, ub]. A success moves there, keeps the direction and grows the step
+% (x1.3, at most half the largest span); a failure moves to the next
+% direction; n_dir failures in a row halve the step. With one evaluation
+% left only the + probe runs. Stops after cap evaluations (cap <= remaining
+% budget) or when the step falls below min_frac * max(span).
 smax = max(span);
 step = step_frac * smax;
 n_dir = size(basis, 1);

@@ -7,6 +7,13 @@
 
 namespace gskcec {
 
+/// Interface for one CEC benchmark function at a fixed dimension D.
+///
+/// evaluate() takes a point of length D and returns its objective value; it
+/// throws std::invalid_argument for any other length. Most suites reuse
+/// scratch buffers inside evaluate(), so do not share one object across
+/// threads; use one per thread. optimum() is the known best value, or NaN
+/// when the suite publishes none (CEC2011).
 class BenchmarkProblem {
 public:
     virtual ~BenchmarkProblem() = default;

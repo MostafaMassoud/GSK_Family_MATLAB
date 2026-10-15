@@ -14,10 +14,9 @@
 
 This project is two languages joined at one seam. The GSK-family optimizers are
 MATLAB (`src/`); the CEC benchmark functions are standalone C++20 ports
-(`benchmarks/`). They meet only at the `gskcec_eval` MEX bridge. There is no
-Python anywhere in the project. This page documents the seam: how a row-wise
-MATLAB population becomes a fitness vector computed by the exact same C++ code
-the C++ tests validate.
+(`benchmarks/`). They meet only at the `gskcec_eval` MEX bridge. This page
+documents the seam: how a row-wise MATLAB population becomes a fitness vector
+computed by the exact same C++ code the C++ tests validate.
 
 ## Source Evidence
 
@@ -217,7 +216,7 @@ Two senses of "correct" stay distinct here:
   bridge means evaluating a port that already matched its ground truth.
 - The **optimizers** are checked statistically against the same optimizer's
   published reference table -- a quality comparison, not a bit-exact one.
-  The DT-GSK tables (`<suite>/dt-gsk/`) were produced by its Python reference
+  The DT-GSK tables (`<suite>/dt-gsk/`) were produced by its reference
   implementation, so agreement with them is cross-implementation evidence;
   `scripts/compare_reference_runs.m` compares a DT-GSK campaign's
   `per_run.csv` with the imported per-run CEC2017 evidence.

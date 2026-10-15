@@ -32,7 +32,7 @@ published-table schedule: GSK/ATMALS-GSK/eGSK use
 `base_seed + 9973*func + run-1`; AGSK/APGSK/FDB-AGSK use `D*func*run`.
 Under reference mode, AGSK/APGSK/FDB-AGSK/eGSK/ATMALS-GSK use legacy `seed`;
 GSK uses `twister`. DT-GSK is unified-only: under every `seed_policy` it gets
-the unified seed below and `threefry` (its Python reference campaign used that
+the unified seed below and `threefry` (its reference campaign used that
 schedule) and samples its own `NP = 5*D` initial population.
 Select `unified` only for new fair cross-family experiments. Unified mode uses:
 

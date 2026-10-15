@@ -1,5 +1,12 @@
 function test_seed_policy()
-%TEST_SEED_POLICY Guard reference/unified seed-policy semantics.
+%TEST_SEED_POLICY Check the reference and unified seed policies of the runner.
+%
+% Runs on the sphere suite (no MEX) and checks: the get_cec_seed formula;
+% that choose_cec_rng_generator restores the RNG state; that unified seeds
+% are the same for every optimizer; seed_policy / rand_generator validation;
+% reference-mode seed metadata; DT-GSK's fixed unified seeding;
+% verify_unified_seed_schedule; a policy round trip; and, with the Parallel
+% Computing Toolbox, that parfor gives the same results as a serial run.
 
 here = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(here));
@@ -48,14 +55,15 @@ assert(contains(env_gsk.seed_policy, 'unified:'), 'environment should record uni
 assert(~contains(env_gsk.seed_policy, 'unified: unified:'), 'environment seed_policy label duplicated');
 
 % ---- seed_policy / rand_generator validation -----------------------------
-% seed_policy is one of the four documented policies, matched
+% seed_policy must be one of the four documented policies, matched
 % case-insensitively; a typo must not silently run the hashed derived schedule.
 small = {'suite', 'sphere', 'functions', 1, 'dimensions', 2, 'runs', 1, ...
          'max_nfes', 300, 'project_root', project_root, 'verbose', false};
 bad_out = fullfile(out_root, 'rejected');
 assert_rejected(@() run_experiment('optimizer', 'gsk', small{:}, 'output_dir', bad_out, ...
                                    'seed_policy', 'unifed'), 'seed_policy', bad_out);
-% auto/default are resolved only under unified; native/derived would fail every cell.
+% rand_generator auto/default is resolved only under unified; with
+% native/derived it would fail every cell, so the call must be rejected.
 assert_rejected(@() run_experiment('optimizer', 'gsk', small{:}, 'output_dir', bad_out, ...
                                    'seed_policy', 'native', 'rand_generator', 'auto'), ...
                 'rand_generator', bad_out);
@@ -93,6 +101,23 @@ for opt = {'gsk', 'agsk'}
     end
 end
 
+% ---- dt-gsk is unified-only: get_cec_seed + threefry under every policy ------
+for pol = {'reference', 'native'}
+    out_dt = fullfile(out_root, ['dt_' pol{1}], 'dt-gsk', 'sphere');
+    run_experiment('optimizer', 'dt-gsk', 'suite', 'sphere', 'functions', 3, 'dimensions', D, ...
+                   'runs', 2, 'max_nfes', 300, 'project_root', project_root, ...
+                   'output_dir', out_dt, 'seed_policy', pol{1}, 'verbose', false);
+    seeds = read_seeds(out_dt);
+    assert(isequal(seeds, [get_cec_seed(base_seed, D, 3, 1); get_cec_seed(base_seed, D, 3, 2)]), ...
+           'dt-gsk must use get_cec_seed under seed_policy=%s', pol{1});
+    env = jsondecode(fileread(fullfile(out_dt, 'summary', 'environment.json')));
+    cfg = jsondecode(fileread(fullfile(out_dt, 'summary', 'run_config.json')));
+    assert(strcmp(env.rand_generator, 'threefry'), 'dt-gsk must run threefry under %s', pol{1});
+    assert(contains(env.initial_population_policy, 'self-initializes'), 'dt-gsk X0 metadata');
+    assert(strcmp(cfg.profile, 'pub') && strcmp(cfg.seed_formula, 'get_cec_seed(base_seed, dim, func, run)'), ...
+           'dt-gsk run_config profile/seed_formula');
+end
+
 % ---- verify_unified_seed_schedule: compare common keys, warn on missing ones ----
 syn = fullfile(out_root, 'synthetic');
 write_schedule(syn, 'opt_a', [10 1 1 11; 10 1 2 12]);
@@ -115,8 +140,8 @@ assert(threw, 'a seed mismatch on a key the first optimizer lacks must still fai
 
 % ---- policy round trip: reused runs must be visible in the schedule --------
 % unified -> reference -> unified into the same trees: the third session
-% reuses the unified rows, and the verifier (latest row per key) must see the
-% unified seeds again, not the intermediate reference ones.
+% reuses the unified rows, and the verifier (latest row per key) must see
+% the unified seeds again, not the reference ones from the middle session.
 rt_root = fullfile(out_root, 'round_trip');
 for policy = {'unified', 'reference', 'unified'}
     for opt = {'gsk', 'agsk'}
@@ -139,7 +164,7 @@ if license('test', 'Distrib_Computing_Toolbox') && ~isempty(ver('parallel'))
             'parfor workers must reproduce the unified seed and rng(seed,generator) draws');
 
         % The runner's own parfor branch (per-worker problem, runner X0,
-        % sliced seeds/rows) must write the same artifacts as the serial loop.
+        % sliced seeds/rows) must write the same files as the serial loop.
         common = {'optimizer', 'gsk', 'suite', 'sphere', 'functions', 1, 'dimensions', D, ...
                   'runs', 3, 'base_seed', base_seed, 'max_nfes', 1200, 'project_root', project_root, ...
                   'seed_policy', 'unified', 'rand_generator', 'threefry', 'verbose', false, ...
@@ -175,6 +200,7 @@ fprintf('test_seed_policy: PASS\n');
 end
 
 function seed = read_first_seed(out_dir)
+% Seed of the first data row in seed_schedule.csv.
 rows = readlines(fullfile(out_dir, 'summary', 'seed_schedule.csv'));
 rows = rows(strlength(strtrim(rows)) > 0);
 fields = strsplit(char(rows(2)), ',');
@@ -193,6 +219,7 @@ end
 end
 
 function assert_rejected(call, what, out_dir)
+% call() must fail with a message that names 'what' and create no out_dir.
 threw = false;
 try
     call();
@@ -204,6 +231,7 @@ assert(~exist(out_dir, 'dir'), 'a rejected call must not create the output tree'
 end
 
 function write_schedule(root, opt, rows)
+% Write a synthetic seed_schedule.csv; each row is [Dim Function Run Seed].
 d = fullfile(root, opt, 'sphere', 'summary');
 if ~exist(d, 'dir'); mkdir(d); end
 fid = fopen(fullfile(d, 'seed_schedule.csv'), 'w');
@@ -213,10 +241,11 @@ fclose(fid);
 end
 
 function [ok, note, guard] = small_process_pool()
-% A 2-worker process pool for the parfor checks (instead of letting parfor or
-% run_experiment open a pool with one worker per core); it is deleted again by
-% guard when this test created it. An existing thread pool is left alone (the
-% runner would replace it), so the checks are skipped then.
+% Open a 2-worker process pool for the parfor checks, so that neither parfor
+% nor run_experiment opens one worker per core. guard deletes the pool when
+% this test created it. An open process pool is reused. Any other open pool
+% (e.g. a thread pool) is left alone and the checks are skipped, since the
+% runner would replace that pool.
 ok = false;
 note = '';
 guard = [];
@@ -236,9 +265,11 @@ end
 end
 
 function fingerprints = seed_task_fingerprints(task_matrix, base_seed, rng_generator, use_parallel)
-% Cheap worker check without a full optimizer run: parfor workers reproduce
-% rng(seed, generator) draws for the unified seed formula (not the runner's X0;
-% the run_experiment serial-vs-parfor comparison in test_seed_policy covers that).
+% Quick worker check without an optimizer run: one fingerprint row per task
+% (num_tasks x 4, see one_seed_task) of the unified seed and its
+% rng(seed, generator) draws, computed serially or in parfor. The runner's
+% own X0 is covered by the serial-vs-parfor run_experiment check in the
+% main test.
 num_tasks = size(task_matrix, 1);
 fingerprints = zeros(num_tasks, 4);
 np = 8;
@@ -254,6 +285,8 @@ end
 end
 
 function fingerprint = one_seed_task(task, base_seed, rng_generator, np)
+% task = [dim func run]. Returns [seed, sum, mean, last value] of an
+% np x dim rand draw made right after rng(seed, rng_generator).
 dim = task(1);
 func = task(2);
 run = task(3);
@@ -264,6 +297,7 @@ fingerprint = [seed, sum(x0(:)), mean(x0(:)), x0(end)];
 end
 
 function cleanup_dirs(varargin)
+% Delete each given folder and its contents, if it exists.
 for i = 1:nargin
     if exist(varargin{i}, 'dir')
         rmdir(varargin{i}, 's');

@@ -1,13 +1,17 @@
 function test_atmals_gsk_smoke()
-%TEST_ATMALS_GSK_SMOKE Smoke test for atmals-gsk on a pure-MATLAB
-%sphere problem, exercising both reference protocols.
+%TEST_ATMALS_GSK_SMOKE Smoke test for atmals-gsk under both protocols.
 %
-% Checks the docs/reference/matlab_interface.md result contract, optimization
-% progress, reference budget-crossing accounting (non-divisible and
-% below-NP budgets under both protocols; reported nfes clipped at max_nfes),
-% fair-start X0 reuse with the post-X0 RNG restore, the cec2011 D == 1
-% senior-only branch, pool-override validation, convergence-array sanity,
-% and seed determinism. Raises error() on any failure.
+% Runs on a plain MATLAB sphere problem (no MEX) with the cec2017 (default)
+% and cec2011 protocols, and checks:
+%   - the result contract in docs/reference/matlab_interface.md,
+%   - optimization progress and seed determinism,
+%   - budget accounting when a generation crosses max_nfes (budget not a
+%     multiple of NP, or below NP) under both protocols; the reported nfes
+%     is clipped at max_nfes,
+%   - fair-start X0 reuse with the post-X0 RNG restore,
+%   - the cec2011 D == 1 senior-only branch,
+%   - pool-override validation and convergence-array sanity.
+% Raises error() on any failure.
 
 here = fileparts(mfilename('fullpath'));
 src_root = fileparts(here);
@@ -25,14 +29,14 @@ local_check_contract(r1, problem, 'atmals-gsk', opts.seed);
 local_assert(strcmp(r1.params.protocol, 'cec2017'), 'default protocol must be cec2017');
 local_assert(strcmp(r1.notes, ''), 'atmals-gsk notes must be empty');
 
-% reference counter semantics: budget divisible by np=100 -> exactly consumed
+% Budget is a multiple of NP = 100, so the run uses exactly max_nfes.
 local_assert(r1.nfes == problem.max_nfes, ...
     sprintf('cec2017 nfes must equal max_nfes (got %d)', r1.nfes));
 local_assert(strcmp(r1.termination, 'max_evaluations'), ...
     'termination must be max_evaluations (reference never stops early)');
 
-% optimization progress: well below the median fitness of the optimizer's
-% own initial population (its first RNG draw, replicated here)
+% Progress: the best must be far below the median fitness of the optimizer's
+% own initial population (its first RNG draw, repeated here).
 np = r1.params.np;
 rng(opts.seed, 'twister');
 pop0 = repmat(problem.lb, np, 1) + rand(np, d) .* repmat(problem.ub - problem.lb, np, 1);
@@ -40,7 +44,7 @@ med0 = median(problem.evaluate(pop0));
 local_assert(isfinite(r1.best_fitness) && r1.best_fitness < 1e-2 * med0, ...
     sprintf('insufficient progress: best=%g vs initial median=%g', r1.best_fitness, med0));
 
-% determinism: same seed reproduces everything
+% The same seed reproduces the whole result.
 r1b = atmals_gsk_optimize(problem, opts);
 local_assert(r1b.best_fitness == r1.best_fitness, 'same seed: best_fitness differs');
 local_assert(isequal(r1b.best_x, r1.best_x), 'same seed: best_x differs');
@@ -49,13 +53,14 @@ local_assert(isequal(r1b.convergence.nfes, r1.convergence.nfes) && ...
     isequal(r1b.convergence.best_fitness, r1.convergence.best_fitness), ...
     'same seed: convergence differs');
 
-% different seed changes the trajectory
+% A different seed changes the trajectory.
 r1c = atmals_gsk_optimize(problem, struct('seed', 20172));
 local_assert(r1c.best_fitness ~= r1.best_fitness || ...
     ~isequal(r1c.convergence.best_fitness, r1.convergence.best_fitness), ...
     'different seed: trajectory should differ');
 
-% CEC2017 reference reporting uses abs(best - optimum), not signed error.
+% For CEC2017 the reference code reports abs(best - optimum), not the signed
+% error.
 problem17 = local_sphere_problem(2, 200, 100, 1e-8);
 problem17.suite = 'cec2017';
 problem17.evaluate = @(pop) zeros(size(pop, 1), 1);
@@ -86,11 +91,12 @@ local_assert(r2b.best_fitness == r2.best_fitness && isequal(r2b.best_x, r2.best_
     'cec2011 same seed: result differs');
 
 %% reference budget crossing: max_nfes not divisible by np = 100
-% The crossing generation is fully evaluated, but the per-child counter only
-% counts (and only lets update the best-so-far) the first max_nfes
-% evaluations; the reference counter then reads max_nfes+1 and the reported
-% copies (result.nfes, convergence.nfes) are clipped at max_nfes. Every
-% evaluation is logged, so the expected best is exact and RNG-independent.
+% As in the reference code, the generation that crosses the budget is fully
+% evaluated, but only the first max_nfes evaluations are counted and may
+% update the best-so-far. The internal counter ends at max_nfes+1; the
+% reported nfes (result.nfes, convergence.nfes) is clipped at max_nfes.
+% Every evaluation is logged, so the expected best is exact and does not
+% depend on the RNG.
 for proto = {'cec2017', 'cec2011'}
     pX = local_sphere_problem(d, 1050, 0, 1e-8);
     pX.evaluate = @(pop) local_logged_sphere(pop);
@@ -110,8 +116,8 @@ for proto = {'cec2017', 'cec2011'}
         sprintf('%s crossing: fixture must have its overall best among the uncounted children', proto{1}));
 end
 
-% budget below one population: only the initial scan runs, and it counts
-% (and lets update the best-so-far) just the first max_nfes individuals
+% Budget below NP: only the initial population is evaluated, and only its
+% first max_nfes individuals are counted and may update the best-so-far.
 pS = local_sphere_problem(d, 50, 0, 1e-8);
 pS.evaluate = @(pop) local_logged_sphere(pop);
 local_logged_sphere([], 'reset');
@@ -133,20 +139,20 @@ rF = atmals_gsk_optimize(pF, oF);
 local_check_contract(rF, pF, 'atmals-gsk', 1);
 local_assert(rF.convergence.best_fitness(1) == min(pF.evaluate(X0)), ...
     'fair start: the initial record must come from the supplied X0');
-% X0 plus the restored state replaces the optimizer's own seeded draw
-% exactly: the run equals a plain seeded run whose own first draw is that X0
+% X0 plus the restored state exactly replaces the optimizer's own seeded
+% draw: the run must equal a plain seeded run whose first draw is that X0.
 rSeed = atmals_gsk_optimize(pF, struct('seed', 20176));
 local_assert(isequal(rF.best_x, rSeed.best_x) && ...
     isequal(rF.convergence.best_fitness, rSeed.convergence.best_fitness), ...
     'fair start: X0 + post-X0 RNG state must reproduce the seeded run that drew X0');
-% once the state is restored the optimizer seed no longer matters
+% Once the state is restored, the optimizer seed no longer matters.
 oF2 = oF;
 oF2.seed = 2;
 rF2 = atmals_gsk_optimize(pF, oF2);
 local_assert(isequal(rF2.best_x, rF.best_x) && ...
     isequal(rF2.convergence.best_fitness, rF.convergence.best_fitness), ...
     'fair start: the restored post-X0 state must override the optimizer seed stream');
-% guard: X0 without a captured state keeps the optimizer's own stream
+% Guard: X0 without a captured RNG state keeps the optimizer's own stream.
 rG = atmals_gsk_optimize(pF, struct('seed', 1, 'initial_population', X0));
 local_assert(rG.convergence.best_fitness(1) == rF.convergence.best_fitness(1) && ...
     ~isequal(rG.convergence.best_fitness, rF.convergence.best_fitness), ...
@@ -167,9 +173,9 @@ r1e = atmals_gsk_optimize(p1, o1);
 local_assert(r1e.best_fitness == r1d.best_fitness && isequal(r1e.best_x, r1d.best_x) && ...
     isequal(r1e.convergence.best_fitness, r1d.convergence.best_fitness), ...
     'cec2011 D==1 same seed: result differs');
-% The branch hard-codes KF = 0.5 / KR = 0.9 and has no junior phase, so the
-% adaptive KF/KR/K selections (one roulette draw each, whatever the pool)
-% never reach it: overriding those pools must leave the trajectory intact ...
+% This branch hard-codes KF = 0.5 and KR = 0.9 and has no junior phase, so
+% the adaptive KF/KR/K picks (one roulette draw each, whatever the pool) do
+% not affect it: overriding those pools must not change the trajectory ...
 pools_kfk = {'kf_pool', [0.3 0.5 0.7], 'kr_pool', [0.9 0.95], 'k_pool', [10 20]};
 o1p = o1;
 o17 = struct('seed', o1.seed);
@@ -219,7 +225,7 @@ end
 
 
 function problem = local_sphere_problem(d, max_nfes, optimum, target_error)
-%LOCAL_SPHERE_PROBLEM Interface-conformant sphere problem struct.
+%LOCAL_SPHERE_PROBLEM Sphere problem struct in the standard problem format.
 problem = struct();
 problem.suite = 'sphere';
 problem.func_id = 1;
@@ -234,8 +240,8 @@ end
 
 
 function f = local_logged_sphere(pop, cmd)
-%LOCAL_LOGGED_SPHERE Sphere objective that logs every evaluated fitness in
-% call order. local_logged_sphere([], 'reset') clears the log and
+%LOCAL_LOGGED_SPHERE Sphere objective that logs every fitness it computes.
+% The log keeps call order. local_logged_sphere([], 'reset') clears it and
 % local_logged_sphere([], 'get') returns it.
 persistent log_f
 if nargin > 1
@@ -251,7 +257,7 @@ end
 
 
 function local_check_contract(r, problem, name, expected_seed)
-%LOCAL_CHECK_CONTRACT Assert the docs/reference/matlab_interface.md result contract.
+%LOCAL_CHECK_CONTRACT Check r against docs/reference/matlab_interface.md.
 expected = {'optimizer'; 'suite'; 'func_id'; 'dim'; 'seed'; 'best_x'; ...
     'best_fitness'; 'error'; 'nfes'; 'termination'; 'convergence'; ...
     'runtime_seconds'; 'params'; 'notes'};
@@ -271,7 +277,7 @@ local_assert(isscalar(r.runtime_seconds) && r.runtime_seconds >= 0, ...
     sprintf('%s: bad runtime_seconds', name));
 local_assert(r.seed == expected_seed, sprintf('%s: seed not recorded correctly', name));
 
-% convergence sanity (per-generation records)
+% Convergence records (one per generation)
 c = r.convergence;
 local_assert(isstruct(c) && isfield(c, 'nfes') && isfield(c, 'best_fitness'), ...
     sprintf('%s: convergence struct malformed', name));
@@ -286,12 +292,13 @@ local_assert(c.nfes(end) == r.nfes, ...
 local_assert(c.best_fitness(end) == r.best_fitness, ...
     sprintf('%s: last convergence best must equal best_fitness', name));
 
-% best_x must reproduce best_fitness on this deterministic problem
+% best_x must reproduce best_fitness (the problem is deterministic)
 bf = problem.evaluate(r.best_x);
 local_assert(abs(bf - r.best_fitness) <= 1e-12 * max(1, abs(bf)), ...
     sprintf('%s: best_x does not reproduce best_fitness', name));
 
-% error semantics
+% Error field: NaN for an unknown optimum, 0 below target_error, otherwise
+% best - optimum (abs(best - optimum) for atmals-gsk on cec2017).
 if isnan(problem.optimum)
     local_assert(isnan(r.error), sprintf('%s: error must be NaN for unknown optimum', name));
 elseif strcmp(name, 'atmals-gsk') && strcmp(problem.suite, 'cec2017')
@@ -313,6 +320,7 @@ end
 
 
 function local_assert(cond, message)
+%LOCAL_ASSERT Raise an error when cond is false.
 if ~cond
     error('test_atmals_gsk_smoke:failed', '%s', message);
 end

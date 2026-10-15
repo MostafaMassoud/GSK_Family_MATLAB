@@ -16,7 +16,7 @@ dt-gsk/
 `dt_gsk_optimize.m` (the whole optimizer), `dt_gsk_config.m` (the published
 `pub` profile by dimension tier) and `dt_gsk_graph.m` (the interaction graph
 used from D = 50). Its `README.md` is the authoritative record of behavior,
-source (DT-GSK reference implementation v2.46, Python, MIT license) and
+source (DT-GSK reference implementation v2.46, MIT license) and
 validation.
 
 Keep variant-specific behavior visible. Do not collapse materially different

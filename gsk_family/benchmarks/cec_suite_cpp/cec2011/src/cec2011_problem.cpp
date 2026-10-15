@@ -1,11 +1,11 @@
 // CEC2011 real-world suite: public factory and dispatch.
 //
-// Ported from the CEC2011 real-world MATLAB package:
-//   historical source: CEC2011 real-world MATLAB package
-//   (define_boundaries.m, Calc_Fitx_2011.m and dependents)
-// The 22 problems are implemented in three work-package translation units
-// (cec2011_problems_a/b/c.cpp); this file routes ids and owns the
-// suite-level metadata. See docs/reference/cec2011_port_plan.md.
+// Ported from the CEC2011 real-world MATLAB package (define_boundaries.m,
+// Calc_Fitx_2011.m and the files they call). The 22 problems live in three
+// work-package files, cec2011_problems_a/b/c.cpp. This file sends each
+// function id to its package and holds the suite metadata (ids, native
+// dimensions). Ids outside 1..22 throw std::invalid_argument.
+// Port plan: docs/reference/cec2011_port_plan.md.
 
 #include "gskcec/benchmark/cec2011.hpp"
 
@@ -19,8 +19,9 @@ namespace gskcec::cec2011 {
 
 namespace {
 
-// Native dimensions per define_boundaries.m (verified against the
-// MATLAB-exported cec2011_bounds.txt in the test data).
+// Native dimension D of problems 1..22 (index = id - 1), from
+// define_boundaries.m; checked against the MATLAB-exported test-data file
+// cec2011_bounds.txt.
 constexpr std::array<int, 22> kNativeDimensions = {
     6, 30, 1, 1, 30, 30, 20, 7, 126, 12,
     120, 240, 6, 13, 15, 40, 140, 96, 96, 96,

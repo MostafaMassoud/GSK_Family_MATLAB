@@ -1,11 +1,17 @@
 function gskcec_require_mex(project_root, caller_name)
 %GSKCEC_REQUIRE_MEX Require the project-local CEC MEX bridge before CEC runs.
 %
-% The run_all_cec*.m launchers call this during setup so a missing
-% build\mex\gskcec_eval.<mexext> fails early with build instructions instead
-% of producing a long sequence of skipped result cells. It also forces a real
-% load of the bridge, so a file that exists but cannot be loaded (e.g. a
-% dependent DLL missing from PATH) fails here the same way.
+% Usage: gskcec_require_mex(project_root, caller_name)
+% caller_name labels the error message (default 'CEC experiment').
+%
+% The run_all_cec*.m launchers and run_experiment call this at setup, so a
+% missing build\mex\gskcec_eval.<mexext> fails early with build instructions
+% instead of a long run of skipped result cells. It adds build\mex to the
+% front of the path and forces a real load, so a file that exists but cannot
+% load (e.g. a dependent DLL missing from PATH) fails here too.
+%
+% Errors: gskcec:badProjectRoot, gskcec:mexMissingPrerequisite,
+% gskcec:mexNotLoadable.
 
 if nargin < 2 || isempty(caller_name)
     caller_name = 'CEC experiment';
@@ -40,7 +46,7 @@ if exist('gskcec_eval', 'file') ~= 3
 end
 
 % exist() only inspects the file. A bare call loads the MEX and raises its
-% own usage error without touching any problem handle; any other error means
+% own gskcec:usage error without touching any handle; any other error means
 % MATLAB could not load it.
 try
     gskcec_eval();

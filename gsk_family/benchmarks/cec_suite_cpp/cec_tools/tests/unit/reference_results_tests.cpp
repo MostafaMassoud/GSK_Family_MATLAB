@@ -1,3 +1,6 @@
+// Unit tests for the reference-results loader: function id normalization
+// ("F1" -> 1) and markers for missing statistics.
+
 #include "gskcec/benchmark/reference_results.hpp"
 
 #include <cstdlib>
@@ -31,9 +34,9 @@ void write_file(const fs::path& path, const std::string& content) {
     out << content;
 }
 
-// Missing statistics appear in the imported tables as empty cells, dashes,
-// NaN and N/A (the AGSK CEC2020 D=5 table). All must load as absent values,
-// never as a parse error.
+// Imported tables mark missing statistics with empty cells, "-", or NaN,
+// N/A or NA in any case (e.g. N/A in the AGSK CEC2020 D=5 table). All must
+// load as absent values, never as a parse error.
 void test_missing_statistic_markers() {
     const fs::path tmp = fs::temp_directory_path() / "gskcec_refresult_tests";
     fs::remove_all(tmp);

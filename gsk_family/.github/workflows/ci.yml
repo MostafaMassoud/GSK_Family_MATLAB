@@ -1,13 +1,13 @@
-# Continuous integration for the C++ side of gsk_variants.
+# Continuous integration for the C++ side of gsk_family.
 #
-# Builds and tests the standalone C++ benchmark library + CLIs on Linux and
-# Windows, with warnings-as-errors, sanitizers, and the no-Python /
-# folder-boundary contract checks. MATLAB is NOT run here (license); the
-# MATLAB optimizer smoke tests run locally - see README.md "MATLAB tests".
+# Builds and tests the C++ benchmark library and CLIs on Linux and Windows
+# with warnings as errors, runs the tests under ASan/UBSan, and checks the
+# language and folder rules (MATLAB and C++ only). MATLAB does not run here
+# (it needs a license); run the MATLAB optimizer smoke tests locally - see
+# README.md "MATLAB tests".
 #
-# Assumes this project (gsk_variants) is the repository root. If it lives in a
-# subdirectory, set `defaults.run.working-directory` and the checkout path
-# accordingly.
+# Assumes gsk_family is the repository root. If it is a subdirectory, set
+# `defaults.run.working-directory` and the checkout path to match.
 
 name: ci
 
@@ -24,10 +24,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # On Linux, select the compiler explicitly. On Windows, leave the
-          # compiler unset so CMake uses the default Visual Studio generator +
-          # MSVC toolset (passing -DCMAKE_CXX_COMPILER=cl is ignored or errors
-          # under the VS generator).
+          # Linux sets the compiler explicitly. Windows leaves it unset so
+          # CMake uses the default Visual Studio generator and MSVC
+          # (-DCMAKE_CXX_COMPILER=cl is ignored or fails with that generator).
           - os: ubuntu-latest
             cxx: g++
             cmake_compiler: "-DCMAKE_CXX_COMPILER=g++"
@@ -72,18 +71,19 @@ jobs:
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
           ASAN_OPTIONS: detect_leaks=1
 
+  # Fails if a forbidden file or top-level folder is present.
   contract-checks:
-    name: language & folder contract (no Python, no merged suites)
+    name: language & folder contract (MATLAB and C++ only, no merged suites)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: No Python / Cython / cec2013.cpp anywhere
+      - name: Only MATLAB and C++ sources (no foreign sources or cec2013.cpp)
         run: |
           set -e
           if find . -path ./build -prune -o -type f \( -name '*.py' -o -name '*.pyx' -o -name 'cec2013.cpp' \) -print | grep .; then
             echo "::error::forbidden file(s) found"; exit 1
           fi
-          echo "ok: no python/cython/cec2013.cpp"
+          echo "ok: only MATLAB and C++ sources"
       - name: No .m/.R/.c under cec_suite_cpp
         run: |
           set -e

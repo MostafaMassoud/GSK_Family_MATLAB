@@ -12,6 +12,7 @@ using EvaluationCount = std::uint64_t;
 using Seed = std::uint64_t;
 using Vector = std::vector<Real>;
 
+/// Why a run stopped; not_run means it never started.
 enum class TerminationReason {
     max_evaluations,
     target_error_reached,

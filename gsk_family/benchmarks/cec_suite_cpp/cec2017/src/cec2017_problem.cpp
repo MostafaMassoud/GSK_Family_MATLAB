@@ -5,18 +5,17 @@
 ///   CEC2017 competition cec17_func.cpp
 ///   (Jane Jing Liang, Dec. 20th 2017, MATLAB MEX evaluator; SHA256
 ///   bc78dae256ee121552fdc7cdfcbcf5763daf017acb7c4afc41054e6358ff227e).
-/// An identical provenance copy is staged next to this file as
-/// cec17_func.cpp; that copy is never compiled.
+/// An unchanged copy of that file sits next to this one as cec17_func.cpp,
+/// for reference only; it is never compiled.
 ///
-/// The port preserves the reference numerics exactly: same formulas, same
-/// constants, same loop structure and summation order, same biases
-/// (f adds 100 * function_id), including reference quirks that are
-/// deliberately NOT fixed (see the README in this directory). The MEX
-/// globals (OShift, M, y, z, SS, ini_flag) become per-instance RAII state:
-/// all input data is loaded once in the constructor, and the y/z work
-/// buffers are mutable per-instance scratch. Consequently a single problem
-/// instance is NOT thread-safe; concurrent evaluation requires one instance
-/// per thread.
+/// The port matches the reference numerics exactly: same formulas,
+/// constants, loop structure, summation order and biases (f adds
+/// 100 * function_id). Reference quirks are kept on purpose, not fixed (see
+/// the README in this directory). The MEX globals OShift, M, y, z and SS
+/// become per-instance std::vector members, and ini_flag is replaced by the
+/// constructor, which loads all input data once. y_ and z_ are mutable
+/// scratch buffers, so one problem instance is NOT thread-safe; use one
+/// instance per thread.
 
 #include "gskcec/benchmark/cec2017.hpp"
 
@@ -37,36 +36,38 @@ namespace {
 
 using gskcec::Real;
 
-/// Constants exactly as #defined in the reference.
+/// Constants copied exactly from the reference #defines.
 constexpr double kInf = 1.0e99;
 constexpr double kE = 2.7182818284590452353602874713526625;
 constexpr double kPi = 3.1415926535897932384626433832795029;
 
-/// Loader-side composition count: the reference always sizes the f>=21
-/// shift/rotation tables for 10 components even when fewer are evaluated.
+/// Number of composition components the loader reads: the reference sizes
+/// the f >= 21 shift and rotation tables for 10 components, even when a
+/// function uses fewer.
 constexpr int kLoaderCfNum = 10;
 
-/// Values per line in shift_data_<f>.txt for f >= 21 (verified for the
-/// shipped data; required for the flat-block row indexing used below).
+/// Values per line in shift_data_<f>.txt for f >= 21. Checked for the
+/// shipped data; load_data() relies on it to find each row in the file.
 constexpr std::size_t kShiftLineWidth = 100;
 
-/// One CEC2017 problem instance (function x dimension), data resident.
+/// One CEC2017 problem (one function at one dimension) with its data loaded.
 ///
-/// Direct transcription of cec17_func.cpp. Member functions mirror the
-/// reference free functions one-to-one (names kept for traceability) and
-/// operate on the mutable y_/z_ scratch buffers that stand in for the
-/// reference globals `y` and `z`. The aliasing behaviour of those globals
-/// is load-bearing (e.g. schaffer_F7_func reads y_ that sr_func produced,
-/// hybrid functions hand sub-views of y_ to component functions), so the
-/// raw-pointer call style of the reference is kept on purpose. All raw
-/// pointers are non-owning views into the std::vector members.
+/// A direct transcription of cec17_func.cpp: each ported function keeps the
+/// name of its reference free function, so the two are easy to compare.
+/// They work on the mutable scratch buffers y_ and z_, which replace the
+/// reference globals `y` and `z`. Results depend on how these buffers are
+/// shared (schaffer_F7_func reads the y_ that sr_func wrote; hybrid
+/// functions pass sub-views of y_ to their component functions), so the
+/// reference raw-pointer call style is kept on purpose. All raw pointers
+/// are non-owning views into the std::vector members.
 ///
-/// NOT thread-safe: evaluate() mutates y_/z_/w_levy_/tmpx_ scratch.
+/// NOT thread-safe: evaluate() writes the y_, z_, w_levy_ and tmpx_ scratch.
 class Cec2017Problem final : public gskcec::BenchmarkProblem {
 public:
     Cec2017Problem(int function_id, int dimension, const std::filesystem::path& data_root)
         : func_(function_id),
           nx_(dimension),
+          // valid_dimension() throws on a bad id or D before any buffer is sized.
           y_(static_cast<std::size_t>(valid_dimension(function_id, dimension)), 0.0),
           z_(static_cast<std::size_t>(dimension), 0.0),
           w_levy_(static_cast<std::size_t>(dimension), 0.0),
@@ -97,7 +98,7 @@ public:
         const double* Mr = m_.data();
         const int* S = ss_.empty() ? nullptr : ss_.data();
         double f = 0.0;
-        // Dispatch table of cec17_test_func, including the +100*func biases.
+        // Same switch as the reference cec17_test_func; case k adds bias 100 * k.
         switch (func_) {
         case 1:
             bent_cigar_func(xp, &f, nx_, Os, Mr, 1, 1);
@@ -230,12 +231,12 @@ private:
     // ---------------------------------------------------------------- state
     int func_;
     int nx_;
-    std::vector<double> oshift_;  ///< Shift rows, compact nx_ stride (reference OShift).
+    std::vector<double> oshift_;  ///< Shift rows packed with stride nx_ (reference OShift).
     std::vector<double> m_;       ///< Rotation matrices, row-major (reference M).
     std::vector<int> ss_;         ///< 1-based shuffle indices (reference SS); may be empty.
     mutable std::vector<double> y_;     ///< Reference global y (scratch).
     mutable std::vector<double> z_;     ///< Reference global z (scratch).
-    mutable std::vector<double> w_levy_;///< Reference levy_func local w (malloc'd per call there).
+    mutable std::vector<double> w_levy_;///< Reference levy_func local w (a per-call malloc there).
     mutable std::vector<double> tmpx_;  ///< Reference bi_rastrigin_func local tmpx.
 
     // ----------------------------------------------------------- validation
@@ -252,19 +253,21 @@ private:
     }
 
     // --------------------------------------------------------- data loading
-    /// Loads M_<f>_D<D>.txt, shift_data_<f>.txt and (for hybrids and the
-    /// hybrid-based compositions) shuffle_data_<f>_D<D>.txt, mirroring what
-    /// the reference fscanf loops actually consume:
-    ///  - M: f<=20 uses one D*D matrix (the reference *requests* 10 matrices
-    ///    for f20 but M_20_D*.txt only holds one and only one is used);
-    ///    f>=21 uses 10 consecutive D*D matrices.
-    ///  - shift: f<=20 consumes the first D values (for f20 the reference
-    ///    requests 10 line-wise rows, but shift_data_20.txt has a single
-    ///    line and only row 0 feeds hf10); f>=21 consumes the first D values
-    ///    of each of 10 lines that hold exactly 100 values each, which maps
-    ///    to consecutive 100-value blocks of the flattened file.
+    /// Loads M_<f>_D<D>.txt, shift_data_<f>.txt and, for the hybrid functions
+    /// and the hybrid-based compositions, shuffle_data_<f>_D<D>.txt. Reads
+    /// only what the reference fscanf loops actually use:
+    ///  - M: f <= 20 uses one D*D matrix. (For f20 the reference asks for 10,
+    ///    but M_20_D*.txt holds only one and only one is used.) f >= 21 uses
+    ///    10 consecutive D*D matrices.
+    ///  - shift: f <= 20 uses the first D values. (For f20 the reference asks
+    ///    for 10 rows, but shift_data_20.txt has one line and only row 0
+    ///    feeds hf10.) f >= 21 uses the first D values of each of 10 lines;
+    ///    every line holds exactly 100 values, so line i is the i-th
+    ///    100-value block of the flattened file.
     ///  - shuffle: f11..f20 use D indices; f29/f30 use 10*D indices (rows of
-    ///    D, of which the compositions consume the first three rows).
+    ///    D; the compositions use only the first three rows).
+    /// Throws std::runtime_error if a file is missing or too short, or if a
+    /// shuffle index is outside [1, D].
     void load_data(const std::filesystem::path& data_root) {
         const std::string fid = std::to_string(func_);
         const std::string did = std::to_string(nx_);
@@ -315,12 +318,14 @@ private:
     }
 
     // ------------------------------------------------- shift/rotate helpers
+    /// xshift = x - Os.
     void shiftfunc(const double* x, double* xshift, int nx, const double* Os) const {
         for (int i = 0; i < nx; ++i) {
             xshift[i] = x[i] - Os[i];
         }
     }
 
+    /// xrot = Mr * x, where Mr is a row-major nx x nx matrix.
     void rotatefunc(const double* x, double* xrot, int nx, const double* Mr) const {
         for (int i = 0; i < nx; ++i) {
             xrot[i] = 0;
@@ -330,9 +335,10 @@ private:
         }
     }
 
-    /// Shift-and-rotate. Note: the (s_flag==1, r_flag==1) and (0, 1) paths
-    /// write the intermediate vector into y_ -- schaffer_F7_func depends on
-    /// reading exactly that buffer afterwards (reference global aliasing).
+    /// Shift (if s_flag == 1), scale by sh_rate, then rotate (if r_flag == 1).
+    /// With r_flag == 1 the scaled vector goes into y_ before rotation, as
+    /// the reference does with its global y; schaffer_F7_func reads that
+    /// buffer afterwards. With r_flag == 0, y_ is left unchanged.
     void sr_func(const double* x, double* sr_x, int nx, const double* Os, const double* Mr,
                  double sh_rate, int s_flag, int r_flag) const {
         double* y = y_.data();
@@ -364,9 +370,8 @@ private:
     }
 
     // ------------------------------------------------------ basic functions
-    // (sphere_func, dif_powers_func, dixon_price_func, asyfunc and oszfunc
-    //  exist in the reference but are never called by any CEC2017 function;
-    //  they are intentionally not ported.)
+    // Not ported: sphere_func, dif_powers_func, dixon_price_func, asyfunc and
+    // oszfunc exist in the reference, but no CEC2017 function calls them.
 
     void bent_cigar_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                          int s_flag, int r_flag) const {
@@ -388,8 +393,9 @@ private:
         }
     }
 
-    /// Reference writes pow(abs(xi), i+1); compiled as C++ the abs resolves
-    /// to the double overload (i.e. fabs) and the int exponent is promoted.
+    /// The reference writes pow(abs(xi), i+1). Compiled as C++, abs picks the
+    /// double overload (fabs) and the int exponent becomes a double, so the
+    /// port calls fabs and passes a double exponent.
     void sum_diff_pow_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                            int s_flag, int r_flag) const {
         double* z = z_.data();
@@ -425,7 +431,7 @@ private:
         f[0] = 0.0;
         sr_func(x, z, nx, Os, Mr, 1.0, s_flag, r_flag);
 
-        double* w = w_levy_.data();  // reference malloc's a local w of size nx
+        double* w = w_levy_.data();  // the reference mallocs a local w of size nx
         for (int i = 0; i < nx; ++i) {
             w[i] = 1.0 + (z[i] - 1.0) / 4.0;
         }
@@ -458,12 +464,11 @@ private:
         }
     }
 
-    /// Reference quirk kept verbatim: the function body reads the y_ buffer
-    /// produced by sr_func (the shifted but UNROTATED vector) instead of the
-    /// rotated z, so the rotation never affects F6. In hybrid context
-    /// (s_flag == r_flag == 0) sr_func does not touch y_ at all and the
-    /// function therefore consumes y_[0..nx-1], i.e. the *start* of the
-    /// hybrid's shuffled vector rather than its own sub-block.
+    /// Reference quirk, kept as is: the body reads y_ as sr_func wrote it
+    /// (shifted but NOT rotated) instead of the rotated z, so the rotation
+    /// never affects F6. Inside a hybrid (s_flag == r_flag == 0) sr_func does
+    /// not write y_, so this reads y_[0..nx-1]: the start of the hybrid's
+    /// shuffled vector, not its own sub-block.
     void schaffer_F7_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                           int s_flag, int r_flag) const {
         double* y = y_.data();
@@ -504,17 +509,18 @@ private:
         double sum2 = 0.0;
         f[0] = 0.0;
         sr_func(x, z, nx, Os, Mr, 0.5 / 100.0, s_flag, r_flag);
-        // pow(a,j)/pow(b,j) depend only on j; precompute once (was recomputed
-        // nx times). Bit-identical: same values, same j-summation order.
+        // pow(a,j) and pow(b,j) depend only on j: compute them once, not for
+        // every i as the reference does. Bit-identical: same values, same
+        // summation order over j.
         double aj[21];
         double bj[21];
         for (int j = 0; j <= k_max; ++j) {
             aj[j] = std::pow(a, static_cast<double>(j));
             bj[j] = std::pow(b, static_cast<double>(j));
         }
-        // sum2 is independent of i; the reference recomputes it every iteration
-        // but uses only its final value after the loop, so computing it once is
-        // identical (same value for every i).
+        // sum2 does not depend on i. The reference recomputes it for every i
+        // but uses only the last value, so computing it once gives the same
+        // result.
         for (int j = 0; j <= k_max; ++j) {
             sum2 += aj[j] * std::cos(2.0 * kPi * bj[j] * 0.5);
         }
@@ -551,10 +557,10 @@ private:
         }
     }
 
-    /// Reference quirk kept verbatim: the "noncontinuous" rounding loop
-    /// below operates on stale y_ contents and is then fully overwritten by
-    /// sr_func, so it has no observable effect -- F8 behaves as a plain
-    /// (shifted, rotated, 5.12/100-scaled) Rastrigin.
+    /// Reference quirk, kept as is: the "noncontinuous" rounding loop below
+    /// works on stale y_ values that sr_func then overwrites (F8, the only
+    /// caller, passes r_flag == 1), so it has no effect. F8 behaves as plain
+    /// shifted, rotated Rastrigin (scaled by 5.12/100).
     void step_rastrigin_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                              int s_flag, int r_flag) const {
         double* y = y_.data();
@@ -604,8 +610,8 @@ private:
         double tmp2 = 0.0;
         f[0] = 1.0;
         const double tmp3 = std::pow(1.0 * nx, 1.2);
-        // pow(2,j) depends only on j; precompute once instead of nx*32 times.
-        // Bit-identical: the same std::pow(2.0, j) values, just not recomputed.
+        // pow(2,j) depends only on j: compute it once instead of nx*32 times.
+        // Bit-identical: the same std::pow(2.0, j) values.
         double pow2[33];
         for (int j = 1; j <= 32; ++j) {
             pow2[j] = std::pow(2.0, static_cast<double>(j));
@@ -624,16 +630,16 @@ private:
         f[0] = f[0] * tmp1 - tmp1;
     }
 
-    /// In hybrid context (s_flag == 0) the reference copies x into the
-    /// global y even though x itself is a sub-view of y; the copy ranges do
-    /// not overlap for any supported dimension and the port preserves the
-    /// identical buffer aliasing. The sign flip uses Os[i] (the shift data),
-    /// which in hybrid context is the *full* shift vector's leading entries.
+    /// Inside a hybrid (s_flag == 0) the reference copies x into the global
+    /// y, although x is itself a sub-view of y. The two ranges never overlap
+    /// for a supported dimension, and the port shares the buffers the same
+    /// way. The sign flip uses Os[i]; inside a hybrid these are the leading
+    /// entries of the FULL shift vector.
     void bi_rastrigin_func(const double* x, double* f, int nx, const double* Os, const double* Mr,
                            int s_flag, int r_flag) const {
         double* y = y_.data();
         double* z = z_.data();
-        double* tmpx = tmpx_.data();  // reference malloc's a local tmpx of size nx
+        double* tmpx = tmpx_.data();  // the reference mallocs a local tmpx of size nx
         const double mu0 = 2.5;
         const double d = 1.0;
         double tmp = 0.0;
@@ -780,8 +786,9 @@ private:
     }
 
     // ----------------------------------------------------- hybrid functions
-    /// Shared partition arithmetic: G_nx[i] = ceil(Gp[i]*nx) for all but the
-    /// last component, which takes the remainder (reference semantics).
+    /// Block split shared by all hybrid functions (the reference repeats this
+    /// code in each hfNN): G_nx[i] = ceil(Gp[i]*nx) for every block but the
+    /// last, which takes the rest. G[i] is the 0-based start index of block i.
     template <int CfNum>
     void hf_partition(const double (&Gp)[CfNum], int nx, int (&G)[CfNum], int (&G_nx)[CfNum]) const {
         int tmp = 0;
@@ -1039,9 +1046,13 @@ private:
     }
 
     // ------------------------------------------------ composition functions
+    /// Adds bias[i] to fit[i] (in place) and writes their weighted mean
+    /// (weights divided by their sum) to f[0]. Weight i falls with the
+    /// distance from x to shift row i (width delta[i]); an exact hit gets
+    /// kInf. If all weights are 0, all become 1.
     void cf_cal(const double* x, double* f, int nx, const double* Os, const double* delta,
                 const double* bias, double* fit, int cf_num) const {
-        double w[kLoaderCfNum];  // reference malloc's cf_num <= 6 weights
+        double w[kLoaderCfNum];  // the reference mallocs cf_num (<= 6) weights
         double w_max = 0.0;
         double w_sum = 0.0;
         for (int i = 0; i < cf_num; ++i) {

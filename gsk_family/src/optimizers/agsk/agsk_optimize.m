@@ -3,32 +3,37 @@ function result = agsk_optimize(problem, options)
 %
 %   result = agsk_optimize(problem, options)
 %
-% Faithful MATLAB port of the reference implementation:
+% MATLAB port of the reference implementation:
 %   historical source: agsk/agsk/AGSK-CODE-FINAL/Adaptive_GSK_ALI.m
-% with its local helpers (same folder):
-%   Gained_Shared_Junior_R1R2R3.m  (shared port: src/common)
-%   Gained_Shared_Senior_R1R2R3.m  (shared port with P = 0.05: src/common)
-%   boundConstraint.m              (shared port: src/common/gsk_bound_repair.m)
+% Its local helpers (same folder) are replaced by these shared ports:
+%   Gained_Shared_Junior_R1R2R3.m  -> src/common
+%   Gained_Shared_Senior_R1R2R3.m  -> src/common, with P = 0.05
+%   boundConstraint.m              -> src/common/gsk_bound_repair.m
 %
-% problem/options/result contracts: docs/reference/matlab_interface.md.
-% Reference behaviors preserved (KW phase duration, All_Imp update,
-% nfes-ratio junior schedule, population reduction, budget-crossing and
-% target-error semantics) are documented in src/optimizers/agsk/README.md.
+% Fields of problem, options and result: docs/reference/matlab_interface.md.
+% Reference behaviors kept here (KW phase length, All_Imp update, nfes-ratio
+% junior schedule, population reduction, budget crossing, target error):
+% src/optimizers/agsk/README.md.
+%
+% options.seed is required. Optional: np_init (100), min_pop_size (12,
+% must be >= 11 and <= np_init). Bad options raise 'agsk_optimize:options'.
+% When problem.optimum and problem.target_error are set, the run stops
+% early once the error drops below the target: the error is reported as 0
+% and termination is 'target_error_reached'.
 
 if ~isfield(options, 'seed') || isempty(options.seed)
     error('agsk_optimize:options', 'options.seed is required');
 end
-actual_seed = gsk_set_rng(options);   % direct-call default 'twister'; selects threefry|twister|seed|state
+actual_seed = gsk_set_rng(options);   % options.rand_generator, default twister
 
-% Interface defaults (docs/reference/matlab_interface.md): np_init = 100,
-% min_pop_size = 12. Note: the reference driver sets pop_size = 40*D for
-% D > 5 and 100 otherwise; pass options.np_init explicitly to reproduce
-% that dimension rule (see README).
+% Interface defaults (docs/reference/matlab_interface.md). The reference
+% driver uses pop_size = 40*D for D > 5 and 100 otherwise; pass
+% options.np_init to reproduce that (see README).
 np_init = local_option(options, 'np_init', 100);
 min_pop_size = local_option(options, 'min_pop_size', 12);
-% The P = 0.05 senior partition needs non-empty best/worst blocks
-% (round(0.05*NP) >= 1 and NP - round(0.95*NP) >= 1), i.e. NP >= 11 for
-% every population size LPSR can reach. Checked before any RNG draw.
+% The P = 0.05 senior partition needs non-empty best and worst blocks
+% (round(0.05*NP) >= 1 and NP - round(0.95*NP) >= 1), so NP must stay
+% >= 11 throughout population reduction. Checked before any RNG draw.
 if ~(isscalar(np_init) && isscalar(min_pop_size) && ...
         min_pop_size >= 11 && np_init >= min_pop_size)
     error('agsk_optimize:options', ...
@@ -37,11 +42,10 @@ if ~(isscalar(np_init) && isscalar(min_pop_size) && ...
         mat2str(np_init), mat2str(min_pop_size));
 end
 
-% Reference parameter pools.
+% Reference parameter pools: setting i uses kf_pool(i) and kr_pool(i).
 kf_pool = [0.1 1.0 0.5 1.0];
 kr_pool = [0.2 0.1 0.9 0.9];
-% Reference local Gained_Shared_Senior_R1R2R3.m hard-codes the 0.05/0.95
-% rank partition.
+% The reference senior helper hard-codes the 0.05/0.95 rank partition.
 senior_p = 0.05;
 
 dim = problem.dim;
@@ -55,10 +59,10 @@ pop_size = np_init;
 max_pop_size = pop_size;
 
 % ----- population initialization (one rand(NP, D) draw, or runner X0) -----
-% Reference/reproduction runs do not pass X0, so this remains the original
-% one-draw initialization. Unified fair-comparison runs pass the runner-drawn
-% X0 plus the post-X0 RNG state; accepting both here lets every optimizer start
-% from the same population and same next random number for the same CEC cell.
+% Reference runs pass no X0 and keep the original single draw. Unified
+% fair-comparison runs pass the runner's X0 and the RNG state right after
+% drawing it, so every optimizer starts from the same population and the
+% same next random number for a given CEC cell.
 popold = gsk_initial_population_from_options(options, pop_size, lb, ub);
 gsk_restore_rng_after_initialization(options);
 pop = popold;
@@ -70,8 +74,8 @@ nfes = 0;
 bsf_fit_var = 1e+300;
 bsf_solution = zeros(1, dim);
 
-% Initial best-so-far scan, counter clipped at max_nfes (sequential scan
-% with strict-< update, first minimum wins). best_x tracking here is an
+% Initial best-so-far scan; count at most max_nfes evaluations. Strict <
+% update, so the first minimum wins. Tracking best_x here is an
 % output-only extension (see README).
 n_init = min(pop_size, max_nfes - nfes);
 if n_init > 0
@@ -85,18 +89,18 @@ end
 
 % ----- per-individual knowledge rate K (reference draw order) -----
 % Reference: Kind = rand(pop_size, 1);
-%   K(Kind <  0.5) = rand                (uniform (0,1))
+%   K(Kind <  0.5) = rand                (uniform in (0,1))
 %   K(Kind >= 0.5) = ceil(20*rand)       (uniform integer 1..20)
 Kind = rand(pop_size, 1);
 k_vec = zeros(pop_size, 1);
 k_vec(Kind < 0.5) = rand(sum(Kind < 0.5), 1);
 k_vec(Kind >= 0.5) = ceil(20 * rand(sum(Kind >= 0.5), 1));
 
-KW_ind = [];                %#ok<NASGU> % assigned on the first generation
+KW_ind = [];                %#ok<NASGU> % set in the first generation
 All_Imp = zeros(1, 4);
 
-% Convergence recording: one row after initialization (generation 0) and
-% one row per generation. Row bound: every generation consumes at least
+% Convergence log: one row after initialization (generation 0), then one
+% row per generation. max_rows assumes each generation uses at least
 % min_pop_size evaluations.
 max_rows = ceil(max_nfes / max(1, min_pop_size)) + 2;
 conv_nfes = zeros(max_rows, 1);
@@ -112,13 +116,14 @@ terminated_on_target = false;
 while nfes < max_nfes
     g = g + 1;
 
-    % KW probability phase. Initial phase lasts while nfes < 0.1*max_nfes
-    % and resets KW_ind = [0.85 0.05 0.05 0.05] every generation; after
-    % that, exponential improvement-credit update with normalization.
-    % The isempty guard covers the edge case where np_init >= 0.1*max_nfes
-    % (e.g. a reduced budget), so generation 1 would otherwise hit the update
-    % branch with an uninitialized KW_ind; on the validated full-budget runs
-    % the nfes condition already fires first, so this is behavior-preserving.
+    % KW probabilities of the four pool settings. While
+    % nfes < 0.1*max_nfes, reset KW_ind to [0.85 0.05 0.05 0.05] every
+    % generation. After that, blend in the improvement credit All_Imp
+    % (weights 0.95 / 0.05) and normalize.
+    % The isempty guard covers np_init >= 0.1*max_nfes (e.g. a reduced
+    % budget), where generation 1 would otherwise update an unset KW_ind.
+    % On full-budget runs the nfes test fires first, so the guard does not
+    % change their results.
     if isempty(KW_ind) || nfes < 0.1 * max_nfes
         KW_ind = [0.85 0.05 0.05 0.05];
     else
@@ -126,8 +131,9 @@ while nfes < max_nfes
         KW_ind = KW_ind ./ sum(KW_ind);
     end
 
-    % Per-individual pool setting selection (reference threshold relabeling
-    % of one rand(NP,1) draw; identical block in both phases).
+    % Pick a pool setting (1..4) per individual: one rand(NP,1) draw,
+    % relabeled by the KW_ind thresholds as in the reference. Same block in
+    % both phases.
     K_rand_ind = rand(pop_size, 1);
     K_rand_ind(K_rand_ind > sum(KW_ind(1:3)) & K_rand_ind <= sum(KW_ind(1:4))) = 4;
     K_rand_ind(K_rand_ind > sum(KW_ind(1:2)) & K_rand_ind <= sum(KW_ind(1:3))) = 3;
@@ -136,8 +142,8 @@ while nfes < max_nfes
     KF = kf_pool(K_rand_ind)';
     KR = kr_pool(K_rand_ind)';
 
-    % Junior dimensionality schedule: nfes ratio (not generation ratio)
-    % with the per-individual exponent K:
+    % Junior dimensions per individual, from the nfes ratio (not the
+    % generation ratio) and the per-individual exponent K:
     %   D_Gained_Shared_Junior = ceil(D * (1 - nfes/max_nfes).^K)
     D_Gained_Shared_Junior = ceil(dim * (1 - nfes / max_nfes) .^ k_vec);
 
@@ -198,8 +204,8 @@ while nfes < max_nfes
     ui(D_Gained_Shared_Senior_mask) = Gained_Shared_Senior(D_Gained_Shared_Senior_mask);
 
     % ----- offspring evaluation -----
-    % Full generation always evaluated; counter and best-so-far updates
-    % clipped at the remaining budget (reference crossing semantics).
+    % The whole generation is evaluated; nfes and the best-so-far count
+    % only up to the remaining budget (reference crossing semantics).
     children_fitness = problem.evaluate(ui);
     children_fitness = children_fitness(:);
 
@@ -214,11 +220,12 @@ while nfes < max_nfes
     end
 
     % ----- improvement credit of each pool setting (All_Imp) -----
-    % Reference: dif = abs(fitness - children_fitness) on parent fitness;
-    % credit only where the child is strictly better; normalize, floor all
-    % but the largest at 0.05, largest takes the remainder; uniform 1/4
-    % when there was no improvement at all. Uses the full generation
-    % (including any children beyond the budget), as the reference does.
+    % As in the reference: the credit of setting i is the sum of
+    % abs(parent - child fitness) over the children that used setting i and
+    % are strictly better. Normalize, raise every entry but the largest to
+    % at least 0.05, and give the largest the remainder. With no improvement
+    % at all, use 1/4 each. Uses the whole generation, including children
+    % past the budget, as the reference does.
     dif = abs(fitness - children_fitness);
     Child_is_better_index = (fitness > children_fitness);
     All_Imp = zeros(1, 4);
@@ -254,10 +261,9 @@ while nfes < max_nfes
             reduction_ind_num = pop_size - min_pop_size;
         end
         pop_size = pop_size - reduction_ind_num;
-        % Index selection via the shared helper (equivalent to the
-        % reference sequential worst-removal loop); all per-individual
-        % arrays the reference trims (popold, pop, fitness, K) are trimmed
-        % here, in original row order.
+        % The shared helper keeps the same rows as the reference loop that
+        % removes the worst individual one at a time. Trim every array the
+        % reference trims (popold, pop, fitness, K), keeping row order.
         survivors = gsk_reduction_survivors(fitness, reduction_ind_num);
         popold = popold(survivors, :);
         pop = pop(survivors, :);
@@ -272,7 +278,7 @@ while nfes < max_nfes
     % ----- reference target check: every generation, zero and stop -----
     %   bsf_error_val = bsf_fit_var - optimum;
     %   if bsf_error_val < val_2_reach, bsf_error_val = 0; break; end
-    % NaN guards per docs/reference/matlab_interface.md.
+    % NaN handling follows docs/reference/matlab_interface.md.
     if ~isnan(problem.target_error) && ~isnan(problem.optimum)
         bsf_error_val = bsf_fit_var - problem.optimum;
         if bsf_error_val < problem.target_error
@@ -319,7 +325,7 @@ end
 
 
 function v = local_option(options, name, default)
-%LOCAL_OPTION Read an optional field with a reference default.
+%LOCAL_OPTION Return options.(name), or default when missing or empty.
 if isfield(options, name) && ~isempty(options.(name))
     v = options.(name);
 else

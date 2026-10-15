@@ -54,7 +54,7 @@ skipped (`gsk_list --references` loads 165 files / 1411 rows).
 ## DT-GSK reference evidence
 
 The `dt-gsk` folders were imported from the DT-GSK reference implementation
-(Python, MIT license) v2.46, <https://github.com/MostafaMassoud/DT-GSK>. They
+v2.46 (MIT license), <https://github.com/MostafaMassoud/DT-GSK>. They
 are runs of that implementation (unified seed `get_cec_seed(20240620, dim,
 func, run)`, Threefry substreams, `pub` profile, full budgets), not tables from
 a paper or from this toolkit, so agreement with them is cross-implementation
@@ -70,7 +70,7 @@ are recorded in `src/optimizers/dt-gsk/README.md`.
 Most files use `Function,Best,Median,Mean,Worst,SD`. The C++ loader
 (`gskcec::load_reference_file`) normalizes `1`/`F1`/`f1` to a single function
 id and accepts missing statistics written as empty cells, `-`, `nan`, or `N/A`
-(used by the AGSK CEC2020 D=5 table). No Python is involved anywhere.
+(used by the AGSK CEC2020 D=5 table).
 
 ## Curated convergence assets
 

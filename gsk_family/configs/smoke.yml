@@ -1,4 +1,4 @@
-# Quick end-to-end smoke: one optimizer, one function, tiny budget.
+# Quick end-to-end smoke test: one optimizer, one function, tiny budget.
 # Run with: gsk_run --config configs/smoke.yml --root .
 optimizers: [gsk]
 suite: cec2017

@@ -16,14 +16,14 @@ option(GSKCEC_WERROR "Treat compiler warnings as errors (used in CI)" OFF)
 option(GSKCEC_NATIVE "Optimize for the build host (-O3 -march=native); OFF by default for portability" OFF)
 
 if(MINGW)
-    # Self-contained binaries: no libstdc++/libgcc/winpthread DLL lookup at run time.
+    # Link statically so the binaries need no libstdc++/libgcc/winpthread DLLs.
     add_link_options(-static)
 endif()
 
-# Warning and optimization flags applied uniformly to every project target
-# (the library, the CLIs and the tests) via gskcec_apply_flags(). GSKCEC_NATIVE
-# must never change results - the test suite asserts the same tolerances under
-# it, so any divergence is a build bug, not an accepted trade-off.
+# gskcec_apply_flags(target): adds the shared warning and optimization flags
+# to one target; every target (library, CLIs, tests) calls it. GSKCEC_NATIVE
+# must never change results: the tests check the same tolerances with it on,
+# so any difference is a build bug, not an accepted trade-off.
 function(gskcec_apply_flags target)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /permissive-)
@@ -37,16 +37,16 @@ function(gskcec_apply_flags target)
         endif()
     endif()
     if(GSKCEC_NATIVE AND NOT MSVC)
-        # -ffp-contract=off is REQUIRED for numerical equivalence: -march=native
-        # exposes FMA hardware and the default -ffp-contract=fast would fuse
-        # multiply-adds, shifting results a few ULP and breaking the exact
-        # ground-truth matches (the 1e-12 CEC2011/CEC2013 tests catch this).
-        # -O3 alone does not reassociate FP without -ffast-math, which we never
-        # enable. The native build must stay bit-identical to the default build.
+        # -ffp-contract=off is required: -march=native enables FMA, and the
+        # default -ffp-contract=fast would fuse multiply-adds, shift results by
+        # a few ULP and break the exact ground-truth matches (the 1e-12
+        # CEC2011/CEC2013 tests catch this). -O3 does not reorder FP math
+        # without -ffast-math, which is never used. The native build must stay
+        # bit-identical to the default build.
         target_compile_options(${target} PRIVATE -O3 -march=native -funroll-loops -ffp-contract=off)
     elseif(GSKCEC_NATIVE AND MSVC)
-        # /fp:precise (default) keeps IEEE semantics; /arch:AVX2 only widens
-        # vectorization. Never use /fp:fast here.
+        # /fp:precise (the default) keeps IEEE semantics; /arch:AVX2 only
+        # widens vectorization. Never use /fp:fast here.
         target_compile_options(${target} PRIVATE /O2 /arch:AVX2 /fp:precise)
     endif()
 endfunction()
@@ -103,8 +103,9 @@ endforeach()
 if(GSKCEC_BUILD_TESTS)
     enable_testing()
 
-    # Suite/data tests take the project root as argv[1]; nothing depends on
-    # the current working directory.
+    # gskcec_add_test(name source [args...]): builds a test and registers it
+    # with CTest. Suite/data tests get the project root as argv[1], so nothing
+    # depends on the current working directory.
     function(gskcec_add_test name source)
         add_executable(${name} ${source})
         target_link_libraries(${name} PRIVATE gskcec)
@@ -124,21 +125,21 @@ if(GSKCEC_BUILD_TESTS)
     gskcec_add_test(gskcec_cec2017_tests benchmarks/cec_suite_cpp/cec_tools/tests/unit/cec2017_tests.cpp ${CMAKE_CURRENT_SOURCE_DIR})
     gskcec_add_test(gskcec_cec2020_tests benchmarks/cec_suite_cpp/cec_tools/tests/unit/cec2020_tests.cpp ${CMAKE_CURRENT_SOURCE_DIR})
 
-    # WP test executables include the cec2011 internal header directly.
+    # The WP tests include the internal CEC2011 header directly.
     target_include_directories(gskcec_cec2011_wpa_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/cec_suite_cpp/cec2011/src)
     target_include_directories(gskcec_cec2011_wpb_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/cec_suite_cpp/cec2011/src)
     target_include_directories(gskcec_cec2011_wpc_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/cec_suite_cpp/cec2011/src)
 
-    # gsk_bench is exercised at a tiny iteration count so it stays a real test
-    # (the timing numbers themselves are not asserted - see docs/research/performance.md).
+    # Runs gsk_bench with a tiny iteration count so it stays a real test; the
+    # timings are not checked (see docs/research/performance.md).
     add_test(NAME gskcec_bench_smoke
              COMMAND gsk_bench --root ${CMAKE_CURRENT_SOURCE_DIR} --iterations 50)
 
-    # CLI exit codes: gsk_run verdict -> exit status (0 / 1 MATLAB failure /
-    # 2 verification error / 3 DEVIATES), strict flag parsing, multi-optimizer
+    # CLI exit-code test: gsk_run verdict -> exit status (0 / 1 MATLAB failure
+    # / 2 verification error / 3 DEVIATES), strict flag parsing, multi-optimizer
     # configs, gsk_validate --verify protocol detection and gsk_bench argument
-    # checks. Stub "MATLAB" executables stand in for MATLAB, so no licence is
-    # needed; the script writes only under the build tree.
+    # checks. Stub executables stand in for MATLAB, so no MATLAB licence is
+    # needed. The script writes only under the build tree.
     add_executable(gskcec_fake_matlab_ok benchmarks/cec_suite_cpp/cec_tools/tests/cli/fake_matlab.cpp)
     add_executable(gskcec_fake_matlab_fail benchmarks/cec_suite_cpp/cec_tools/tests/cli/fake_matlab.cpp)
     target_compile_definitions(gskcec_fake_matlab_fail PRIVATE FAKE_MATLAB_RC=1)
@@ -156,11 +157,11 @@ if(GSKCEC_BUILD_TESTS)
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/cec_suite_cpp/cec_tools/tests/cli/gsk_run_exit_codes.cmake)
 endif()
 
-# Installation / export: `cmake --install <build> --prefix <dir>` lays out the
-# CLIs, the static library, and the public headers. Lets downstream CMake do
-# find_package(gskcec) against the exported target (gskcec::gskcec): the
-# package config file below just includes the exported targets, since the
-# library has no external link dependencies to re-find.
+# Install and export: `cmake --install <build> --prefix <dir>` installs the
+# CLIs, the static library and the public headers. Other CMake projects can
+# then call find_package(gskcec) and link gskcec::gskcec. The package config
+# file only includes the exported targets, because the library has no external
+# link dependencies to find.
 install(TARGETS gskcec gsk_list gsk_validate gsk_run gsk_bench
         EXPORT gskcecTargets
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

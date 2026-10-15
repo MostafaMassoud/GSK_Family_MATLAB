@@ -3,10 +3,12 @@ function c = dt_gsk_config(D)
 %
 %   c = dt_gsk_config(D)
 %
-% Lists only the parameters dt_gsk_optimize reads. The values shared by all
-% tiers come first; each dimension tier (D < 20, 20 <= D < 50, D >= 50,
-% D >= 100) then changes values or switches on its own mechanisms. Budget
-% fractions are fractions of max_nfes.
+% Returns a struct with only the parameters dt_gsk_optimize reads. The values
+% shared by all tiers come first; each dimension tier (D < 20, 20 <= D < 50,
+% D >= 50, D >= 100) then changes values or switches on its own mechanisms.
+% Smaller tiers return early, so a setting made outside an 'if D < ...'
+% block also holds for every larger D unless a later tier changes it.
+% Budget fractions are fractions of max_nfes.
 
 %% Common to all tiers
 % Population and GSK operators
@@ -17,7 +19,7 @@ c.KR = 0.9;                  % base GSK knowledge ratio    (reported only; ACE p
 c.Kexp = 10;                 % base GSK knowledge exponent (reported only; ACE picks Kexp)
 c.p_senior = 0.05;           % senior best/worst group fraction
 c.split_senior = false;      % bottom half uses wider senior groups when acceptance is low
-c.p_senior_bottom = 0.10;    % senior group fraction of that wider cone
+c.p_senior_bottom = 0.10;    % senior group fraction of those wider groups
 
 % ACE (adaptive configuration engine) and ARGP (pool pruning)
 c.ace_pool = [0.1 0.2  2     % [KF KR Kexp]: cautious explorer
@@ -25,14 +27,14 @@ c.ace_pool = [0.1 0.2  2     % [KF KR Kexp]: cautious explorer
               0.5 0.9 10     %   GSK-pure (baseline values)
               1.0 0.9  5     %   aggressive wide
               0.5 0.9  3];   %   extended-exploration GSK
-c.ace_init_probs = [0.05 0.05 0.45 0.05 0.40];
-c.ace_modules = [true true false true true];  % entries whose mass keeps BSE escapes enabled
+c.ace_init_probs = [0.05 0.05 0.45 0.05 0.40];   % initial probabilities
+c.ace_modules = [true true false true true];  % entries whose mass keeps BSE enabled
 c.module_gate = 0.30;        % BSE only runs while that mass is >= this
 c.ace_lr = 0.10;             % learning rate of the probability update
 c.ace_start = 0.05;          % budget fraction before probabilities adapt
 c.ace_min_prob = 0.05;       % probability floor per entry
 c.ace_top_bottom = false;    % separate probabilities for the top and bottom half
-c.kr_min_dims = 0;           % KR floor: every individual changes >= this many dims (in expectation)
+c.kr_min_dims = 0;           % KR floor: at least this many dims changed, on average
 c.de_entry = false;          % add a DE/rand/1 entry to the pool
 c.de_F = 0.5;                % DE scale factor
 c.de_CR = 0.9;               % DE crossover rate
@@ -56,9 +58,9 @@ c.bse_acc_floor = 0.10;      % low-acceptance threshold
 c.bse_div_floor = 0.35;      % low-diversity threshold, relative to the initial radius
 c.bse_max_restarts = 2;      % partial restarts per run
 c.bse_restart_frac = 0.10;   % share of NP re-seeded by a restart
-c.bse_cooldown = 0.05;       % budget fraction between restarts
+c.bse_cooldown = 0.05;       % no BSE for this budget fraction after a restart
 c.bse_stop = 0.95;           % no escapes after this budget fraction
-c.bse_freeze_frac = 0.05;    % elite share protected from restarts
+c.bse_freeze_frac = 0.05;    % elite share protected from kicks and restarts
 c.bse_arch_prob = 0.50;      % chance a restart row is seeded from the archive
 c.bse_jitter = 0.10;         % archive-seed jitter (fraction of span / sqrt(D))
 c.cauchy_frac = 0.10;        % share of NP (worst rows) given a Cauchy kick
@@ -101,6 +103,7 @@ if D < 20
 end
 
 %% Tier 20 <= D < 50
+% The next four settings hold for every D >= 20 (D >= 100 turns de_entry off).
 c.ace_top_bottom = true;
 c.de_entry = true;
 c.bse_triple = true;
@@ -160,7 +163,7 @@ c.final_polish = true;
 c.fp_start = 0.96;           % budget fraction where it runs (once)
 c.fp_budget = 0.02;          % evaluation share
 c.fp_step = 0.05;            % initial step (fraction of max span)
-c.fp_min_step = 1e-12;       % stop when the step falls below this
+c.fp_min_step = 1e-12;       % stop below this step (fraction of max span)
 
 if D < 100
     return

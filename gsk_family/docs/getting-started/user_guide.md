@@ -8,7 +8,8 @@
 > **Prerequisites:** Windows with MATLAB R2025b, a C++20 compiler, and CMake;
 > the repository checked out. New to the ideas? Read [explainer.md](explainer.md)
 > first. Want a guided first run? Use [tutorial.md](tutorial.md). For the
-> full copy-paste, per-algorithm command set, see [runbook.md](runbook.md).
+> full copy-paste, per-algorithm command set, see
+> [command_reference.md](command_reference.md).
 > **After reading:** you will be able to build the tooling, run a smoke
 > experiment, run a single benchmark cell, check output against the published
 > reference tables, and find every file a run produces.
@@ -16,7 +17,7 @@
 This project has two halves joined by one bridge. The CEC benchmark suites are
 standalone C++20 ports under `benchmarks/`; the seven GSK-family optimizers are
 MATLAB under `src/`; the `gskcec_eval` MEX bridge lets the MATLAB optimizers
-evaluate the C++ benchmarks. There is no Python anywhere.
+evaluate the C++ benchmarks.
 
 A note on commands: examples use PowerShell, the project's development shell on
 Windows. Run them from the project root (the folder that contains
@@ -130,12 +131,12 @@ The seven registered optimizers (public hyphen-slug ids):
 | `fdb-agsk` | AGSK with fitness-distance-balance donor selection |
 | `atmals-gsk` | GSK with adaptive memory and local search |
 | `egsk` | Enhanced GSK |
-| `dt-gsk` | Dimension-Tiered GSK (mechanisms switched on by dimension tier; port of the Python DT-GSK reference) |
+| `dt-gsk` | Dimension-Tiered GSK (mechanisms switched on by dimension tier; port of the DT-GSK reference implementation) |
 
 DT-GSK differs from the other six in how it is seeded: it always uses the
 unified seed with `threefry`, whatever the seed policy, and samples its own
 `NP = 5*D` initial population instead of the runner's shared one (see
-[runbook.md](runbook.md#37-dt-gsk)).
+[command_reference.md](command_reference.md#37-dt-gsk)).
 
 The five benchmark suites are `cec2017`, `cec2011`, `cec2020`, `cec2013`, and
 `cec2013lsgo`. See [benchmark_protocol.md](../reference/benchmark_protocol.md)
@@ -236,7 +237,7 @@ Direct `run_experiment` defaults to the **unified** seed policy. For full
 per-optimizer control - population size, `kf`/`kr`/`k`/`p`, `fdb_case`,
 `protocol`, `use_fmincon`, or a custom single seed - use the lower-level path
 (`gskcec_make_problem` + `<name>_optimize(problem, options)`) documented in
-[runbook.md](runbook.md) section 3.
+[command_reference.md](command_reference.md) section 3.
 
 During a run the MATLAB Command Window prints one progress line per run, for
 example `gsk cec2017 f1 D10 run 1/3: best=... error=... nfes=... (0.4s)`, then
@@ -297,8 +298,8 @@ CEC2020); for those the gross-deviation check cannot fire. The walk skips
 campaign run by run against an imported per-run record (today the DT-GSK
 CEC2017 evidence), use the MATLAB script `scripts/compare_reference_runs.m`
 (Wilcoxon rank-sum per cell with Holm-adjusted p-values; needs the Statistics
-and Machine Learning Toolbox); the runbook shows the call in
-[section 3.7](runbook.md#37-dt-gsk).
+and Machine Learning Toolbox); the Command Reference shows the call in
+[section 3.7](command_reference.md#37-dt-gsk).
 
 **Reduced-budget runs will not reproduce full-budget reference statistics.** A
 tiny smoke run is legitimately worse than the published full-budget table, so
@@ -353,7 +354,7 @@ the current MATLAB folder. For the exact filenames and CSV columns, see
 
 Build the browsable HTML documentation (PowerShell + Pandoc 3.8 or newer, with
 a built-in fallback renderer when Pandoc is absent or older, and Doxygen for
-the C++ API if present - no Python):
+the C++ API if present):
 
 ```powershell
 powershell -File scripts\build_docs.ps1

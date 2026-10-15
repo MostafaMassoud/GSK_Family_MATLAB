@@ -1,24 +1,24 @@
-// CEC2011 work package B: problems 9 and 11-20 (power-systems family).
+// CEC2011 work package B (wpb): problems 9 and 11-20 (power systems).
 //
-// Ported from the read-only MATLAB reference
-//   historical source: CEC2011 real-world MATLAB package
-// files: cost_fn.m + EBEinputfile.m + EBEformybus.m (problem 9),
-// MY_FUNCTION_10_1/_10_2.m -> fn_DED_5/fn_DED_10.m (problems 11/12),
-// MY_FUNCTION_11_1..5.m -> fn_ELD_6/13/15/40/140.m (problems 13-17),
-// MY_FUNCTION_12_1..3.m -> fn_HT_ELD_Case_1/2/3.m (problems 18-20),
-// dispatched per Calc_Fitx_2011.m; bounds per define_boundaries.m.
-// See docs/reference/cec2011_port_plan.md sections 5 (per-problem dossier) and 3
-// (global quirks). Reference bugs are reproduced on purpose and marked
-// [PRESERVE].
+// Ported from the CEC2011 real-world MATLAB package (the reference code):
+//   problem 9       cost_fn.m + EBEinputfile.m + EBEformybus.m
+//   problems 11-12  MY_FUNCTION_10_1/_10_2.m -> fn_DED_5/fn_DED_10.m
+//   problems 13-17  MY_FUNCTION_11_1..5.m -> fn_ELD_6/13/15/40/140.m
+//   problems 18-20  MY_FUNCTION_12_1..3.m -> fn_HT_ELD_Case_1/2/3.m
+// Dispatch follows Calc_Fitx_2011.m; bounds follow define_boundaries.m.
+// Details: docs/reference/cec2011_port_plan.md, section 5 (each problem) and
+// section 3 (suite-wide quirks).
 //
-// Wrapper rounding: every MY_FUNCTION_* wrapper (problems 11-20) applies
-// x = round(x*10000)/10000 before its fn_* objective; problem 9 calls
-// cost_fn directly and does NOT round.
+// [PRESERVE] marks a bug or quirk of the reference code that is kept on
+// purpose so results match.
 //
-// All data tables below were extracted MECHANICALLY from the .m sources
-// (scripted, not retyped), keeping the original numeric tokens verbatim so
-// the C++ literals parse to the same doubles MATLAB parsed; each table was
-// re-compared float-by-float against its source matrix after extraction.
+// Rounding: for problems 11-20 the MY_FUNCTION_* wrapper rounds x to 4
+// decimals, x = round(x*10000)/10000, before calling its fn_* objective.
+// Problem 9 calls cost_fn directly and does not round.
+//
+// The data tables were copied from the .m files by script, not retyped. The
+// numeric tokens are unchanged, so each C++ literal parses to the same double
+// as in MATLAB. Each table was checked value by value against its source.
 
 #include "cec2011_detail.hpp"
 
@@ -61,7 +61,7 @@ inline constexpr double kDed5Data2[5][7] = {
     {kNaN, 30, 30, 20, 20, 20, 20},
     {kNaN, 40, 40, 30, 30, 30, 30},
     {kNaN, 50, 50, 40, 40, 40, 40},
-    {kNaN, 50, 50, 50, 50, 50, 50}};  // [Po UR DR Z1lo Z1hi Z2lo Z2hi] (Po=NaN unused)
+    {kNaN, 50, 50, 50, 50, 50, 50}};  // [Po UR DR Z1lo Z1hi Z2lo Z2hi]; Po is NaN, unused
 
 inline constexpr double kDed5B1[5][5] = {
     {0.000049, 0.000014, 0.000015, 0.000015, 0.000020},
@@ -99,7 +99,7 @@ inline constexpr double kDed10Data2[10][3] = {
     {kNaN, 30, 30},
     {kNaN, 30, 30},
     {kNaN, 30, 30},
-    {kNaN, 30, 30}};  // [Po UR DR] (Po=NaN unused; no POZ columns)
+    {kNaN, 30, 30}};  // [Po UR DR]; Po is NaN, unused; no POZ columns
 
 // ---- fn_ELD_6.m ----
 
@@ -125,10 +125,10 @@ inline constexpr double kEld6B1Raw[6][6] = {
     {0.7, 0.9, 3.1, 0.0, -1.0, -0.6},
     {-0.1, 0.1, 0.0, 0.24, -0.6, -0.8},
     {-0.5, -0.6, -0.1, -0.6, 12.9, -0.2},
-    {0.2, -0.1, -0.6, -0.8, -0.2, 15.0}};  // .*1e-5 applied in code
+    {0.2, -0.1, -0.6, -0.8, -0.2, 15.0}};  // scaled by 1e-5 in code
 
 inline constexpr double kEld6B2Raw[6] = {
-    -0.3908, -0.1297, 0.7047, 0.0591, 0.2161, -0.6635};  // .*1e-5 applied in code
+    -0.3908, -0.1297, 0.7047, 0.0591, 0.2161, -0.6635};  // scaled by 1e-5 in code
 
 // ---- fn_ELD_13.m ----
 
@@ -198,11 +198,11 @@ inline constexpr double kEld15B1Raw[15][15] = {
     {-0.2, 0.0, 0.0, 0.0, -0.2, -0.1, 0.7, -3.6, -2.5, -3.4, 0.1, 5.4, -0.1, -0.4, 2.8},
     {0.4, 0.4, -2.6, 0.1, -0.2, -0.2, 0.0, 0.1, 0.7, 0.9, 0.4, -0.1, 10.3, -10.1, 2.8},
     {0.3, 1.0, 11.1, 0.1, -2.4, -1.7, -0.2, 0.5, -1.2, -1.1, -3.8, -0.4, -10.1, 57.8, -9.4},
-    {-0.1, -0.2, -2.8, -2.6, -0.3, 0.3, -0.8, -7.8, -7.2, -8.8, 16.8, 2.8, 2.8, -9.4, 128.3}};  // .*1e-5 applied in code
+    {-0.1, -0.2, -2.8, -2.6, -0.3, 0.3, -0.8, -7.8, -7.2, -8.8, 16.8, 2.8, 2.8, -9.4, 128.3}};  // scaled by 1e-5 in code
 
 inline constexpr double kEld15B2Raw[15] = {
     -0.1, -0.2, 2.8, -0.1, 0.1, -0.3, -0.2, -0.2,
-    0.6, 3.9, -1.7, 0.0, -3.2, 6.7, -6.4};  // .*1e-5 applied in code
+    0.6, 3.9, -1.7, 0.0, -3.2, 6.7, -6.4};  // scaled by 1e-5 in code
 
 // ---- fn_ELD_40.m ----
 
@@ -390,7 +390,7 @@ inline constexpr double kEld140Data1[140][5] = {
     {17, 51, 4477.11, 161.829, 0.005245},
     {7, 19, 57.794, 84.972, 0.234787},
     {7, 19, 57.794, 84.972, 0.234787},
-    {26, 40, 1258.437, 16.087, 1.111878}};  // [Pmin Pmax c b a]  <-- REVERSED cost column order
+    {26, 40, 1258.437, 16.087, 1.111878}};  // [Pmin Pmax c b a]: cost columns in reverse order
 
 inline constexpr double kEld140Data2[140][3] = {
     {98.4, 30, 120},
@@ -546,13 +546,13 @@ inline constexpr double kEld140Data3[12][3] = {
     {72, 1000, 0.050},
     {84, 1000, 0.050},
     {119, 600, 0.070},
-    {121, 1200, 0.043}};  // [unit e f] valve-point splice
+    {121, 1200, 0.043}};  // [unit e f]: valve-point data for these units
 
 inline constexpr double kEld140Data4[4][7] = {
     {8, 250, 280, 305, 335, 420, 450},
     {32, 220, 250, 320, 350, 390, 420},
     {74, 230, 255, 365, 395, 430, 455},
-    {136, 50, 75, 85, 95, 0, 0}};  // [unit Z1lo Z1hi Z2lo Z2hi Z3lo Z3hi] POZ splice
+    {136, 50, 75, 85, 95, 0, 0}};  // [unit Z1lo Z1hi Z2lo Z2hi Z3lo Z3hi]: POZ data
 
 // ---- fn_HT_ELD_Case_1/2/3.m (shared data) ----
 
@@ -648,7 +648,7 @@ inline constexpr double kEbeLineData[41][7] = {
     {27, 30, 0.3202, +0.6027, 0.0, 1, 16},
     {29, 30, 0.2399, +0.4533, 0.0, 1, 16},
     {8, 28, 0.0636, +0.2000, 0.0214, 1, 32},
-    {6, 28, 0.0169, +0.0599, 0.0065, 1, 32}};  // [from to R X halfB tap limit] (complex col 3 split into R,X)
+    {6, 28, 0.0169, +0.0599, 0.0065, 1, 32}};  // [from to R X halfB tap limit]; complex column 3 (R+jX) split into R, X
 
 // ---- cost_fn.m lines 96-100: EBE rate targets ----
 inline constexpr double kEbeRg[6] = {
@@ -660,18 +660,18 @@ inline constexpr double kEbeRd[21] = {
 
 } // namespace wpb_data
 
-/* ===================================================================== */
-/* Shared MATLAB-semantics primitives (the dispatch-penalty engine).     */
-/* Each helper transcribes one recurring expression of the fn_* family;  */
-/* evaluation order matches the MATLAB statements term for term.         */
-/* ===================================================================== */
+// ---- Shared helpers for the dispatch penalties ----
+// Each helper implements one expression that recurs in the fn_* files. The
+// order of operations matches the MATLAB code term for term.
 
-// MATLAB round(): ties away from zero == std::round.
+// Round to 4 decimals. MATLAB round() and std::round both round ties away
+// from zero.
 inline double round4(double v) {
     return std::round(v * 10000.0) / 10000.0;
 }
 
-// MY_FUNCTION_* wrapper line: x = round(x*10000)/10000 ("4 digit precision").
+// Copy of x rounded to 4 decimals, as in the MY_FUNCTION_* wrappers:
+// x = round(x*10000)/10000.
 inline Vector round4_copy(std::span<const Real> x) {
     Vector r(x.size());
     for (std::size_t i = 0; i < x.size(); ++i) {
@@ -688,11 +688,11 @@ inline double sum(std::span<const double> v) {
     return s;
 }
 
-// The one-sided limit-violation primitive used by every fn_* file:
+// Limit-violation penalty used by every fn_* file:
 //   sum(abs(v-lo)-(v-lo)) + sum(abs(hi-v)-(hi-v))
-// == 2*sum(max(lo-v,0)) + 2*sum(max(v-hi,0)) -- the factor 2 is part of the
-// reference. The two sums are accumulated separately and added last, exactly
-// as MATLAB evaluates the expression.
+// This equals 2*sum(max(lo-v,0)) + 2*sum(max(v-hi,0)). The factor 2 comes
+// from the reference. As in MATLAB, the two sums are kept separate and added
+// last.
 inline double limit_violation_sum(std::span<const double> v, std::span<const double> lo,
                                   std::span<const double> hi) {
     double low = 0.0;
@@ -706,8 +706,8 @@ inline double limit_violation_sum(std::span<const double> v, std::span<const dou
     return low + high;
 }
 
-// Prohibited-operating-zone tables, zone-major like the reference
-// POZ_Lower_Limits/POZ_Upper_Limits (rows = zones, columns = units).
+// Prohibited operating zone (POZ) limits, stored like the reference
+// POZ_Lower_Limits/POZ_Upper_Limits: rows = zones, columns = units.
 struct PozZones {
     std::vector<Vector> lo;
     std::vector<Vector> hi;
@@ -716,10 +716,10 @@ struct PozZones {
     }
 };
 
-// POZ depth-of-intrusion penalty:
+// POZ penalty: how far each unit output lies inside a zone.
 //   sum(sum((POZ_lo<x & x<POZ_hi).*min(x-POZ_lo,POZ_hi-x)))
-// Strictly-inside test; MATLAB sums over zones per unit first, then over
-// units. Degenerate zones (lo==hi) and all-zero zones contribute 0.
+// The inside test is strict. As in MATLAB, it sums over the zones of each
+// unit first, then over units. Zones with lo == hi and all-zero zones add 0.
 inline double poz_penalty(std::span<const double> x, const PozZones& z) {
     double total = 0.0;
     for (std::size_t u = 0; u < x.size(); ++u) {
@@ -736,10 +736,10 @@ inline double poz_penalty(std::span<const double> x, const PozZones& z) {
     return total;
 }
 
-// Power_Loss = (x*B1*x') + (B2*x') + B3 in MATLAB evaluation order:
+// Power_Loss = (x*B1*x') + (B2*x') + B3, in MATLAB evaluation order:
 // y = x*B1 with y(j) = sum_k x(k)*B1(k,j), then y*x', then + B2*x' + B3.
-// Empty b1/b2 stand for the all-zero matrices of fn_ELD_13/40/140 and
-// fn_DED_10 (loss is then exactly 0).
+// An empty b1 or b2 means an all-zero matrix, as in fn_ELD_13/40/140 and
+// fn_DED_10, where the loss is exactly 0.
 inline double transmission_loss(std::span<const double> x, const std::vector<Vector>& b1,
                                 std::span<const double> b2, double b3) {
     double quad = 0.0;
@@ -759,8 +759,8 @@ inline double transmission_loss(std::span<const double> x, const std::vector<Vec
     return quad + lin + b3;
 }
 
-// Production cost sum(a.*x.^2 + b.*x + c [+ abs(e.*sin(f.*(Pmin-x)))]);
-// empty e/f means the file has no valve-point term (fn_ELD_6/15).
+// Production cost: sum(a.*x.^2 + b.*x + c [+ abs(e.*sin(f.*(Pmin-x)))]).
+// Empty e/f means no valve-point term (fn_ELD_6/15).
 inline double production_cost(std::span<const double> x, std::span<const double> a,
                               std::span<const double> b, std::span<const double> c,
                               std::span<const double> e, std::span<const double> f,
@@ -803,8 +803,9 @@ inline Vector scaled(Vector v, double scale) {
     return v;
 }
 
-// POZ zone pairs taken from consecutive (lo,hi) column pairs of a Data2-style
-// table, mirroring Prohibited_Operating_Zones_POZ = Data2(:,4:end)'.
+// Build POZ zones from consecutive (lo, hi) column pairs of a Data2-style
+// table, like Prohibited_Operating_Zones_POZ = Data2(:,4:end)'.
+// first_col is 0-based (3 = MATLAB column 4).
 template <std::size_t R, std::size_t C>
 PozZones poz_from_columns(const double (&table)[R][C], std::size_t first_col, std::size_t zones) {
     PozZones z;
@@ -824,10 +825,11 @@ inline Vector tile(std::span<const double> base, std::size_t copies) {
     return v;
 }
 
-// Dense matrix inverse via Gauss-Jordan elimination with partial pivoting.
-// MATLAB inv() uses an LAPACK LU factorization (dgetrf/dgetri); on the
-// well-conditioned 29x29 reduced susceptance matrix of problem 9 the two
-// agree far below the 1e-12 relative probe gate (verified by the tests).
+// Dense matrix inverse by Gauss-Jordan elimination with partial pivoting.
+// MATLAB inv() uses LAPACK LU (dgetrf/dgetri). On the well-conditioned
+// 29x29 reduced susceptance matrix of problem 9 the two agree far inside the
+// 1e-12 relative tolerance that the probe tests check.
+// Throws std::runtime_error if a pivot is exactly 0.
 std::vector<Vector> invert_dense(std::vector<Vector> a) {
     const std::size_t n = a.size();
     std::vector<Vector> inv(n, Vector(n, 0.0));
@@ -865,10 +867,11 @@ std::vector<Vector> invert_dense(std::vector<Vector> a) {
     return inv;
 }
 
-/* ===================================================================== */
-/* Common BenchmarkProblem scaffolding for the package.                  */
-/* ===================================================================== */
+// ---- Common base class ----
 
+// Base for all problems in this file: stores the id and bounds, checks the
+// input size (throws std::invalid_argument) and applies the reference
+// NaN -> 0 rule.
 class WpbProblem : public BenchmarkProblem {
 public:
     std::string suite_name() const override {
@@ -883,7 +886,7 @@ public:
     Bounds bounds() const override {
         return Bounds(lower_, upper_);
     }
-    // No certified optima exist for the CEC2011 real-world problems.
+    // CEC2011 real-world problems have no certified optimum: returns NaN.
     Real optimum() const override {
         return std::numeric_limits<Real>::quiet_NaN();
     }
@@ -893,7 +896,7 @@ public:
                                         ": expected dimension " + std::to_string(lower_.size()) +
                                         ", got " + std::to_string(x.size()) + ".");
         }
-        // Calc_Fitx_2011.m lines 57-61: NaN -> 0 after EVERY evaluation.
+        // As in Calc_Fitx_2011.m lines 57-61: NaN -> 0 on every evaluation.
         return apply_reference_nan_rule(evaluate_objective(x));
     }
 
@@ -904,10 +907,10 @@ protected:
 
     virtual Real evaluate_objective(std::span<const Real> x) const = 0;
 
-    // MY_FUNCTION_* wrapper rounding into a reused per-instance buffer (avoids
-    // a fresh allocation per evaluate). evaluate() has already checked that
-    // raw.size() == lower_.size(), so the scratch is exactly the right size.
-    // Bit-identical to round4_copy: same std::round(v*1e4)/1e4 values.
+    // MY_FUNCTION_* 4-decimal rounding into a reused per-instance buffer, so
+    // no allocation per call. evaluate() has already checked that
+    // raw.size() == lower_.size(), so the buffer has the right size.
+    // Gives the same values as round4_copy, bit for bit.
     std::span<const double> round4_into_scratch(std::span<const Real> raw) const {
         for (std::size_t i = 0; i < raw.size(); ++i) {
             round4_scratch_[i] = round4(raw[i]);
@@ -922,9 +925,7 @@ private:
     mutable Vector round4_scratch_;
 };
 
-/* ===================================================================== */
-/* Problem 9 -- EBE transmission pricing, IEEE 30-bus (cost_fn.m).       */
-/* ===================================================================== */
+// ---- Problem 9: EBE transmission pricing, IEEE 30-bus (cost_fn.m) ----
 
 class EbeTransmissionPricingProblem final : public WpbProblem {
 public:
@@ -933,21 +934,21 @@ public:
 private:
     static constexpr std::size_t kBuses = 30;
     static constexpr std::size_t kLines = 41;
-    static constexpr std::size_t kGens = 6;   // buses {1,2,5,8,11,13}
-    static constexpr std::size_t kLoads = 21; // 21 buses with Pd > 0
+    static constexpr std::size_t kGens = 6;   // buses 1,2,5,8,11,13 (1-based)
+    static constexpr std::size_t kLoads = 21; // buses with Pd > 0
 
     struct Model {
         Vector lower;
         Vector upper;
-        Vector pg;                  // reduced Pg (6), per cost_fn Pg = Pg(g)
-        Vector pd;                  // reduced Pd (21)
-        std::vector<Vector> bt;     // 6x21 bilateral transactions
+        Vector pg;                  // Pg at the 6 generators (cost_fn: Pg(g))
+        Vector pd;                  // Pd at the 21 loads
+        std::vector<Vector> bt;     // BT: 6x21 bilateral transactions
         Vector pg_net;              // pg - sum(BT,2)
         Vector pd_net;              // pd - sum(BT,1)'
         std::vector<std::size_t> na; // line from-bus (0-based)
         std::vector<std::size_t> nb; // line to-bus (0-based)
-        Vector ptdf;                // 6*21*41, index (i*21+j)*41+k
-        Vector fc;                  // 41 facility costs
+        Vector ptdf;                // PTDF, 6*21*41, index (i*21+j)*41+k
+        Vector fc;                  // FC: 41 line facility costs
     };
 
     explicit EbeTransmissionPricingProblem(Model m)
@@ -956,8 +957,8 @@ private:
     static Model build() {
         Model m;
 
-        // Pg = bus_spec(:,7)/100; Pd = bus_spec(:,5)/100; g = find(Pg>0),
-        // d = find(Pd>0); the reduced vectors keep the bus order.
+        // Pg = bus_spec(:,7)/100, Pd = bus_spec(:,5)/100, g = find(Pg>0),
+        // d = find(Pd>0). The reduced vectors keep the bus order.
         std::vector<std::size_t> g;
         std::vector<std::size_t> d;
         Vector pg_full(kBuses);
@@ -984,9 +985,9 @@ private:
             m.pd[j] = pd_full[d[j]];
         }
 
-        // 50 MW bilateral-transaction table (cost_fn.m lines 29-35 ==
-        // define_boundaries.m case 9); indices are positions in the g/d
-        // lists, not bus numbers. Whole table divided by 100 afterwards.
+        // Bilateral transactions BT, 50 MW in total (cost_fn.m lines 29-35,
+        // same as define_boundaries.m case 9). Indices are 0-based positions
+        // in the g/d lists, not bus numbers. The table is then divided by 100.
         m.bt.assign(kGens, Vector(kLoads, 0.0));
         m.bt[0][3] = 5.0;
         m.bt[0][4] = 10.0;
@@ -1003,9 +1004,9 @@ private:
             }
         }
 
-        // Bounds (define_boundaries.m case 9, COMPUTED from the data):
-        // xmin = 0, xmax(c) = min(Pg(g(i))-BT(i,j), Pd(d(j))-BT(i,j)),
-        // flattened with j fastest.
+        // Bounds are computed from the data (define_boundaries.m case 9):
+        // xmin = 0, xmax = min(Pg(g(i))-BT(i,j), Pd(d(j))-BT(i,j)),
+        // flattened with j fastest: x[i*21+j].
         m.lower.assign(kGens * kLoads, 0.0);
         m.upper.resize(kGens * kLoads);
         for (std::size_t i = 0; i < kGens; ++i) {
@@ -1015,7 +1016,8 @@ private:
             }
         }
 
-        // pg = Pg - sum(BT,2); pd = Pd - sum(BT,1)'.
+        // Power left after the bilateral transactions (pg, pd in cost_fn.m):
+        // pg_net = Pg - sum(BT,2), pd_net = Pd - sum(BT,1)'.
         m.pg_net.resize(kGens);
         for (std::size_t i = 0; i < kGens; ++i) {
             m.pg_net[i] = m.pg[i] - sum(m.bt[i]);
@@ -1029,8 +1031,8 @@ private:
             m.pd_net[j] = m.pd[j] - bt_col;
         }
 
-        // EBEformybus.m: imaginary-part Ybus. The complex impedance column
-        // is consumed ONLY through imag(): YI = 1./imag(Z).
+        // Imaginary part of Ybus, as in EBEformybus.m. Only imag(Z) of each
+        // line impedance is used: YI = 1./imag(Z).
         m.na.resize(kLines);
         m.nb.resize(kLines);
         Vector xij(kLines);
@@ -1050,8 +1052,8 @@ private:
             yibus[b][b] += yi;
         }
 
-        // cost_fn.m: delete row 1 and column 1, invert, re-pad with a zero
-        // first row/column (the loop writes X(i+1,j+1)=Xt(i,j) for i,j>=1).
+        // As in cost_fn.m: drop row 1 and column 1, invert, then add back a
+        // zero first row and column (X(i+1,j+1) = Xt(i,j) for i,j >= 1).
         std::vector<Vector> reduced(kBuses - 1, Vector(kBuses - 1));
         for (std::size_t r = 1; r < kBuses; ++r) {
             for (std::size_t c = 1; c < kBuses; ++c) {
@@ -1088,11 +1090,11 @@ private:
         return m;
     }
 
-    // cost_fn.m main body. NOTE: no 4-decimal rounding for this problem.
+    // Main body of cost_fn.m. This problem does not round x to 4 decimals.
     Real evaluate_objective(std::span<const Real> x) const override {
         constexpr double kKp = 100.0;
 
-        // GD(i,:) = x((i-1)*21+1 : i*21).
+        // GD(i,:) = x((i-1)*21+1 : i*21), so gd(i,j) = x[i*21+j] (0-based).
         const auto gd = [&](std::size_t i, std::size_t j) {
             return x[i * kLoads + j];
         };
@@ -1115,7 +1117,7 @@ private:
 
         // cost_l(i,j) = sum_k |cost_line(k)*PTDF(i,j,k)|;
         // cost_gen(i) = sum_j GD(i,j)*cost_l(i,j);
-        // rate_ebe1 = sum_i (cost_gen(i)/pg(i) - Rg(i))^2.
+        // rate_ebe1 = sum_i (cost_gen(i)/pg_net(i) - Rg(i))^2.
         std::vector<Vector> cost_l(kGens, Vector(kLoads, 0.0));
         double rate_ebe1 = 0.0;
         for (std::size_t i = 0; i < kGens; ++i) {
@@ -1131,7 +1133,7 @@ private:
         }
 
         // cost_load(j) = sum_i GD(i,j)*cost_l(i,j);
-        // rate_ebe2 = sum_j (cost_load(j)/pd(j) - Rd(j))^2.
+        // rate_ebe2 = sum_j (cost_load(j)/pd_net(j) - Rd(j))^2.
         double rate_ebe2 = 0.0;
         for (std::size_t j = 0; j < kLoads; ++j) {
             double cost_load = 0.0;
@@ -1143,8 +1145,9 @@ private:
         }
         const double rate_d = rate_ebe1 + rate_ebe2;
 
-        // Constraint violations: Pg_x = sum(GD,2)+sum(BT,2) vs reduced Pg;
-        // Pd_x = sum(GD,1)+sum(BT,1) vs reduced Pd; both weighted by 100.
+        // Constraint penalties, each term weighted by 100: |Pg_x - Pg| with
+        // Pg_x = sum(GD,2)+sum(BT,2), and |Pd_x - Pd| with
+        // Pd_x = sum(GD,1)+sum(BT,1). Pg, Pd are the reduced m_.pg, m_.pd.
         double gpen = 0.0;
         for (std::size_t i = 0; i < kGens; ++i) {
             double gd_row = 0.0;
@@ -1175,20 +1178,18 @@ private:
     Model m_;
 };
 
-/* ===================================================================== */
-/* Problems 11/12 -- dynamic economic dispatch (fn_DED_5/fn_DED_10.m).   */
-/* ===================================================================== */
+// ---- Problems 11-12: dynamic economic dispatch, DED (fn_DED_5/10.m) ----
 
 class DynamicEconomicDispatchProblem final : public WpbProblem {
 public:
     struct Config {
         int id = 0;
         std::size_t units = 0;
-        Vector demand; // 24 hours
+        Vector demand; // one value per hour (24)
         Vector pmin, pmax, a, b, c, e, f;
         Vector up_ramp, down_ramp;
-        PozZones poz;            // fn_DED_10 has NO POZ columns (empty table)
-        std::vector<Vector> b1;  // empty == all-zero loss matrix
+        PozZones poz;            // empty for fn_DED_10 (no POZ columns)
+        std::vector<Vector> b1;  // empty = all-zero loss matrix
         bool round_loss = false; // [PRESERVE] only fn_DED_5 rounds Power_Loss
         double ramp_weight = 0.0; // [PRESERVE] 1e5 in fn_DED_5, 1e3 in fn_DED_10
     };
@@ -1201,16 +1202,16 @@ private:
     static constexpr std::size_t kHours = 24;
 
     Real evaluate_objective(std::span<const Real> raw) const override {
-        const std::span<const double> x = round4_into_scratch(raw); // MY_FUNCTION_10_* wrapper rounding
+        const std::span<const double> x = round4_into_scratch(raw); // MY_FUNCTION_10_* rounding
 
-        // Input_Generations = reshape(x,units,24)': row j of the reshaped
-        // matrix (hour j) is the contiguous slice x(j*units .. ).
+        // Input_Generations = reshape(x,units,24)': hour j (0-based) is the
+        // contiguous slice x[j*units .. j*units+units-1].
         const std::size_t units = cfg_.units;
         double total_cost = 0.0;
         double total_penalty = 0.0;
         Vector up(units);
         Vector down(units);
-        std::span<const double> previous; // hour j-1 generations
+        std::span<const double> previous; // generations of hour j-1
         for (std::size_t j = 0; j < kHours; ++j) {
             const std::span<const double> xj{x.data() + j * units, units};
 
@@ -1222,8 +1223,8 @@ private:
                 std::abs(cfg_.demand[j] + power_loss - sum(xj));
             const double capacity = limit_violation_sum(xj, cfg_.pmin, cfg_.pmax);
 
-            // Ramp limits chain BETWEEN hours; hour 1 is skipped (the NaN
-            // initial Previous_Generations is never consumed).
+            // Ramp limits link each hour to the one before. The first hour is
+            // skipped, so the NaN initial Previous_Generations is never used.
             double ramp = 0.0;
             if (j > 0) {
                 for (std::size_t u = 0; u < units; ++u) {
@@ -1261,8 +1262,8 @@ DynamicEconomicDispatchProblem::Config make_ded5_config() {
     cfg.f = column(kDed5Data1, 6);
     cfg.up_ramp = column(kDed5Data2, 1);
     cfg.down_ramp = column(kDed5Data2, 2);
-    // Two degenerate zones (Zone1min==Zone1max etc.) -> penalty always 0,
-    // but the code path exists in the reference, so keep it.
+    // Both zones have lo == hi, so the POZ penalty is always 0. Kept because
+    // the reference computes it.
     cfg.poz = poz_from_columns(kDed5Data2, 3, 2);
     cfg.b1 = matrix(kDed5B1);
     cfg.round_loss = true;
@@ -1285,16 +1286,15 @@ DynamicEconomicDispatchProblem::Config make_ded10_config() {
     cfg.f = column(kDed10Data1, 6);
     cfg.up_ramp = column(kDed10Data2, 1);
     cfg.down_ramp = column(kDed10Data2, 2);
-    // Data2 has no POZ columns -> empty 0-zone table; B1=B2=B3=0 and the
-    // loss is NOT rounded in fn_DED_10 [PRESERVE].
+    // Data2 has no POZ columns, so poz stays empty. B1 = B2 = B3 = 0, and
+    // fn_DED_10 does not round the loss [PRESERVE].
     cfg.round_loss = false;
     cfg.ramp_weight = 1e3; // [PRESERVE] 1e3 here vs 1e5 in fn_DED_5
     return cfg;
 }
 
-/* ===================================================================== */
-/* Problems 13-16 -- static ELD (fn_ELD_6/13/15/40.m).                   */
-/* ===================================================================== */
+// ---- Problems 13-16: static ELD (fn_ELD_6/13/15/40.m) ----
+// ELD = economic load dispatch.
 
 class StaticEldProblem final : public WpbProblem {
 public:
@@ -1302,10 +1302,10 @@ public:
         int id = 0;
         double demand = 0.0;
         Vector pmin, pmax, a, b, c;
-        Vector e, f;              // empty == no valve-point term
-        Vector up_limit, down_limit; // empty == no ramp block (Data2=[])
+        Vector e, f;              // empty = no valve-point term
+        Vector up_limit, down_limit; // empty = no ramp or POZ terms (Data2=[])
         PozZones poz;
-        std::vector<Vector> b1;   // empty == all-zero loss matrix
+        std::vector<Vector> b1;   // empty = all-zero loss matrix
         Vector b2;
         double b3 = 0.0;
         double balance_weight = 0.0;  // [PRESERVE] 1e3 (6/15) vs 1e5 (13/40)
@@ -1316,7 +1316,7 @@ public:
 
 private:
     Real evaluate_objective(std::span<const Real> raw) const override {
-        const std::span<const double> x = round4_into_scratch(raw); // MY_FUNCTION_11_* wrapper rounding
+        const std::span<const double> x = round4_into_scratch(raw); // MY_FUNCTION_11_* rounding
 
         double power_loss = transmission_loss(x, cfg_.b1, cfg_.b2, cfg_.b3);
         power_loss = round4(power_loss);
@@ -1325,8 +1325,8 @@ private:
 
         double total_penalty;
         if (!cfg_.up_limit.empty()) {
-            // fn_ELD_6/15: static ramp limits from Po (computed once, NOT
-            // chained over hours) plus POZ.
+            // fn_ELD_6/15: fixed ramp limits from Po (set once, not linked
+            // across hours), plus POZ.
             const double ramp = limit_violation_sum(x, cfg_.down_limit, cfg_.up_limit);
             const double poz = poz_penalty(x, cfg_.poz);
             total_penalty = ((cfg_.balance_weight * balance + 1e3 * capacity) +
@@ -1344,7 +1344,8 @@ private:
     Config cfg_;
 };
 
-// Up_Ramp_Limit = min(Pmax,Po+UR); Down_Ramp_Limit = max(Pmin,Po-DR).
+// Fixed ramp limits: Up_Ramp_Limit = min(Pmax,Po+UR),
+// Down_Ramp_Limit = max(Pmin,Po-DR). Set cfg.pmin and cfg.pmax first.
 void set_static_ramp_limits(StaticEldProblem::Config& cfg, const Vector& po,
                             const Vector& ur, const Vector& dr) {
     const std::size_t n = po.size();
@@ -1369,8 +1370,8 @@ StaticEldProblem::Config make_eld6_config() {
     set_static_ramp_limits(cfg, column(kEld6Data2, 0), column(kEld6Data2, 1),
                            column(kEld6Data2, 2));
     cfg.poz = poz_from_columns(kEld6Data2, 3, 2);
-    // [PRESERVE] kEld6B1Raw(6,1) = +0.2 while (1,6) = -0.2 (asymmetric typo
-    // in the reference B1).
+    // [PRESERVE] The reference B1 is not symmetric: (6,1) = +0.2 but
+    // (1,6) = -0.2 (a typo), and (5,3) = -0.1 but (3,5) = -1.0.
     cfg.b1 = matrix(kEld6B1Raw, 1e-5);
     cfg.b2 = scaled(Vector(std::begin(kEld6B2Raw), std::end(kEld6B2Raw)), 1e-5);
     cfg.b3 = 0.0056 * 1e-2;
@@ -1430,11 +1431,9 @@ StaticEldProblem::Config make_eld40_config() {
     return cfg;
 }
 
-/* ===================================================================== */
-/* Problem 17 -- static ELD, 140 units / Korean grid (fn_ELD_140.m).     */
-/* Kept separate from StaticEldProblem because its penalty aggregation   */
-/* differs structurally (vector broadcast quirk, 1e7 weights).           */
-/* ===================================================================== */
+// ---- Problem 17: static ELD, 140 units, Korean grid (fn_ELD_140.m) ----
+// Separate from StaticEldProblem because its penalties are summed in a
+// different way (a vector broadcast quirk and 1e7 weights).
 
 class Eld140Problem final : public WpbProblem {
 public:
@@ -1458,13 +1457,13 @@ private:
         m.pmin = column(kEld140Data1, 0);
         m.pmax = column(kEld140Data1, 1);
         // [PRESERVE] Data1 columns are [Pmin Pmax c b a]: the cost
-        // coefficients are REVERSED relative to every other ELD file.
+        // coefficients are in reverse order compared with the other ELD files.
         m.c = column(kEld140Data1, 2);
         m.b = column(kEld140Data1, 3);
         m.a = column(kEld140Data1, 4);
 
-        // Data1(Data3(:,1),6:7) = Data3(:,2:3): valve-point coefficients for
-        // 12 units only; MATLAB's matrix auto-expansion zero-fills the rest.
+        // Data1(Data3(:,1),6:7) = Data3(:,2:3) sets valve-point coefficients
+        // for 12 units only. MATLAB grows the matrix and fills the rest with 0.
         m.e.assign(kUnits, 0.0);
         m.f.assign(kUnits, 0.0);
         for (const auto& row : kEld140Data3) {
@@ -1473,7 +1472,7 @@ private:
             m.f[unit] = row[2];
         }
 
-        // Static ramp limits from Data2 = [Po UR DR].
+        // Fixed ramp limits from Data2 = [Po UR DR].
         const Vector po = column(kEld140Data2, 0);
         const Vector ur = column(kEld140Data2, 1);
         const Vector dr = column(kEld140Data2, 2);
@@ -1485,8 +1484,8 @@ private:
         }
 
         // Data2(Data4(:,1),4:9) = Data4(:,2:end): three POZ zones for units
-        // {8,32,74,136}; all other units zero-filled (zones (0,0) never
-        // trigger the strictly-inside test).
+        // 8, 32, 74 and 136 (1-based). All other units get zones (0,0), which
+        // never pass the strict inside test.
         m.poz.lo.assign(3, Vector(kUnits, 0.0));
         m.poz.hi.assign(3, Vector(kUnits, 0.0));
         for (const auto& row : kEld140Data4) {
@@ -1500,21 +1499,21 @@ private:
     }
 
     Real evaluate_objective(std::span<const Real> raw) const override {
-        const std::span<const double> x = round4_into_scratch(raw); // MY_FUNCTION_11_5 wrapper rounding
+        const std::span<const double> x = round4_into_scratch(raw); // MY_FUNCTION_11_5 rounding
         constexpr double kDemand = 49342.0;
 
-        // B1=B2=B3=0; the loss is still computed and rounded (== 0).
+        // B1 = B2 = B3 = 0; the loss is still computed and rounded (it is 0).
         double power_loss = transmission_loss(x, {}, {}, 0.0);
         power_loss = round4(power_loss);
         const double balance = std::abs(kDemand + power_loss - sum(x));
 
-        // [PRESERVE] fn_ELD_140.m line 354 omits the sum() around the
-        // LOWER-bound term:
+        // [PRESERVE] fn_ELD_140.m line 354 has no sum() around the
+        // lower-bound term:
         //   Capacity_Limits_Penalty = (abs(x-Pmin)-(x-Pmin))
         //                           + sum(abs(Pmax-x)-(Pmax-x));
-        // MATLAB broadcasts the scalar upper-bound sum across the 140-vector
+        // MATLAB adds the scalar upper-bound sum to each of the 140 elements,
         // and the weight line then sums the vector, so the upper-bound
-        // violation is effectively counted 140 times.
+        // violation is counted 140 times.
         double upper_violation = 0.0;
         for (std::size_t i = 0; i < kUnits; ++i) {
             const double dh = m_.pmax[i] - x[i];
@@ -1526,8 +1525,8 @@ private:
             capacity += (std::abs(dl) - dl) + upper_violation;
         }
 
-        // Ramp penalty is likewise kept as a 140-vector and summed in the
-        // weight line: sum over i of the per-unit (low + high) terms.
+        // The ramp penalty is also a 140-vector, summed in the weight line:
+        // the sum over units of the (low + high) terms.
         double ramp = 0.0;
         for (std::size_t i = 0; i < kUnits; ++i) {
             const double dl = x[i] - m_.down_limit[i];
@@ -1537,7 +1536,7 @@ private:
 
         const double poz = poz_penalty(x, m_.poz);
 
-        // [PRESERVE] weights differ from every other ELD file:
+        // [PRESERVE] Weights differ from the other ELD files:
         // 1e7*PB + 1e5*sum(Cap) + 1e7*sum(Ramp) + 1e5*POZ.
         const double total_penalty =
             ((1e7 * balance + 1e5 * capacity) + 1e7 * ramp) + 1e5 * poz;
@@ -1548,14 +1547,12 @@ private:
     Model m_;
 };
 
-/* ===================================================================== */
-/* Problems 18-20 -- hydrothermal scheduling (fn_HT_ELD_Case_1/2/3.m).   */
-/* One engine; the three cases differ ONLY in the POZ block:             */
-/*   case 1 (P18): no POZ at all;                                        */
-/*   case 2 (P19): POZ on discharges, weight 1e5;                        */
-/*   case 3 (P20): POZ computed but weighted 0 -> numerically identical  */
-/*                 to case 1 [PRESERVE].                                 */
-/* ===================================================================== */
+// ---- Problems 18-20: hydrothermal scheduling (fn_HT_ELD_Case_1/2/3.m) ----
+// One class for all three cases. They differ only in the POZ term:
+//   case 1 (P18): no POZ;
+//   case 2 (P19): POZ on the discharges, weight 1e5;
+//   case 3 (P20): POZ computed but weighted 0, so results equal case 1
+//                 [PRESERVE].
 
 class HydrothermalSchedulingProblem final : public WpbProblem {
 public:
@@ -1567,7 +1564,7 @@ public:
 private:
     static constexpr std::size_t kPlants = 4;
     static constexpr std::size_t kHours = 24;
-    // fn_HT_ELD_Case_*.m lines 27-45.
+    // Constants from fn_HT_ELD_Case_*.m lines 27-45.
     static constexpr double kPtMin = 500.0;
     static constexpr double kPtMax = 2500.0;
     static constexpr double kPhMin[kPlants] = {0, 0, 0, 0};
@@ -1585,18 +1582,19 @@ private:
     static constexpr double kPozHi[kPlants] = {9, 8, 27, 18};
 
     Real evaluate_objective(std::span<const Real> raw) const override {
-        const std::span<const double> x = round4_into_scratch(raw); // MY_FUNCTION_12_* wrapper rounding
+        const std::span<const double> x = round4_into_scratch(raw); // MY_FUNCTION_12_* rounding
 
-        // Input_Discharges = reshape(x,4,24) (NO transpose): column j is
-        // hour j, i.e. q(plant i, hour j) = x[j*4+i].
+        // Input_Discharges = reshape(x,4,24), no transpose: column j is
+        // hour j, so q(plant i, hour j) = x[j*4+i] (0-based).
         const auto q = [&](std::size_t plant, std::size_t hour) {
             return x[hour * kPlants + plant];
         };
 
-        // Reservoir cascade: plant 3 receives plants 1 and 2; plant 4
-        // receives plant 3. All_Discharges = [zeros(4,4) Q] gives 4 columns
-        // of zero history; All_Spillages and Spillages are identically zero,
-        // so their additions/subtractions are dropped here (exact no-ops).
+        // Reservoir cascade: plant 3 receives the discharge of plants 1 and
+        // 2; plant 4 receives plant 3. Upstream water arrives after the
+        // upstream plant's delay (kDelayTime). All_Discharges = [zeros(4,4) Q]
+        // gives 4 columns of zero history. All_Spillages and Spillages are
+        // always zero, so those terms are left out (exact no-ops).
         // Storage_Volume(i,j+1) = V(i,j) + Upstream - Q(i,j) + Inflow(i,j).
         double volume[kPlants][kHours + 1];
         for (std::size_t i = 0; i < kPlants; ++i) {
@@ -1628,7 +1626,7 @@ private:
             const double discharge = limit_violation_sum(qj, kQmin, kQmax);
             const double storage = limit_violation_sum(vj, kVmin, kVmax);
 
-            // Ph = c1*v^2 + c2*q^2 + c3*v*q + c4*v + c5*q + c6, clamped via
+            // Ph = c1*v^2 + c2*q^2 + c3*v*q + c4*v + c5*q + c6, then
             // Ph.*(Ph>0): negative hydro generation becomes 0 [PRESERVE].
             double ph[kPlants];
             for (std::size_t i = 0; i < kPlants; ++i) {
@@ -1643,21 +1641,21 @@ private:
             }
             const double hydro_capacity = limit_violation_sum(ph, kPhMin, kPhMax);
 
-            // Power_Loss is identically 0 in all three cases.
+            // Power_Loss is always 0 in all three cases.
             const double hydro_total = sum(ph);
             const double p_thermal = wpb_data::kHtDemand[j] - hydro_total;
 
-            // [PRESERVE] the thermal capacity penalty is computed by the
-            // reference but never added to All_Penalty; kept here (unused)
-            // to document the dropped term.
+            // [PRESERVE] The reference computes the thermal capacity penalty
+            // but never adds it to All_Penalty. Kept here, unused, to show
+            // the dropped term.
             const double dtl = p_thermal - kPtMin;
             const double dth = kPtMax - p_thermal;
             const double thermal_capacity =
                 (std::abs(dtl) - dtl) + (std::abs(dth) - dth);
             (void)thermal_capacity;
 
-            // Power-balance penalty recomputes the thermal residual and is
-            // therefore exactly 0 by construction [PRESERVE].
+            // The power-balance penalty recomputes the thermal residual, so
+            // it is always exactly 0 [PRESERVE].
             const double balance =
                 std::abs((wpb_data::kHtDemand[j] - hydro_total) - p_thermal);
 
@@ -1672,15 +1670,15 @@ private:
                 poz = sum(per_plant);
             }
 
-            // Cost: the valve-point term is commented out in ALL THREE case
-            // files (despite case 3's banner claiming valve-point loading)
+            // Thermal cost. All three case files comment out the valve-point
+            // term, although the case 3 header mentions valve-point loading
             // [PRESERVE].
             total_cost +=
                 (5000.0 + 19.2 * p_thermal) + 0.002 * (p_thermal * p_thermal);
 
-            // [PRESERVE] the hydro capacity penalty is added TWICE in all
-            // three cases; the POZ term is weighted 1e5 in case 2 and 0 in
-            // case 3 (and absent in case 1).
+            // [PRESERVE] All three cases add the hydro capacity penalty
+            // twice. The POZ weight is 1e5 in case 2 and 0 in case 3; case 1
+            // has no POZ term.
             double hour_penalty = (((1e4 * balance + 1e4 * hydro_capacity) +
                                     1e4 * hydro_capacity) +
                                    1e4 * discharge) +
@@ -1693,8 +1691,8 @@ private:
             total_penalty += hour_penalty;
         }
 
-        // Reservoir end-volume penalty; the first term compares V(:,1) to
-        // V_Initial and is identically 0 [PRESERVE].
+        // Reservoir end-volume penalty. The first term compares V(:,1) with
+        // V_Initial and is always 0 [PRESERVE].
         double end_initial = 0.0;
         double end_final = 0.0;
         for (std::size_t i = 0; i < kPlants; ++i) {
@@ -1715,8 +1713,9 @@ private:
 
 std::unique_ptr<BenchmarkProblem> make_problem_wpb(int function_id,
                                                    const std::filesystem::path& /*data_root*/) {
-    // Every problem in this package embeds its data tables (the MATLAB
-    // reference inlines them in the fn_* files), so data_root is unused.
+    // All data tables are built into this file (the reference keeps them
+    // inside its .m files), so data_root is not used. Any id other than 9
+    // or 11-20 throws std::invalid_argument.
     switch (function_id) {
     case 9:
         return std::make_unique<EbeTransmissionPricingProblem>();

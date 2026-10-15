@@ -357,7 +357,7 @@ post-initialization RNG state for fair cross-family starts.
   the reference `Adaptive_GSK_ALI.m` (AGSK release) with identical pools,
   defaults, and draw order. Entry point and interface contract:
   [matlab_interface.md](../reference/matlab_interface.md); run instructions:
-  [runbook.md](../getting-started/runbook.md).
+  [command_reference.md](../getting-started/command_reference.md).
 - Tested for deterministic replay, fair-start reuse, pool-adaptation and
   population-reduction behaviour, budget crossing, and runner execution on smoke
   cells. See [validation_report.md](../research/validation_report.md) and

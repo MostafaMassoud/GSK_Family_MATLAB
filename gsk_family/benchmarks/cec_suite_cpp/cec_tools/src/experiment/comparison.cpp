@@ -42,9 +42,9 @@ Real parse_real(const std::filesystem::path& file, std::size_t line_no, const st
     }
 }
 
-// Formats a numeric value for a human-readable failure reason. %.10g keeps
-// small references (1e-7) and the -1e-6 floor legible, where std::to_string's
-// fixed six decimals would print them as 0.000000 / -0.000001.
+// Formats a number for a failure message with 10 significant digits (%.10g),
+// so small values such as 1e-7 or the -1e-6 floor stay readable;
+// std::to_string would print them as 0.000000 / -0.000001.
 std::string format_reason_value(Real v) {
     std::ostringstream os;
     os << std::setprecision(10) << v;
@@ -62,8 +62,9 @@ struct ReferenceKey {
     }
 };
 
-/// Parses suite/algorithm/dimension from an imported reference file path,
+/// Reads suite, algorithm and dimension from an imported reference file path,
 /// e.g. .../cec2017/agsk/agsk_cec2017_D10.csv or .../cec2011/gsk/gsk_cec2011.csv.
+/// Returns nullopt when the suite folder name does not start with "cec".
 std::optional<ReferenceKey> parse_reference_path(const std::filesystem::path& path) {
     const auto parent = path.parent_path();
     const auto algorithm = parent.filename().string();
@@ -96,14 +97,14 @@ std::string lower(std::string s) {
     return s;
 }
 
-// A per-dimension summary file is <optimizer>_<suite>_D<dim>.csv inside a
+// Parses a per-dimension summary file: <optimizer>_<suite>_D<dim>.csv in a
 // folder named "summary" (normally results/<optimizer>/<suite>/summary).
-// Optimizer and suite are taken from the file stem that run_experiment.m
-// writes, not from the enclosing folder names, so a run written to any
-// output_dir (e.g. results/demo) is still judged under its real suite and
-// optimizer. Optimizer slugs are hyphenated and suite names carry no '_', so
-// the first '_' separates the two. Returns false for the dimensionless
-// rollup, per_run.csv, environment.json, etc.
+// Optimizer and suite come from the file name that run_experiment.m writes,
+// not from folder names, so a run saved to any output_dir (e.g.
+// results/demo) is still judged under its real suite and optimizer.
+// Optimizer slugs use '-' and suite names have no '_', so the first '_'
+// splits the two. Returns false for other files (the rollup without a
+// dimension, per_run.csv, environment.json, ...).
 bool parse_summary_path(const std::filesystem::path& path, std::string& optimizer,
                         std::string& suite, int& dimension) {
     if (path.extension() != ".csv") {
@@ -143,11 +144,10 @@ std::vector<SummaryRow> load_summaries(const std::filesystem::path& results_root
         throw std::runtime_error("Results root does not exist: " + results_root.string());
     }
     std::vector<SummaryRow> rows;
-    // Explicit iterator so the walk can be pruned: the runner's archive
-    // folders (_overwrite_archive/ from overwrite=true, _archive/ from
-    // per-file refreshes) hold superseded history, not live results. Only
-    // folders below results_root are pruned, so pointing the loader directly
-    // at an archived tree still works.
+    // Explicit iterator so the walk can skip the runner's archive folders
+    // (_overwrite_archive/ from overwrite=true, _archive/ from per-file
+    // refreshes): they hold old results, not live ones. Only folders below
+    // results_root are skipped, so pointing the loader at an archive works.
     for (auto it = std::filesystem::recursive_directory_iterator(results_root);
          it != std::filesystem::recursive_directory_iterator(); ++it) {
         const auto& entry = *it;
@@ -171,8 +171,9 @@ std::vector<SummaryRow> load_summaries(const std::filesystem::path& results_root
         if (!in) {
             throw std::runtime_error("Cannot open " + entry.path().string());
         }
-        // Header: Function,Best,Median,Mean,Worst,SD (case-insensitive); locate
-        // each statistic column so column order is not assumed.
+        // Header: Function,Best,Median,Mean,Worst,SD (any case). Columns are
+        // found by name, so their order does not matter; a name that is
+        // missing keeps its default position (0-5 in the order above).
         std::string line;
         std::size_t line_no = 0;
         std::size_t c_func = 0, c_best = 1, c_median = 2, c_mean = 3, c_worst = 4, c_sd = 5;
@@ -238,9 +239,10 @@ ComparisonReport compare_with_references(const std::vector<SummaryRow>& generate
         entry.dimension = g.dimension;
         entry.generated_mean = g.mean;
 
-        // The summary file stem carries run_experiment's canonical slug
-        // (atmals-gsk, fdb-agsk, ...), which is exactly the reference folder
-        // name, so no alias mapping is needed.
+        // The summary file name holds run_experiment's optimizer slug
+        // (atmals-gsk, fdb-agsk, ...), which equals the reference folder
+        // name, so no alias table is needed. Try the reference file for this
+        // D first, then one without a dimension tag.
         const ReferenceFile* ref = nullptr;
         for (const int dim : {g.dimension, 0}) {
             const auto it = by_key.find(ReferenceKey{g.suite, g.optimizer, dim});
@@ -266,6 +268,7 @@ ComparisonReport compare_with_references(const std::vector<SummaryRow>& generate
             entry.reference_mean = ref_mean;
             entry.abs_diff = std::abs(g.mean - ref_mean);
             entry.rel_diff = *entry.abs_diff / std::max<Real>(1.0, std::abs(ref_mean));
+            // Minimization: within 1e-8 relative is a tie, a lower mean wins.
             if (*entry.rel_diff <= 1.0e-8) {
                 entry.verdict = "tie";
                 ++report.ties;
@@ -309,12 +312,14 @@ void write_comparison_csv(const ComparisonReport& report, const std::filesystem:
 }
 
 bool suite_has_known_optimum(const std::string& suite) {
-    // cec2011 reports raw objectives (no published optima); cec2013lsgo optima
-    // are 0 by construction but the imported DECC-G/MOS tables report raw
-    // objectives, so the sign check is not meaningful there either.
+    // CEC2011 reports raw objective values (no published optima). CEC2013-LSGO
+    // optima are 0 by construction, but the imported DECC-G/MOS tables report
+    // raw values, so the sign check does not apply there either.
     return suite == "cec2017" || suite == "cec2020" || suite == "cec2013";
 }
 
+// Reduced protocol: the budget is overridden (max_nfes_override != 0) or
+// there are fewer than 25 runs.
 bool is_reduced_protocol(long long runs, long long max_nfes_override) {
     return max_nfes_override != 0 || runs < 25;
 }
@@ -325,9 +330,10 @@ std::optional<bool> reduced_protocol_from_environment(const std::filesystem::pat
         return std::nullopt;
     }
     const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    // No JSON parser in the tooling: pull the two top-level numbers out
-    // directly. MATLAB jsonencode may write large integers in E notation
-    // (1e6 -> 1.0E+6), so accept a general number token.
+    // The tools have no JSON parser, so read the two numbers with a regex.
+    // MATLAB jsonencode may write large integers in E notation
+    // (1e6 -> 1.0E+6), so accept a general number token. A missing or
+    // out-of-range field gives nullopt.
     const auto number_field = [&text](const char* key) -> std::optional<long long> {
         const std::regex re(std::string("\"") + key +
                             "\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)");
@@ -375,10 +381,9 @@ RunVerification classify_run(const std::vector<SummaryRow>& generated,
     v.optimizer = join_distinct(&SummaryRow::optimizer);
     v.suite = join_distinct(&SummaryRow::suite);
 
-    // Reuse the existing reference alignment for win/tie/loss and ref means.
-    // compare_with_references emits exactly one entry per generated row, in
-    // order, so report.entries[i] is row i's own (optimizer, suite, function,
-    // dimension) alignment.
+    // Reuse compare_with_references for win/tie/loss and reference means. It
+    // returns one entry per generated row, in order, so report.entries[i]
+    // belongs to row i (same optimizer, suite, function and dimension).
     const ComparisonReport report = compare_with_references(generated, reference_root);
     v.wins = report.wins;
     v.ties = report.ties;
@@ -403,8 +408,8 @@ RunVerification classify_run(const std::vector<SummaryRow>& generated,
         }
 
         // (2) Sign: a best error below the floor means the optimizer beat the
-        // known optimum, which a correct implementation cannot do. Judged
-        // under this row's own suite.
+        // known optimum, which a correct implementation cannot do. Uses this
+        // row's own suite.
         if (suite_has_known_optimum(row.suite) && row.best < thresholds.negative_error_floor) {
             check.sign_ok = false;
             check.failures.push_back("best error " + format_reason_value(row.best) +
@@ -412,9 +417,10 @@ RunVerification classify_run(const std::vector<SummaryRow>& generated,
                                      " (beats the known optimum)");
         }
 
-        // (3) Gross deviation vs a non-trivial reference mean. A hard failure
-        // only at full protocol; under a reduced budget a large gap is the
-        // expected consequence of fewer evaluations, so it is informational.
+        // (3) Gross deviation: mean > gross_factor x |reference mean|, for
+        // references above the trivial floor. A hard failure only at full
+        // protocol; with a reduced budget a large gap is expected, so it is
+        // only noted.
         const ComparisonEntry* entry = i < report.entries.size() ? &report.entries[i] : nullptr;
         if (entry != nullptr && entry->reference_mean.has_value()) {
             const Real ref_mean = *entry->reference_mean;
@@ -468,8 +474,8 @@ void write_verification_json(const RunVerification& v, const std::filesystem::pa
     bool first = true;
     for (const auto& c : v.checks) {
         for (const auto& reason : c.failures) {
-            // Only hard failures count toward the verdict; list them all here
-            // (informational notes are suffixed in the reason text).
+            // List every reason. Only hard failures count toward the
+            // verdict; informational notes say so in their text.
             if (!first) {
                 out << ", ";
             }

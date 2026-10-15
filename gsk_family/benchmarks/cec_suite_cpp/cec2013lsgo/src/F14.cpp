@@ -7,10 +7,10 @@ F14::F14(const std::filesystem::path& dataDir) : Benchmarks(dataDir) {
     maxX = 100;
     ID = 14;
     s_size = 20;
-    dimension = 905; // because of overlapping
+    dimension = 905; // group sizes sum to 1000; 19 overlaps of 5 leave 905
     overlap = 5;
-    // Same load order as the reference: s first, then the grouped shift
-    // vector (readOvectorVec needs s).
+    // Load order as in the reference: s first, because readOvectorVec()
+    // needs the group sizes.
     s = readS(s_size);
     OvectorVec = readOvectorVec();
     Pvector = readPermVector();
@@ -24,7 +24,7 @@ double F14::compute(const double* x) {
     int i;
     double result = 0.0;
 
-    // s_size non-separable parts with conflicting overlapping rotation
+    // s_size rotated, overlapping groups with their own shifts (conflicting)
     int c = 0;
     for (i = 0; i < s_size; i++) {
         std::vector<double>& anotherz1 = rotateVectorConflict(i, c, x);

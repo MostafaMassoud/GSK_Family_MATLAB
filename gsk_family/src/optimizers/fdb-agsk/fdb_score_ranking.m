@@ -1,18 +1,17 @@
 function [indFDB] = fdb_score_ranking(population, fitness)
-%FDB_SCORE_RANKING Faithful port of the FDB-AGSK ranking selector (Case 2).
+%FDB_SCORE_RANKING Population indices sorted by descending FDB score (Case 2).
 %
-% Source (transcribed verbatim):
-%   historical source: FDB-AGSK reference FDB_Func2.m
+%   indFDB = fdb_score_ranking(population, fitness)
 %
-% Same Fitness-Distance Balance score as fdb_score_best (FDB_Func1), but
-% returns the FULL index ranking sorted by DESCENDING score (indFDB).
-% Ported separately because it differs materially from FDB_Func1 (vector
-% ranking output vs scalar argmax).
+% Faithful port of the FDB-AGSK reference FDB_Func2.m (historical source).
+% population: NP x D; fitness: NP values (lower is better).
+% Same FDB score as fdb_score_best (FDB_Func1), but returns the full
+% ranking: a 1 x NP row of indices, highest score first. Kept as its own
+% file because the output differs (a ranking, not a single argmax).
 %
-% Preserved reference quirk: in the degenerate flat-fitness branch the
-% function draws randi into a local variable that is NOT the output, so
-% indFDB is returned EMPTY (the Case2 caller would then error on indexing,
-% exactly as the reference would).
+% Reference quirk, kept: if all fitness values are equal, randi is drawn
+% into a local variable, not the output, so indFDB is empty. The Case 2
+% caller then fails on indexing, as the reference would.
 
 indFDB = [];
 
@@ -27,13 +26,12 @@ divDistances = zeros(1, populationSize);
 
 if min(fitness) == max(fitness)
 
-    index = randi(populationSize); %#ok<NASGU> % consumed but not returned (as written)
+    index = randi(populationSize); %#ok<NASGU> % one RNG draw; not returned
 
 else
 
-    % Manhattan distance to best + normalization, vectorized. sum(...,2) sums
-    % over dimensions in the same order as the original inner j-loop, so the
-    % scores are bit-identical to the loop version.
+    % Vectorized distance and normalization. sum(...,2) adds the dimensions
+    % in the same order as the original loop, so scores match bit for bit.
     distances = sum(abs(best - population), 2).';
     f = fitness(:).';
     minFitness = min(f); maxMinFitness = max(f) - minFitness;
@@ -42,9 +40,9 @@ else
     normDistances = (distances - minDistance) / maxMinDistance;
     divDistances = normFitness + normDistances;
 
-    [~, index] = max(divDistances); %#ok<NASGU> % computed but unused for the ranking output (as written)
+    [~, index] = max(divDistances); %#ok<NASGU> % unused, as in the reference
 
-    % Sort FDB scores
+    % Rank by FDB score, highest first.
     [~, indFDB] = sort(divDistances, 'descend');
 
 end

@@ -1,70 +1,67 @@
 function result = atmals_gsk_optimize(problem, options)
-%ATMALS_GSK_OPTIMIZE Faithful MATLAB port of ATMALS-GSK (adaptive GSK with
-%memory-based parameter selection and best-solution local search).
+%ATMALS_GSK_OPTIMIZE Faithful MATLAB port of the ATMALS-GSK optimizer.
 %
-% Historical source notes (transcribed line by line):
+%   result = atmals_gsk_optimize(problem, options)
+%   Adaptive GSK with memory-based parameter selection and a local search
+%   around the best solution. Interface: docs/reference/matlab_interface.md.
+%   options.seed is required (error 'atmals_gsk:options'). Optional: np
+%   (default 100) and kf_pool, kr_pool, k_pool, p_pool, pls_pool; each pool
+%   must contain its initial value (else error 'atmals_gsk:options').
+%
+% Sources, transcribed line by line:
 %   historical source: atmalsgsk/atmalsgsk/cec2017/ATMALS_GSK.m
 %   historical source: atmalsgsk/atmalsgsk/cec2011/ATMALS_GSK.m
 %   historical source: atmalsgsk/atmalsgsk/cec2017/ProbUpdate.m
-%       (byte-identical to .../cec2011/ProbUpdate.m; ported as
-%        atmals_prob_update.m with atmals_gaussmf.m replacing the Fuzzy
-%        Logic Toolbox gaussmf)
+%       -> atmals_prob_update.m (atmals_gaussmf.m replaces the Fuzzy Logic
+%          Toolbox gaussmf)
 %   historical source: atmalsgsk/atmalsgsk/cec2017/RouletteWheelSelection.m
-%       (byte-identical to .../cec2011/RouletteWheelSelection.m; ported as
-%        atmals_roulette_select.m)
+%       -> atmals_roulette_select.m
 %   historical source: atmalsgsk/atmalsgsk/cec2017/boundConstraint.m
-%       (byte-identical to .../cec2011/boundConstraint.m; transcribed as the
-%        boundConstraint local function below)
+%       -> local function boundConstraint below
+%   The cec2011 copies of the last three files are byte-identical.
 %
-% options.protocol = 'cec2017' (default) | 'cec2011' selects which of the two
-% reference driver behaviors is reproduced:
-%   'cec2017': G_Max = fix(max_nfes/np); Mean_Fit signal = mean of the best
-%              half of abs(fitness - optimum); local-search out-of-bound
-%              coordinates clipped exactly to the bounds; senior donors from
-%              the cec2017-local partition (atmals_senior_r1r2r3_cec2017
-%              below: PartSize+1 .. pop_size-PartSize middle block, which
-%              the shared src/common Senior helper intentionally does not
-%              reproduce -- it uses round(NP*(1-P)) instead, differing
-%              whenever NP*P is an exact half-integer).
-%   'cec2011': G_Max = max_nfes/np (no fix); Mean_Fit signal = mean of the
-%              best half of the raw fitness (the CEC2011 problems have no
-%              known optima); local-search out-of-bound coordinates clipped
-%              to bound+eps / bound-eps; senior donors from the cec2011-local
-%              partition (atmals_senior_r1r2r3_cec2011 below); dedicated
-%              senior-only branch for problem_size == 1.
-% If problem.optimum is NaN under the 'cec2017' protocol, the optimum-based
-% Mean_Fit signal is undefined; the port falls back to the cec2011 raw-fitness
-% signal (the reference never ran cec2017 with unknown optima).
+% options.protocol picks which reference driver to reproduce
+% (other values raise 'atmals_gsk:protocol'):
+%   'cec2017' (default): G_Max = fix(max_nfes/np); Mean_Fit = mean of the
+%       best half of abs(fitness - optimum); out-of-bound local-search
+%       coordinates are clipped exactly to the bound; senior donors come
+%       from atmals_senior_r1r2r3_cec2017 below (middle block
+%       PartSize+1 .. NP-PartSize, unlike the shared src/common helper).
+%   'cec2011': G_Max = max_nfes/np (no fix); Mean_Fit = mean of the best
+%       half of the raw fitness (CEC2011 optima are unknown); out-of-bound
+%       local-search coordinates go to bound+eps / bound-eps; senior donors
+%       come from atmals_senior_r1r2r3_cec2011 below; problem_size == 1 has
+%       its own senior-only branch.
+%   If problem.optimum is NaN under 'cec2017', Mean_Fit falls back to the
+%   cec2011 raw-fitness signal (the reference never ran that case).
 %
-% Preserved reference quirks (deliberate, do NOT "fix"):
-%   * RP update uses the LOCAL-SEARCH range constants as written:
-%     RP = RP_Min + (RangeLS_Max - RangeLS_Min)*(g/G_Max), so RP grows from
-%     3 to only ~3.2; RP_Max = 5 is defined but never used.
-%   * The local search draws randperm(pop_size) into iii_mat but the loop
-%     overwrites rows 1..NLS of ui, not the rows listed in iii_mat. The
-%     unused randperm draw is kept because it consumes RNG state.
-%   * The senior phase always uses the FIXED P (P_GSK = 0.1): the adaptive P
-%     is selected by roulette every generation but never consumed (in either
-%     protocol file).
-%   * atmals_prob_update quirks: gaussmf center is the pool INDEX, and the
-%     memory weighting gives the OLDEST reward row the LARGEST weight (see
-%     atmals_prob_update.m).
+% Reference quirks, kept on purpose (do NOT "fix"):
+%   * The RP update uses the local-search range constants:
+%     RP = RP_Min + (RangeLS_Max - RangeLS_Min)*(g/G_Max), so RP only grows
+%     from 3 to about 3.2. RP_Max = 5 is defined but never used.
+%   * The local search draws randperm(pop_size) into iii_mat, then changes
+%     rows 1..NLS of ui, not the rows in iii_mat. The unused draw is kept
+%     because it consumes RNG state.
+%   * The senior phase always uses the fixed P = 0.1 (P_GSK). The adaptive P
+%     is picked by roulette every generation, but the senior phase never
+%     uses it (both protocols).
+%   * atmals_prob_update centers gaussmf on the pool INDEX and gives the
+%     OLDEST reward row the LARGEST weight (see atmals_prob_update.m).
 %
-% RNG setup is centralized in gsk_set_rng(options). The runner uses a
-% deterministic legacy-seed replacement for the historical
-% rand('seed', sum(100 * clock)) ATMALS-GSK reference driver; wall-clock
-% seeding is not used by this project.
-% For the published CEC2017 protocol, result.error is abs(best - optimum),
-% zeroed at the standard CEC target error (1e-8).
-%
-% Interface: see docs/reference/matlab_interface.md. result = atmals_gsk_optimize(problem, options)
+% RNG: gsk_set_rng(options) seeds it. The reference driver seeded from the
+% clock (rand('seed', sum(100 * clock))); the runner passes a deterministic
+% seed instead (legacy 'seed' generator in reference runs). Wall-clock
+% seeding is never used.
+% result.error: abs(best - optimum) for suite cec2017 under protocol
+% 'cec2017', else best - optimum; set to 0 below problem.target_error
+% (standard CEC value 1e-8); NaN when the optimum is unknown.
 
 start_time = tic;
 
 if ~isfield(options, 'seed') || isempty(options.seed)
     error('atmals_gsk:options', 'options.seed is required');
 end
-actual_seed = gsk_set_rng(options);   % direct-call default 'twister'; selects threefry|twister|seed|state
+actual_seed = gsk_set_rng(options);   % options.rand_generator: threefry|twister|seed|state (default twister)
 
 protocol = 'cec2017';
 if isfield(options, 'protocol') && ~isempty(options.protocol)
@@ -81,7 +78,7 @@ max_nfes = problem.max_nfes;
 lu = [problem.lb; problem.ub];
 has_optimum = ~isnan(problem.optimum);
 
-%% Parameter settings (reference ATMALS_GSK.m, identical in both files)
+%% Parameter settings (same in both reference ATMALS_GSK.m files)
 pop_size = 100;
 if isfield(options, 'np') && ~isempty(options.np); pop_size = options.np; end
 
@@ -104,10 +101,10 @@ if isfield(options, 'pls_pool') && ~isempty(options.pls_pool); PLS_VAL = options
 alpha = 0.98;
 PLS = 1;
 
-% The first-generation atmals_prob_update looks the hard-coded initial picks
-% up in their pools (find(abs(VALs - val) < eps)); an overridden pool that
-% lacks its initial pick would otherwise crash inside atmals_gaussmf. Same
-% match predicate; no RNG draws, defaults unchanged.
+% A custom pool must contain its hard-coded initial value: the first
+% atmals_prob_update call finds it with abs(VALs - val) < eps and would
+% crash in atmals_gaussmf without a match. Same test here; no RNG draws, and
+% default runs are unaffected.
 pool_checks = {'kf_pool', KF_VAL, KF_GSK; 'kr_pool', KR_VAL, KR_GSK; ...
     'k_pool', K_VAL, K_GSK; 'p_pool', P_VAL, P_GSK; 'pls_pool', PLS_VAL, PLS};
 for c = 1:size(pool_checks, 1)
@@ -122,7 +119,7 @@ end
 NLS = round(0.05 * pop_size);
 
 RP_Min = 3;
-RP_Max = 5; %#ok<NASGU> % defined by the reference, never used in the RP update (quirk preserved)
+RP_Max = 5; %#ok<NASGU> % defined by the reference but never used (quirk kept)
 
 RangeLS_Max = 0.2;
 RangeLS_Min = 1e-10;
@@ -136,7 +133,7 @@ end
 KF = KF_GSK;
 KR = KR_GSK;
 K = K_GSK;
-P = P_GSK; %#ok<NASGU> % adaptive P is tracked but never consumed (reference quirk)
+P = P_GSK; %#ok<NASGU> % the senior phase never uses the adaptive P (reference quirk)
 
 Prob_KF_OLDMAT = ones(1, length(KF_VAL));
 Prob_KR_OLDMAT = ones(1, length(KR_VAL));
@@ -145,29 +142,29 @@ Prob_P_OLDMAT = ones(1, length(P_VAL));
 Prob_PLS_OLDMAT = ones(1, length(PLS_VAL));
 
 %% Initialize the main population (reference one-liner, or runner X0)
-% Reference/reproduction runs do not pass X0, so this remains the original
-% one-draw initialization. Unified fair-comparison runs pass the runner-drawn
-% X0 plus the post-X0 RNG state; accepting both here lets every optimizer start
-% from the same population and same next random number for the same CEC cell.
+% Reference runs pass no X0 and keep the original single-draw start.
+% Unified (fair-comparison) runs pass the runner's X0 and the RNG state
+% right after it, so every optimizer starts from the same population and
+% the same next random number for the same problem and run.
 popold = gsk_initial_population_from_options(options, pop_size, lu(1, :), lu(2, :));
 gsk_restore_rng_after_initialization(options);
-pop = popold; % the old population becomes the current population
+pop = popold;
 
 fitness = problem.evaluate(pop);
 
-% Mean_Fit best-half signal, per protocol
+% Mean_Fit: mean of the best half of the protocol's signal
 if use_cec2011 || ~has_optimum
     aa = fitness;                          % cec2011 file (raw fitness, unknown optima)
 else
     aa = abs(fitness - problem.optimum);   % cec2017 file
 end
 bb = sort(aa);
-cc = bb(1:floor(pop_size/2));   % floor: robust to an odd custom np (no-op for the default np=100)
+cc = bb(1:floor(pop_size/2));   % floor() handles an odd custom np; no effect for the default np = 100
 Mean_Fit = mean(cc);
 
 nfes = 0;
 bsf_fit_var = 1e+300;
-bsf_solution = pop(1, :); % defined-before-use guard; overwritten identically by the loop below
+bsf_solution = pop(1, :); % always defined; the loop below sets it as the reference does
 
 for i = 1:pop_size
     nfes = nfes + 1;
@@ -178,10 +175,10 @@ for i = 1:pop_size
     end
 end
 
-% Per-generation convergence recording (interface requirement). The
-% reference per-child counter reads max_nfes+1 when a generation crosses the
-% budget; only the RECORDED copies are clipped at max_nfes (bookkeeping only,
-% the loop counter and its crossing semantics are untouched).
+% Convergence trace, one entry per generation (required by the interface).
+% The reference counter reads max_nfes+1 when a generation crosses the
+% budget. Only the recorded copies are clipped to max_nfes; the loop counter
+% keeps the reference behavior.
 max_records = ceil(max_nfes / pop_size) + 2;
 conv_nfes = zeros(max_records, 1);
 conv_fit = zeros(max_records, 1);
@@ -198,10 +195,10 @@ while nfes < max_nfes
         %% ---- protocol 'cec2017' generation (cec2017/ATMALS_GSK.m) ----
         D_Gained_Shared_Junior = ceil((problem_size) * (1 - g / G_Max).^(K * ones(pop_size, 1)));
         D_Gained_Shared_Senior = problem_size - D_Gained_Shared_Junior;
-        pop = popold; % the old population becomes the current population
+        pop = popold;
 
         [~, indBest] = sort(fitness, 'ascend');
-        [Rg1, Rg2, Rg3] = Gained_Shared_Junior_R1R2R3(indBest); % shared src/common port (RNG-stream identical)
+        [Rg1, Rg2, Rg3] = Gained_Shared_Junior_R1R2R3(indBest); % shared src/common helper, same RNG draws
 
         [R1, R2, R3] = atmals_senior_r1r2r3_cec2017(indBest, P_GSK); % quirk: fixed P_GSK, not the adaptive P
         R01 = 1:pop_size;
@@ -264,7 +261,7 @@ while nfes < max_nfes
 
     else
         %% ---- protocol 'cec2011' generation (cec2011/ATMALS_GSK.m) ----
-        pop = popold; % the old population becomes the current population
+        pop = popold;
 
         if (problem_size > 1)
             D_Gained_Shared_Junior = ceil((problem_size) * (1 - g / G_Max).^(K * ones(pop_size, 1)));
@@ -313,7 +310,7 @@ while nfes < max_nfes
 
             RangeLS = RangeLS_Max - (RangeLS_Max - RangeLS_Min) * (g / G_Max);
 
-            iii_mat = randperm(pop_size); % quirk preserved (see protocol cec2017 branch)
+            iii_mat = randperm(pop_size); % quirk kept (see the cec2017 branch)
             iii_mat = iii_mat(1:NLS); %#ok<NASGU>
 
             for iii = 1:NLS
@@ -332,8 +329,8 @@ while nfes < max_nfes
             end
 
         else
-            % cec2011 file: dedicated senior-only branch for problem_size == 1
-            % (hard-coded 0.5 knowledge factor and 0.9 ratio, as written)
+            % cec2011 file: senior-only branch for problem_size == 1, with the
+            % hard-coded KF = 0.5 and KR = 0.9 written in the reference
             D_Gained_Shared_Senior = problem_size; %#ok<NASGU>
 
             [~, indBest] = sort(fitness, 'ascend');
@@ -360,7 +357,7 @@ while nfes < max_nfes
 
             RangeLS = RangeLS_Max - (RangeLS_Max - RangeLS_Min) * (g / G_Max);
 
-            iii_mat = randperm(pop_size); % quirk preserved
+            iii_mat = randperm(pop_size); % quirk kept (see the cec2017 branch)
             iii_mat = iii_mat(1:NLS); %#ok<NASGU>
 
             for iii = 1:NLS
@@ -391,7 +388,7 @@ while nfes < max_nfes
         aa = abs(children_fitness - problem.optimum);   % cec2017 signal
     end
     bb = sort(aa);
-    cc = bb(1:floor(pop_size/2));   % floor: robust to an odd custom np (no-op for the default np=100)
+    cc = bb(1:floor(pop_size/2));   % floor() handles an odd custom np; no effect for the default np = 100
     Mean_Fit_New = mean(cc);
 
     [Prob_KF, Prob_KF_OLDMAT] = atmals_prob_update(Prob_KF_OLDMAT, KF_VAL, KF, Mean_Fit, Mean_Fit_New, alpha);
@@ -410,14 +407,14 @@ while nfes < max_nfes
     K = K_VAL(ii);     % Knowledge Rate
 
     ii = atmals_roulette_select(Prob_P.^RP);
-    P = P_VAL(ii); %#ok<NASGU> % selected but never consumed (reference quirk)
+    P = P_VAL(ii); %#ok<NASGU> % the senior phase never uses it (reference quirk)
 
     ii = atmals_roulette_select(Prob_PLS.^RP);
     PLS = PLS_VAL(ii);
 
     Mean_Fit = Mean_Fit_New;
 
-    %% Budget accounting and best-so-far update (reference crossing semantics)
+    %% Budget count and best-so-far update (reference budget-crossing rule)
     for i = 1:pop_size
         nfes = nfes + 1;
         if nfes > max_nfes; break; end
@@ -435,7 +432,7 @@ while nfes < max_nfes
     n_rec = n_rec + 1;
     conv_nfes(n_rec) = min(nfes, max_nfes); % recorded copy clipped (see above)
     conv_fit(n_rec) = bsf_fit_var;
-end % end while loop
+end
 
 %% Result assembly (docs/reference/matlab_interface.md)
 if has_optimum
@@ -493,10 +490,11 @@ end
 
 function [R1, R2, R3] = atmals_senior_r1r2r3_cec2017(indBest, P)
 %ATMALS_SENIOR_R1R2R3_CEC2017 Faithful port of the cec2017-local senior helper.
-% Source: historical source: atmalsgsk/atmalsgsk/cec2017/Gained_Shared_Senior_R1R2R3.m
-% Kept variant-local because the middle block ends at pop_size-PartSize,
-% whereas the shared src/common Senior helper uses round(pop_size*(1-P));
-% the two differ whenever pop_size*P is an exact half-integer.
+% historical source: atmalsgsk/atmalsgsk/cec2017/Gained_Shared_Senior_R1R2R3.m
+% Draws R1, R2, R3 (one per individual) from the best, middle and worst
+% rank blocks, with PartSize = round(P*NP). Kept local because the middle
+% block ends at NP-PartSize, while the shared src/common helper uses
+% round(NP*(1-P)); the two differ whenever NP*P is an exact half-integer.
 
 pop_size = length(indBest);
 
@@ -518,10 +516,12 @@ end
 
 function [R1, R2, R3] = atmals_senior_r1r2r3_cec2011(indBest)
 %ATMALS_SENIOR_R1R2R3_CEC2011 Faithful port of the cec2011-local senior helper.
-% Source: historical source: atmalsgsk/atmalsgsk/cec2011/Gained_Shared_Senior_R1R2R3.m
-% (no P argument; fixed round(0.1/0.9) partition boundaries, which differ from
-% Gained_Shared_Senior_R1R2R3(indBest, 0.1) whenever round(pop_size*0.9) ~=
-% pop_size - round(pop_size*0.1)).
+% historical source: atmalsgsk/atmalsgsk/cec2011/Gained_Shared_Senior_R1R2R3.m
+% No P argument: the block bounds are fixed at round(NP*0.1) and
+% round(NP*0.9). These equal the shared src/common helper with P = 0.1
+% (1 - 0.1 == 0.9 in double). The cec2017 helper above ends the middle
+% block at NP - round(NP*0.1) instead; the two differ whenever
+% round(NP*0.9) ~= NP - round(NP*0.1).
 
 pop_size = length(indBest);
 
@@ -540,11 +540,13 @@ R3 = R3(R3rand);
 end
 
 function vi = boundConstraint(vi, pop, lu)
-%BOUNDCONSTRAINT Midpoint bound repair, transcribed from the reference
-% boundConstraint.m placed next to ATMALS_GSK.m (byte-identical in the
-% cec2017 and cec2011 reference folders).
+%BOUNDCONSTRAINT Midpoint bound repair, from the reference boundConstraint.m.
+% A coordinate of vi below lb (above ub) is set to the midpoint between the
+% parent value in pop and that bound. vi and pop are NP x D; lu is 2 x D
+% ([lb; ub]). The file is byte-identical in the cec2017 and cec2011
+% reference folders.
 
-[NP, ~] = size(pop); % the population size and the problem's dimension
+[NP, ~] = size(pop); % NP = population size
 
 % check the lower bound
 xl = repmat(lu(1, :), NP, 1);

@@ -13,7 +13,7 @@ Imported mapping:
 | `cec2020/input_data/` | `cec_suite_cpp/cec2020/input_data/` |
 | `cec2013/src/` | current standalone C++ CEC2013 port |
 | `cec2013/input_data/` | CEC2013 R package `inst/extdata/` |
-| `cec2013lsgo/src/` | `cec_suite_cpp/cec2013lsgo/cec2013lsgo/*.cpp`, `*.h`, excluding generated Cython/Python binding files |
+| `cec2013lsgo/src/` | `cec_suite_cpp/cec2013lsgo/cec2013lsgo/*.cpp`, `*.h`, excluding generated language-binding files |
 | `cec2013lsgo/input_data/` | `cec_suite_cpp/cec2013lsgo/cec2013lsgo/cdatafiles/` |
 | `cec2011/src/` | current standalone C++ CEC2011 port |
 | `cec2011/input_data/` | committed CEC2011 text assets and suite data |
@@ -22,8 +22,8 @@ Excluded from this staging copy:
 
 - MEX binaries such as `*.mexw64`.
 - PDF reports.
-- Python/Cython wrappers for CEC2013LSGO.
-- Generated Cython/Python binding files such as `cec2013.cpp`.
+- Wrappers for CEC2013LSGO in other languages.
+- Generated binding files such as `cec2013.cpp`.
 - CEC2013 C/R source copies not needed by the current standalone C++ port.
 - CEC2011 MATLAB source copies not needed by the current standalone C++ port.
 - Build-system helper files unless needed by the standalone C++ port.

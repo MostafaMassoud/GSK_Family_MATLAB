@@ -1,7 +1,7 @@
 # DT-GSK reference evidence — provenance
 
 The `dt-gsk` reference folders were imported from the DT-GSK reference
-implementation (Python, MIT license):
+implementation (MIT license):
 
 - Repository: <https://github.com/MostafaMassoud/DT-GSK>, local checkout tag
   `v2.46` (commit `64c70bb54125c9361b821939802ee4810fb7af50`), folder
@@ -23,11 +23,12 @@ implementation (Python, MIT license):
 
 Protocol (all suites): `pub` profile, unified seed
 `get_cec_seed(20240620, dim, func, run)`, Threefry substreams, NP = 5*D,
-full budgets (`10000*D` for CEC2017/CEC2013), CPython 3.10.11 with Numba 0.64
-kernels, single-threaded kernels. The CEC2017 reference `verification.json`
+full budgets (`10000*D` for CEC2017/CEC2013), the reference implementation's
+compiled kernels, single-threaded (runtime versions are recorded in
+`evidence/environment.json`). The CEC2017 reference `verification.json`
 verdict is `CONSISTENT` over 116 cells.
 
 These tables are the comparison baseline for the MATLAB port
 `src/optimizers/dt-gsk/` (see `src/optimizers/dt-gsk/README.md` for the port
-record and validation). They were produced by the Python implementation, not by
-this toolkit, so agreement with them is cross-implementation evidence.
+record and validation). They were produced by the reference implementation, not
+by this toolkit, so agreement with them is cross-implementation evidence.

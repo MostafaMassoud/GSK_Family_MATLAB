@@ -79,9 +79,8 @@ exception in [`docs/reference/porting_notes.md`](../reference/porting_notes.md).
 - **Never weaken a test tolerance to make a change pass.** Every `ctest` suite
   asserts against committed ground truth; if a port no longer matches, the port
   is wrong, not the threshold.
-- **No Python, anywhere.** Code, tooling, bindings, and package metadata are all
-  excluded by contract. Tooling languages are C++, MATLAB, PowerShell, and
-  CMake.
+- **Code is MATLAB and C++ only (no other languages or generated bindings).**
+  Tooling languages are C++, MATLAB, PowerShell, and CMake.
 - **No external GSK or CEC imports** into the active tree. The committed ports,
   imported reference tables, and provenance notes are the self-contained source
   of truth.

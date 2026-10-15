@@ -1,43 +1,45 @@
-% run_all_cec2011.m
-% =========================================================================
-% Run the GSK-family optimizer(s) on the CEC2011 real-world suite.
+%RUN_ALL_CEC2011 Run GSK-family optimizers on the CEC2011 real-world suite.
 %
-% HOW TO USE
-%   1. Open this file in MATLAB (it sits next to the  gsk_family/  folder).
+% How to use:
+%   1. Open this file in MATLAB (it sits next to the gsk_family/ folder).
 %   2. Press the green Run button (click "Change Folder" if MATLAB asks).
-%   3. Each problem prints one results row; a results table and a
-%      Reference-GSK comparison print. The full report is also saved to
+%   3. Each problem prints one results row, then a results table and a
+%      comparison with the optimizer's reference results. The full report is
+%      also saved to
 %      results/_run_all/<opt>/cec2011/summary/<opt>_native_log_*.txt
 %      (per-run detail in <opt>_native_runs_log_*.txt).
 %
-% CEC2011 notes: 22 real-world problems with NATIVE (per-problem) dimensions
-% and NO known optimum -- statistics are over raw objective values, which can
-% be negative. The budget is 150,000 evaluations per problem. Keep
-% dimensions = [0] (0 = each problem's own dimension). The CONFIG below runs
-% a subset (problems 4:6); set functions = 1:22 for the full suite.
-% DT-GSK runs the unified seed + threefry under every seed_policy and samples
-% its own NP = 5*D initial population (it ignores the runner X0).
-% =========================================================================
+% CEC2011 notes:
+%   - 22 real-world problems, each with its own (native) dimension.
+%   - No known optimum: statistics use raw objective values, which can be
+%     negative.
+%   - Budget: 150,000 evaluations per problem.
+%   - Keep dimensions = 0 (0 = each problem's own dimension).
+%   - The CONFIG below runs problems 4:6 only; set functions = 1:22 for the
+%     full suite.
+%   - DT-GSK uses the unified seed and threefry under every seed_policy, and
+%     samples its own NP = 5*D initial population (it ignores the runner X0).
 
 %% ------------------------------ CONFIG ----------------------------------
 optimizers  = {'gsk'};
 % optimizers = {'gsk', 'agsk', 'apgsk','fdb-agsk','egsk','atmals-gsk','dt-gsk'};
 
-functions   = 4:6;         % subset; full suite is 1:22 (22 problems, none excluded)
+functions   = 4:6;         % subset; full suite is 1:22 (none excluded)
 dimensions  = 0;            % 0 = each problem's native dimension (required for CEC2011)
 runs        = 25;           % CEC2011 protocol (adjust as needed)
 max_nfes    = 0;            % 0 = suite default (150,000 evaluations)
-% Base seed is centralized in gsk_family/src/runners/run_experiment.m.
+% The base seed is set in gsk_family/src/runners/run_experiment.m.
 % seed_policy:
-%   'unified'   -> same seed + same runner-generated X0 + same post-X0 RNG
-%                  state per (D,function,run); threefry if available, else twister
-%   'reference' -> published-table reproduction; per-optimizer reference rules
-%   'native'/'derived' -> optimizer/suite-hashed diagnostic schedules
+%   'unified'   -> for each (D, function, run), every optimizer gets the same
+%                  seed, the same runner-made X0 and the same RNG state after
+%                  X0; threefry if available, else twister
+%   'reference' -> reproduce published tables with each optimizer's own rules
+%   'native'/'derived' -> diagnostic seed schedules hashed per optimizer/suite
 seed_policy = 'unified';
 rand_generator = 'threefry';
-use_parallel = true;       % true = parfor run loop; false = serial baseline / troubleshooting
+use_parallel = true;       % true = parfor over runs; false = serial baseline / troubleshooting
 write_graphs = false;      % false = keep numeric curves/gen_logs, skip slow PNG rendering
-overwrite = true;          % true = archive previous result tree and start a clean run
+overwrite = true;          % true = archive the previous result tree and start clean
 % -------------------------------------------------------------------------
 
 suite = 'cec2011';
@@ -50,9 +52,9 @@ if ~isfolder(src_dir)
 end
 addpath(genpath(src_dir));                      % optimizers, runners, helpers
 rehash;
-clear run_experiment;                           % reload updated runner helpers in long MATLAB sessions
-% Prerequisite: CEC suites require the C++ gskcec_eval MEX bridge.
-% Build first; see build.txt and gsk_family/build.txt for commands.
+clear run_experiment;                           % pick up runner edits in long MATLAB sessions
+% The CEC suites need the C++ MEX bridge gskcec_eval. Build it first
+% (RUNBOOK.md section 3; commands also in build.txt).
 gskcec_require_mex(root, 'run_all_cec2011');
 
 fprintf('\n==================== run_all (CEC2011) ====================\n');
@@ -81,8 +83,8 @@ for i = 1:numel(optimizers)
     end
 end
 if strcmpi(seed_policy, 'unified')
-    % Confirms the files written by successful optimizers really used identical
-    % seeds for each (D,function,run); catches accidental policy drift.
+    % Check that the passed optimizers recorded the same seed for each
+    % (D, function, run) in seed_schedule.csv; catches seed-policy drift.
     verify_unified_seed_schedule(fullfile(root, 'results', '_run_all'), passed_optimizers, suite);
 end
 

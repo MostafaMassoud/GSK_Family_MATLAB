@@ -3,8 +3,8 @@
 > **What this is:** A map of the `gsk_family` repository -- which folder owns
 > what, and where a new file belongs. The tree is split by language: MATLAB
 > GSK-family optimizers in `src/`, standalone C++20 CEC ports and tooling in
-> `benchmarks/`, joined only by the optional `gskcec_eval` MEX bridge. There is
-> no Python in this project. **For:** anyone navigating the source tree or
+> `benchmarks/`, joined only by the optional `gskcec_eval` MEX bridge.
+> **For:** anyone navigating the source tree or
 > deciding where to add a file. **Prerequisites:** none.
 > **After reading:** you can predict the location of any file from its purpose
 > and know which folders are generated (and gitignored).
@@ -12,6 +12,11 @@
 This repository is intentionally split by language and responsibility.
 
 ```text
+GSK_Family_MATLAB/        repository root
+  README.md               short overview and where to start
+  RUNBOOK.md, RUNBOOK.html  beginner runbook: prerequisites, first run, parallel runs
+  run_all_cec*.m          launchers, one per CEC suite (open in MATLAB, press Run)
+  build.txt               build commands, run from the repository root
 gsk_family/
   CMakeLists.txt          C++ build entry point for CEC tooling
   README.md               project overview and quick commands
@@ -61,10 +66,10 @@ states which wins and why.
 | CEC reference result tables and curated convergence assets | CSV/TXT/PNG | Keep imported tables plus curated benchmark-side `curves/`, `curves/graphs/`, and `gen_logs/` under `benchmarks/cec_reference_results`. |
 | CEC tooling, CLIs, and tests | C++ | Keep all CEC support code under `benchmarks/cec_suite_cpp/cec_tools`. |
 | GSK-family optimizers | MATLAB | Keep implementations under `src`. |
-| Tooling scripts | PowerShell, MATLAB, or C++ | Do not add Python. |
+| Tooling scripts | PowerShell, MATLAB, or C++ | Do not add other languages. |
 
-Python files, Python wrappers, generated Cython bindings, and Python package
-dependencies are not allowed in this project.
+Files, wrappers, generated bindings, and package dependencies in any other
+language are not allowed in this project.
 
 ## Benchmarks
 
@@ -135,7 +140,7 @@ the Markdown into `docs/html`.
 ```text
 docs/
   index.md                documentation landing page
-  getting-started/        explainer, tutorial, runbook, configuration,
+  getting-started/        explainer, tutorial, command_reference, configuration,
                           user guide, troubleshooting
   reference/              this map (project_structure.md), architecture,
                           benchmark_protocol, porting_notes, cec2011_port_plan,
@@ -174,7 +179,7 @@ It reinforces the same language and folder boundaries as this document.
 | `scripts/build_docs.ps1` | HTML documentation generator | `docs/html` is generated from Markdown, not hand-edited. |
 | `scripts/analyze_results.m` | Post-run statistical analysis | Creates comparison/statistical figures without changing raw results. |
 | `scripts/compare_reference_runs.m` | Per-(dimension, function) comparison of two `per_run.csv` sets | Judges a campaign against an imported per-run reference (e.g. DT-GSK vs `cec2017/dt-gsk/evidence/per_run.csv`); needs the Statistics and Machine Learning Toolbox. |
-| `benchmarks/cec_reference_results/<suite>/dt-gsk/` | Imported DT-GSK reference tables (Python reference implementation) | Cross-implementation baseline; `cec2017/dt-gsk/` adds `PROVENANCE.md` and per-run `evidence/`. |
+| `benchmarks/cec_reference_results/<suite>/dt-gsk/` | Imported DT-GSK reference tables (produced by its reference implementation) | Cross-implementation baseline; `cec2017/dt-gsk/` adds `PROVENANCE.md` and per-run `evidence/`. |
 
 When adding new documentation, prefer a focused page under `docs/` and then add
 it to `scripts/build_docs.ps1` so the HTML site stays complete.

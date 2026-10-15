@@ -230,7 +230,7 @@ Population size is algorithm behavior and is not folded into the seed.
 DT-GSK is scheduled the same way under every `seed_policy` (`reference`,
 `unified`, `native`, `derived`). `run_experiment` treats it as unified-only
 (`is_unified_only` in `src/runners/run_experiment.m`), mirroring
-`UNIFIED_ONLY_OPTIMIZERS` in the Python reference, whose imported campaigns
+`UNIFIED_ONLY_OPTIMIZERS` in the reference implementation, whose imported campaigns
 were produced this way:
 
 - Seed: `get_cec_seed(base_seed, dim, func, run)`, the unified formula above,
@@ -266,12 +266,12 @@ Because the seed is unified, `verify_unified_seed_schedule` matches DT-GSK's
 DT-GSK does not share with them is the first population and the post-`X0` RNG
 state.
 
-MATLAB's Threefry generator and the Python reference's Threefry replica produce
-the same 64-bit words but convert them to doubles slightly differently (MATLAB
-keeps up to one more bit below 0.5), so a live MATLAB run differs from the
-Python run with the same seed by at most `2^-53` per uniform draw; integer,
-permutation, and mask draws coincide. Same-seed MATLAB and Python runs are
-therefore not expected to match bit for bit, and agreement with the imported
+MATLAB's Threefry generator produces the same 64-bit words as the reference
+implementation's Threefry replica but converts them to doubles slightly differently
+(MATLAB keeps up to one more bit below 0.5), so a live MATLAB run differs from
+the reference run with the same seed by at most `2^-53` per uniform draw;
+integer, permutation, and mask draws coincide. Same-seed MATLAB and reference
+runs are therefore not expected to match bit for bit, and agreement with the imported
 reference campaign is judged statistically (validation record:
 `src/optimizers/dt-gsk/README.md`).
 

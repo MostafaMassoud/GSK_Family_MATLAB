@@ -1,30 +1,34 @@
 function verify_unified_seed_schedule(results_root, optimizers, suite)
 %VERIFY_UNIFIED_SEED_SCHEDULE Confirm matching seeds across optimizers.
 %
-% Reads results/_run_all/<optimizer>/<suite>/summary/seed_schedule.csv and
-% verifies that the optimizers used the same seed for every (Dim,Function,Run)
-% key that two or more of their schedules contain.
+% Usage: verify_unified_seed_schedule(results_root, optimizers, suite)
+% Reads <results_root>/<optimizer>/<suite>/summary/seed_schedule.csv (the
+% launchers pass results/_run_all) and checks that the optimizers used the
+% same seed for every (Dim,Function,Run) key found in two or more schedules.
+% With fewer than two optimizers it returns at once. Prints a PASS line.
 %
-% This is a post-run safety net for the root run_all_cec*.m launchers. The
-% seed formula is already optimizer-independent, but this check proves the
-% written artifacts obeyed that contract. It catches accidental future changes
-% such as adding an optimizer index, using a per-optimizer base seed, or running
-% one optimizer under reference/native mode while the rest run unified.
+% Post-run safety net for the root run_all_cec*.m launchers. The seed formula
+% is already optimizer-independent; this check proves the written files obey
+% it. It catches future slips such as adding an optimizer index, using a
+% per-optimizer base seed, or running one optimizer in reference/native mode
+% while the rest run unified.
 %
-% Only a seed mismatch is an error. A key missing from some optimizers is a
-% warning (verify_unified_seed_schedule:missingKeys), not policy drift:
-% run_experiment records a failed (function, dimension) cell as a SKIP with no
-% schedule row (e.g. eGSK without the Optimization Toolbox), and with
-% overwrite=false a tree may hold rows from an earlier functions/runs config.
-% Keys are compared against the union of the schedules read so far, so a cell
-% missing from the first optimizer is still compared between the others.
+% Errors: verify_unified_seed_schedule:seedMismatch on a seed mismatch, and
+% :missingFile, :io or :badHeader for a missing or unreadable schedule.
+% A key missing from some optimizers is only a warning
+% (verify_unified_seed_schedule:missingKeys), not policy drift: run_experiment
+% records a failed (function, dimension) cell as a SKIP with no schedule row
+% (e.g. eGSK without the Optimization Toolbox), and with overwrite=false a
+% tree may hold rows from an earlier functions/runs config. Each schedule is
+% compared with the union of those read before it, so a cell missing from the
+% first optimizer is still compared between the others.
 %
-% Result directories are append-only. When a run is repeated after a policy
-% change, seed_schedule.csv may contain older historical rows for the same
-% (Dim,Function,Run). The reader below keeps the latest row per key; this is
-% the active schedule because run_experiment appends the active seed again
-% whenever it reuses a run whose latest row came from another configuration.
-% Old rows remain auditable, while the current schedule is what gets compared.
+% Result directories are append-only, so a run repeated after a policy change
+% can leave older rows for the same key. The reader keeps the latest row per
+% key, which is the active schedule: run_experiment appends the active seed
+% again whenever it reuses a run whose latest row came from another
+% configuration. Old rows stay for audit; only the current schedule is
+% compared.
 
 optimizers = cellstr(optimizers);
 if numel(optimizers) < 2
@@ -76,6 +80,7 @@ fprintf(['verify_unified_seed_schedule: PASS (%d optimizers, %d scheduled key(s)
 end
 
 function rows = read_seed_schedule(path)
+%READ_SEED_SCHEDULE Rows [Dim Function Run Seed], latest per key, key-sorted.
 assert(isfile(path), 'verify_unified_seed_schedule:missingFile', ...
     'missing seed schedule: %s', path);
 fid = fopen(path, 'r');

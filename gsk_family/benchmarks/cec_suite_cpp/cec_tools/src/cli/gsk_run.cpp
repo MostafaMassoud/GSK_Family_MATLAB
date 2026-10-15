@@ -1,10 +1,14 @@
-// gsk_run: experiment orchestrator.
+// gsk_run: runs an experiment given on the command line or in a config file.
 //
-// All GSK-family optimizers are MATLAB implementations under src/ (the
-// project contract forbids porting them to C++), so gsk_run validates the
-// requested experiment against the C++ benchmark factory and then drives
-// MATLAB's src/runners/run_experiment.m in -batch mode, one invocation per
-// optimizer. Results land under the output root in the documented schema.
+// The GSK-family optimizers are MATLAB code under src/ (by project rule they
+// are not ported to C++). gsk_run checks the requested cells against the C++
+// benchmark factory, then calls src/runners/run_experiment.m through
+// "matlab -batch", once per optimizer, and verifies each run against its
+// reference table (unless --no-verify). Results go under the output root in
+// the documented result schema.
+// Exit code: 0 ok, 1 usage error, 2 other error (e.g. bad config file or
+// verification could not run), 3 DEVIATES or no summary to verify. A failed
+// MATLAB call passes on MATLAB's exit code (3 if it is above 255).
 
 #include "gskcec/benchmark/factory.hpp"
 #include "gskcec/experiment/comparison.hpp"
@@ -55,7 +59,7 @@ std::string forward_slashes(const fs::path& p) {
 }
 
 // Escapes a value for a single-quoted MATLAB char literal (' -> ''), so a
-// path such as C:/Users/O'Brien/... does not break the -batch command.
+// path like C:/Users/O'Brien/... does not break the -batch command.
 std::string matlab_quote(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 2);
@@ -68,17 +72,17 @@ std::string matlab_quote(const std::string& s) {
     return out;
 }
 
-// Relative roots written in a config file resolve under --root, so a config
-// behaves the same from any working directory. Explicit --output/--reference
-// flags keep resolving against the working directory.
+// Relative roots in a config file resolve under --root, so a config behaves
+// the same from any working directory. Explicit --output/--reference flags
+// still resolve against the working directory.
 fs::path rooted(const fs::path& root, const std::string& value) {
     const fs::path p(value);
     return p.is_absolute() ? p : root / p;
 }
 
-// Strict integer flag parsing (mirrors config.cpp): the whole token must be an
+// Strict integer flag parsing, as in config.cpp: the whole token must be an
 // integer, so '--function 1,3' or '--runs 2.9' fail with a clear message
-// instead of being silently truncated to 1 / 2.
+// instead of being silently cut to 1 or 2. cli_ll does the same for long long.
 int cli_int(const std::string& flag, const std::string& value) {
     std::size_t consumed = 0;
     int v = 0;
@@ -107,6 +111,8 @@ long long cli_ll(const std::string& flag, const std::string& value) {
     return v;
 }
 
+// Returns @p path if it is free, else the first free <stem>_1<ext>,
+// <stem>_2<ext>, ... so an earlier file is never overwritten.
 fs::path noncolliding_path(const fs::path& path) {
     if (!fs::exists(path)) {
         return path;
@@ -122,6 +128,7 @@ fs::path noncolliding_path(const fs::path& path) {
     }
 }
 
+// Formats {1, 2, 3} as the MATLAB row vector "[1 2 3]".
 std::string int_list_matlab(const std::vector<int>& v) {
     std::ostringstream out;
     out << "[";
@@ -135,20 +142,20 @@ std::string int_list_matlab(const std::vector<int>& v) {
 struct CliOptions {
     fs::path project_root = ".";
     fs::path output_root;
-    fs::path reference_root; // empty => <project_root>/benchmarks/cec_reference_results
+    fs::path reference_root; // empty = config value or the default (see run_one)
     std::string matlab;
     std::string seed_policy_override;
     std::string rand_generator_override;
     bool overwrite = false;
     bool dry_run = false;
-    bool verify = true; // Mandate 1.1c: verify each run by default; --no-verify opts out
+    bool verify = true; // verify each run by default; --no-verify turns it off
 };
 
-// Mandate 1.1c: a run used a reduced (non-reference) protocol when its budget
-// was overridden or its run count is below a full-study threshold. Reduced
-// runs are legitimately worse than the published tables, so the gross-deviation
-// check and win/tie/loss become informational rather than hard failures. The
-// rule itself is shared with gsk_validate --verify (comparison.hpp).
+// A run uses a reduced (non-reference) protocol when its budget is overridden
+// or it has fewer than 25 runs (a full study). Reduced runs are expected to
+// score worse than the published tables, so the gross-deviation check and
+// win/tie/loss are informational, not hard failures. The rule is shared with
+// gsk_validate --verify (comparison.hpp).
 bool is_reduced_protocol(const gskcec::ExperimentConfig& cfg) {
     return gskcec::is_reduced_protocol(cfg.runs, cfg.max_evaluations);
 }
@@ -163,10 +170,10 @@ std::string locate_matlab(const CliOptions& opts) {
     return "matlab"; // resolved through PATH by the shell
 }
 
-// Validates the requested cells against the benchmark factory before any
-// MATLAB startup cost and resolves the suite defaults. Optimizer-independent,
-// so main() runs it once for the whole config. Returns 0, or 1 after printing
-// the reason.
+// Checks the requested functions and dimensions against the benchmark
+// factory before MATLAB starts, and fills in the suite defaults when none are
+// given. It does not depend on the optimizer, so main() calls it once.
+// Returns 0, or 1 after printing the reason. An unknown suite throws.
 int resolve_cells(const gskcec::ExperimentConfig& cfg,
                   std::vector<int>& functions,
                   std::vector<int>& dimensions) {
@@ -180,8 +187,8 @@ int resolve_cells(const gskcec::ExperimentConfig& cfg,
     }
     dimensions = cfg.dimensions;
     if (info.dimensions.empty()) {
-        // Fixed native dimension per function: 0 tells the MATLAB runner to
-        // use the native dimension.
+        // Each function has a fixed native dimension; 0 tells the MATLAB
+        // runner to use it.
         for (const int d : dimensions) {
             if (d != 0) {
                 std::cerr << "gsk_run: suite " << cfg.suite
@@ -203,8 +210,8 @@ int resolve_cells(const gskcec::ExperimentConfig& cfg,
     return 0;
 }
 
-// Runs one optimizer through MATLAB and verifies it. Returns the exit code and
-// sets @p status to a one-word outcome for the multi-optimizer summary.
+// Runs one optimizer in MATLAB, then verifies it. Returns the exit code and
+// sets @p status to a short outcome label for the multi-optimizer summary.
 int run_one(const gskcec::ExperimentConfig& cfg,
             const std::string& optimizer,
             const std::vector<int>& functions,
@@ -217,7 +224,7 @@ int run_one(const gskcec::ExperimentConfig& cfg,
                                   ? opts.output_root
                                   : (!cfg.output_root.empty() ? rooted(opts.project_root, cfg.output_root)
                                                               : opts.project_root / "results");
-    // CEC-competition layout: results/<optimizer>/<suite>/{summary,curves,gen_logs}
+    // CEC competition layout: results/<optimizer>/<suite>/{summary,curves,gen_logs}
     const fs::path out_dir = out_root / optimizer / cfg.suite;
 
     std::ostringstream batch;
@@ -248,7 +255,7 @@ int run_one(const gskcec::ExperimentConfig& cfg,
         status = "dry-run";
         return 0;
     }
-    // Extra outer quotes keep cmd.exe from eating the quoted executable path.
+    // Extra outer quotes stop cmd.exe from stripping the quoted exe path.
     const int rc = std::system(("\"" + inner + "\"").c_str());
     if (rc != 0) {
         std::cerr << "gsk_run: MATLAB invocation failed with exit code " << rc
@@ -260,7 +267,7 @@ int run_one(const gskcec::ExperimentConfig& cfg,
         status = "ok (not verified)";
     }
 
-    // Mandate 1.1c: every run is automatically checked against the same
+    // Post-run check (Mandate 1.1c): compare the run with the same
     // optimizer's published reference table before it counts as done.
     if (opts.verify) {
         const fs::path reference_root =
@@ -407,8 +414,8 @@ int main(int argc, char** argv) {
                 return 1;
             }
         }
-        // Checked after every flag, so a --runs override of a config is
-        // validated too.
+        // Checked after all flags are read, so a --runs override of a
+        // config is checked too.
         if (cfg.runs < 1) {
             std::cerr << "gsk_run: runs must be >= 1.\n";
             return 1;
@@ -429,8 +436,8 @@ int main(int argc, char** argv) {
         }
 
         // Run and verify every optimizer even if an earlier one fails or
-        // DEVIATES, so one bad cell does not abort a multi-optimizer campaign.
-        // The first nonzero code is returned, keeping the 1/2/3 meanings.
+        // DEVIATES, so one failure does not stop a multi-optimizer campaign.
+        // Return the first nonzero code (see the file header).
         struct Outcome {
             std::string optimizer;
             int rc = 0;

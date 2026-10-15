@@ -1,5 +1,8 @@
-// gsk_validate: reference-table validation, suite smoke evaluation,
-// CEC2013 saved-vector regression and generated-vs-reference comparison.
+// gsk_validate: checks for the C++ benchmark ports and for run results.
+// Modes: load-check the imported reference tables, smoke-test a suite,
+// re-check CEC2013 against saved values, compare run results with the
+// reference tables, and give a post-run CONSISTENT/DEVIATES verdict.
+// Exit code: 0 pass, 1 usage error, 2 input or load error, 3 check failed.
 
 #include "gskcec/benchmark/data_loading.hpp"
 #include "gskcec/benchmark/factory.hpp"
@@ -32,6 +35,8 @@ void print_usage() {
               << "       summary/environment.json runs/max_nfes_override; full if absent)\n";
 }
 
+// Returns @p path if it is free, else the first free <stem>_1<ext>,
+// <stem>_2<ext>, ... so an earlier file is never overwritten.
 fs::path noncolliding_path(const fs::path& path) {
     if (!fs::exists(path)) {
         return path;
@@ -47,12 +52,12 @@ fs::path noncolliding_path(const fs::path& path) {
     }
 }
 
-// Runs the post-run verdict (Mandate 1.1c): is this run consistent with the
-// same optimizer's published reference table? Writes a non-colliding
-// verification*.json file and prints CONSISTENT/DEVIATES. Returns the process
-// exit code. Without an explicit --reduced/--full the protocol comes from the
-// run's own environment.json, with the same rule gsk_run applies, so a
-// standalone re-check agrees with gsk_run's automatic verdict.
+// Post-run verdict (Mandate 1.1c): is this run consistent with the same
+// optimizer's published reference table? Writes verification.json (or
+// verification_N.json if taken), prints CONSISTENT or DEVIATES and returns
+// the exit code (0, 2 or 3). Without --reduced/--full the protocol is read
+// from the run's environment.json with the same rule as gsk_run, so a
+// re-check here agrees with gsk_run's own verdict.
 int run_verify(const fs::path& run_dir, const fs::path& reference_root,
                std::optional<bool> reduced_flag) {
     const auto summaries = gskcec::load_summaries(run_dir);
@@ -76,8 +81,8 @@ int run_verify(const fs::path& run_dir, const fs::path& reference_root,
         }
     }
     const auto verification = gskcec::classify_run(summaries, reference_root, reduced);
-    // Match gsk_run: keep the verdict next to the summaries when a summary/
-    // subdir exists (the CEC-competition layout).
+    // As in gsk_run: write the verdict next to the summaries when a summary/
+    // folder exists (CEC competition layout).
     const auto out_path = noncolliding_path(fs::exists(run_dir / "summary")
                                                 ? run_dir / "summary" / "verification.json"
                                                 : run_dir / "verification.json");
@@ -100,7 +105,8 @@ int run_verify(const fs::path& run_dir, const fs::path& reference_root,
     return verification.verdict == "CONSISTENT" ? 0 : 3;
 }
 
-/// Deterministic in-bounds probe: midpoint shifted per coordinate.
+/// Deterministic in-bounds test point: each coordinate lies at 25% to 75% of
+/// its range, in a pattern that repeats every 7 coordinates.
 gskcec::Vector pattern_point(const gskcec::Bounds& bounds) {
     gskcec::Vector x(bounds.dimension());
     for (gskcec::Index j = 0; j < x.size(); ++j) {
@@ -112,12 +118,15 @@ gskcec::Vector pattern_point(const gskcec::Bounds& bounds) {
     return x;
 }
 
+// Evaluates every (function, dimension) cell of @p suite at the box midpoint
+// and at pattern_point(). Returns 0, or 3 at the first NaN (or +/-Inf outside
+// CEC2011). Cells whose data are missing are printed as SKIP.
 int run_suite_smoke(const std::string& suite, const fs::path& project_root) {
     const auto info = gskcec::suite_info(suite);
     const auto data_root = gskcec::default_data_root(suite, project_root);
     std::vector<int> dimensions = info.dimensions;
     if (dimensions.empty()) {
-        dimensions = {0}; // native per function
+        dimensions = {0}; // 0 = native dimension per function
     }
     int evaluated = 0;
     int skipped = 0;
@@ -128,8 +137,8 @@ int run_suite_smoke(const std::string& suite, const fs::path& project_root) {
             try {
                 problem = gskcec::make_problem(suite, function_id, dimension, data_root);
             } catch (const std::runtime_error& ex) {
-                // Data-driven unavailability (e.g. cec2020 f1/f8 at D=5/15 in
-                // the reference data). Reported explicitly, never silent.
+                // No data for this cell (e.g. cec2020 f1/f8 at D=5/15 in the
+                // reference data). Always reported, never skipped silently.
                 std::cout << "SKIP " << suite << " f" << function_id << " D" << dimension
                           << ": " << ex.what() << "\n";
                 ++skipped;
@@ -142,9 +151,9 @@ int run_suite_smoke(const std::string& suite, const fs::path& project_root) {
             }
             const double f_mid = problem->evaluate(mid);
             const double f_pat = problem->evaluate(pattern_point(bounds));
-            // The CEC2011 reference NaN->0 rule means NaN must never escape;
-            // +/-Inf is legitimate there (documented). Other suites must be
-            // strictly finite at in-bounds points.
+            // CEC2011 maps NaN to 0 (reference rule), so NaN must never
+            // appear; +/-Inf is allowed there (documented). Other suites must
+            // give finite values at in-bounds points.
             const bool mid_ok = suite == "cec2011" ? !std::isnan(f_mid) : std::isfinite(f_mid);
             const bool pat_ok = suite == "cec2011" ? !std::isnan(f_pat) : std::isfinite(f_pat);
             if (!mid_ok || !pat_ok) {
@@ -163,6 +172,10 @@ int run_suite_smoke(const std::string& suite, const fs::path& project_root) {
     return 0;
 }
 
+// Re-evaluates the saved CEC2013 test points (cec_tools/tests/data/
+// points_D<D>.txt) and compares the values with the expected ones in
+// cec_tools/tests/data/cec2013_regression.csv. Returns 0, 2 on a bad input
+// file, or 3 if a relative deviation exceeds 1e-12.
 int run_cec2013_saved_vectors(const fs::path& project_root) {
     const fs::path csv = project_root / "benchmarks" / "cec_suite_cpp" / "cec_tools" / "tests" / "data" / "cec2013_regression.csv";
     const fs::path data_root = gskcec::default_data_root("cec2013", project_root);
@@ -177,7 +190,7 @@ int run_cec2013_saved_vectors(const fs::path& project_root) {
     std::unique_ptr<gskcec::BenchmarkProblem> problem;
     int cur_f = -1;
     int cur_d = -1;
-    gskcec::Vector points; // 5 x D probe matrix, row-major
+    gskcec::Vector points; // 5 x D test points, row-major (one point per row)
     while (std::getline(in, line)) {
         if (line.empty() || line[0] == '#' || line.rfind("function", 0) == 0) {
             continue;
@@ -203,8 +216,8 @@ int run_cec2013_saved_vectors(const fs::path& project_root) {
             points = gskcec::load_values_file(project_root / "benchmarks" / "cec_suite_cpp" / "cec_tools" / "tests" / "data" /
                                               ("points_D" + std::to_string(dimension) + ".txt"));
         }
-        // Guard the slice: a regression CSV row whose point id exceeds the
-        // points file would otherwise form an out-of-range iterator pair.
+        // Bounds check: point ids are 1-based, and an id past the end of the
+        // points file would read out of range.
         if (point_id < 1 ||
             static_cast<std::size_t>(point_id) * static_cast<std::size_t>(dimension) > points.size()) {
             std::cerr << "gsk_validate: cec2013 regression row f" << function_id << " D" << dimension
@@ -237,9 +250,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Boolean flags (no value): --reduced / --full select the verification
-    // protocol context. Without either, --verify reads it from the run's
-    // environment.json (strict full protocol when that is absent).
+    // Flags without a value: --reduced / --full set the verification
+    // protocol. Without either, --verify reads it from the run's
+    // environment.json (full protocol if that is missing).
     std::optional<bool> reduced;
     for (std::size_t i = 0; i < args.size();) {
         if (args[i] == "--reduced") {
@@ -253,7 +266,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Value flags.
+    // Flags with a value: --root, --out.
     fs::path project_root = ".";
     fs::path out_csv;
     for (std::size_t i = 0; i + 1 < args.size();) {
@@ -267,7 +280,8 @@ int main(int argc, char** argv) {
             ++i;
         }
     }
-    // The flags above may have consumed every argument (e.g. `gsk_validate --full`).
+    // The flags above may have used up every argument
+    // (e.g. `gsk_validate --full`).
     if (args.empty()) {
         print_usage();
         return 1;

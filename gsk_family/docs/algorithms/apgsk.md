@@ -348,7 +348,7 @@ state for fair cross-family starts.
   the reference APGSK release's `Adaptive_GSK_ALI.m` (a different file from the
   AGSK one) with identical pools, gate, schedule, and draw order. Entry point and
   interface contract: [matlab_interface.md](../reference/matlab_interface.md); run
-  instructions: [runbook.md](../getting-started/runbook.md).
+  instructions: [command_reference.md](../getting-started/command_reference.md).
 - `src/tests/test_apgsk_smoke.m` checks the result contract on the pure-MATLAB
   `sphere` problem (D = 5, default NP = 100, budget 10000), budget accounting,
   the target-error semantics of both exits (target stop zeroes the error, a

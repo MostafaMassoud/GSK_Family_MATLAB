@@ -7,12 +7,12 @@ Keep a Changelog; this project uses semantic versioning.
 
 ### Added
 - DT-GSK (`dt-gsk`), the seventh optimizer: a MATLAB port of the DT-GSK
-  reference implementation (Python, MIT license) v2.46 in three files under
+  reference implementation v2.46 (MIT license) in three files under
   `src/optimizers/dt-gsk/` (`dt_gsk_optimize.m`, `dt_gsk_config.m` with the
   `pub` profile by dimension tier, `dt_gsk_graph.m` with the D >= 50
   interaction graph). NP = 5*D with nonlinear population reduction, four
   dimension tiers, always the full budget. Validated against the unmodified
-  Python code on identical random numbers; details in its `README.md`.
+  reference implementation on identical random numbers; details in its `README.md`.
 - Unified-only seeding for DT-GSK: `run_experiment` schedules it with
   `get_cec_seed` and `threefry` under every `seed_policy` and draws no runner
   X0 for it (DT-GSK self-initializes from its own Threefry substream; documented
@@ -24,7 +24,8 @@ Keep a Changelog; this project uses semantic versioning.
   (ignored by the reference loader). `gsk_list --references` now loads 165
   files / 1411 rows.
 - `scripts/compare_reference_runs.m`: per-(dimension, function) comparison of
-  two `per_run.csv` sets (Best/Median/Mean, order-of-magnitude agreement,
+  two `per_run.csv` sets (Best/Median/Mean each within an order of magnitude,
+  both sides rounded to the reference file's 11 significant digits,
   two-sided Wilcoxon rank-sum, paired signed-rank when seeds match,
   Holm-adjusted p-values; needs the Statistics and Machine Learning Toolbox).
 - CLI support: `gsk_run` and `gsk_list --optimizers` know `dt-gsk` (seven
@@ -104,7 +105,7 @@ Keep a Changelog; this project uses semantic versioning.
   policy, MEX contract, CLI/config reference, troubleshooting entries, ctest
   count, and shifted code line references.
 - Corrected documentation-only findings: the shipped reference-table inventory
-  (all six optimizers on CEC2011, `fdb-agsk` on CEC2017, `gsk` on CEC2013
+  (all six original optimizers on CEC2011, `fdb-agsk` on CEC2017, `gsk` on CEC2013
   D10/30/50); the cec2013lsgo `error` column is the raw objective, not `NaN`;
   APGSK's default NP is 100; reference-mode generators are a project choice, not
   a replay of the archived AGSK/APGSK `twister` drivers; ATMALS-GSK memory
@@ -116,19 +117,21 @@ Keep a Changelog; this project uses semantic versioning.
 - DT-GSK presented as the seventh optimizer in `README.md`, `SKILL.md`,
   `CITATION.cff`, `codemeta.json`, `LICENSES.md` (MIT reference, GPL-compatible)
   and the folder READMEs; new algorithm page `docs/algorithms/dt-gsk.md`.
+- Docs: new beginner `RUNBOOK.md`; the detailed runbook is now
+  `docs/getting-started/command_reference.md`.
 
 ## [1.0.0] - 2026-06-13
 
 First public, publication-grade release.
 
-### Benchmarks (standalone C++20, no MATLAB/R/MEX/Python at runtime)
+### Benchmarks (standalone C++20, no MATLAB/R/MEX at runtime)
 - Ported all five CEC suites and validated each against ground truth from the
   original reference implementations:
   - CEC2017 (30 functions) - max relative deviation 4.8e-15 vs the original MEX.
   - CEC2020 (10 functions, internal mapping preserved) - 2.8e-16.
   - CEC2013 (standard 28-function suite, converted from the R package; runs
     without R) - analytic + optimum-at-shift + self-regression at 0.
-  - CEC2013LSGO (15 large-scale functions; Cython glue removed) - bit-exact vs
+  - CEC2013LSGO (15 large-scale functions; only the C++ sources kept) - bit-exact vs
     the untouched reference.
   - CEC2011 (22 real-world problems; `.mat` assets converted to text) - WP-A/WP-B
     bit-exact, WP-C (MGA-DSM trajectories) ~1.9e-13, including a behavioural
@@ -147,15 +150,15 @@ First public, publication-grade release.
 - `gsk_bench` micro-benchmark harness for the C++ hot paths.
 
 ### Quality, performance, docs (publication preparation)
-- **Automatic post-run verification (Mandate c):** every `gsk_run` compares the
+- **Automatic post-run verification:** every `gsk_run` compares the
   result against the same optimizer's published table and writes a
   `CONSISTENT`/`DEVIATES` verdict (`verification.json`); exposed as
   `gsk_validate --verify`. Exits nonzero on `DEVIATES`.
-- **Folder clarity (Mandate b):** imported reference tables live in
+- **Folder clarity:** imported reference tables live in
   `benchmarks/cec_reference_results`, while CEC ports, input data, and nested
   C++ tools live in `benchmarks/cec_suite_cpp`; `configs/`, `scripts/` READMEs; a
   folder-structure decision guide; `.gitignore`.
-- **Code readability (Mandate a):** `docs/development/code_reading_guide.md` guided tour;
+- **Code readability:** `docs/development/code_reading_guide.md` guided tour;
   every ported file cites its reference source.
 - **Engineering:** warnings-as-errors clean (GCC 16, `-Werror`); `.clang-format`,
   `.clang-tidy`; CMake `install`/`export` rules; `GSKCEC_NATIVE` and

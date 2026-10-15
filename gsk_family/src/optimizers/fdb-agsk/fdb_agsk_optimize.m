@@ -1,80 +1,75 @@
 function result = fdb_agsk_optimize(problem, options)
-%FDB_AGSK_OPTIMIZE Faithful MATLAB port of FDB-AGSK (AGSK with
-%Fitness-Distance Balance guide selection), all five reference cases.
+%FDB_AGSK_OPTIMIZE AGSK with Fitness-Distance Balance (FDB) guide selection.
 %
-% Historical source notes (the Case files are self-contained and were
-% transcribed directly, including their local
-% Gained_Shared_* and boundConstraint subfunctions):
-%   historical source: FDB-AGSK reference FDB_AGSK_Case1.m
-%   historical source: FDB-AGSK reference FDB_AGSK_Case2.m
-%   historical source: FDB-AGSK reference FDB_AGSK_Case3.m
-%   historical source: FDB-AGSK reference FDB_AGSK_Case4.m
-%   historical source: FDB-AGSK reference FDB_AGSK_Case5.m
-%   historical source: FDB-AGSK reference FDB_Func1.m   -> fdb_score_best.m
-%   historical source: FDB-AGSK reference FDB_Func2.m   -> fdb_score_ranking.m
-%   historical source: FDB-AGSK reference RFDB_Func1.m  -> fdb_score_roulette.m
-%   historical source: FDB-AGSK reference problem.m, problem_terminate.m
-%       (reference driver harness: sphere objective, D = 100,
-%        maxFEs = 1000*D, pop_size = 40*D)
+%   result = fdb_agsk_optimize(problem, options)
 %
-% options.fdb_case selects the injection variant (default 1 -- the
-% first/canonical case of the reference set; all five are available):
-%   Case 1: FDB_Func1 best-scored index -> senior R2 (same guide for every
-%           row); junior standard.
-%   Case 2: FDB_Func2 descending FDB ranking -> senior R3 sampled from the
-%           ranking tail (positions round(NP*0.95)+1..NP); senior R2 is the
-%           standard middle partition; junior standard.
-%   Case 3: junior R2 = RFDB_Func1 roulette index, junior R3 = FDB_Func1
-%           best index (both overwriting the ring-computed values before the
-%           collision-regeneration loop); senior standard (0.05/0.95).
-%   Case 4: junior R1 = RFDB_Func1 roulette index, junior R3 = FDB_Func1
-%           best index; senior standard.
-%   Case 5: junior R3 = FDB_Func1 best index; senior standard.
-% In cases 3-5 the junior collision loop (R3 == R1/R2/R0) re-randomizes the
-% injected constant index at collision positions, exactly as the reference.
+% MATLAB port of all five FDB-AGSK reference cases. Historical sources
+% (FDB-AGSK reference code):
+%   FDB_AGSK_Case1.m .. FDB_AGSK_Case5.m  (self-contained; their local
+%       Gained_Shared_* and boundConstraint helpers are transcribed here)
+%   FDB_Func1.m  -> fdb_score_best.m
+%   FDB_Func2.m  -> fdb_score_ranking.m
+%   RFDB_Func1.m -> fdb_score_roulette.m
+%   problem.m, problem_terminate.m  (reference driver: sphere objective,
+%       D = 100, max_nfes = 1000*D, NP = 40*D)
 %
-% Transcribed AGSK machinery (as it appears in the Case files):
-%   * Reference problem_terminate harness uses pop_size = 40*problem.dim;
-%     this interface defaults to pop_size = 100 and keeps 40*D opt-in via
-%     options.np_init. min_pop_size = 12, nonlinear population reduction
-%     plan = round((min-max)*((nfes/max_nfes)^(1-nfes/max_nfes)) + max)
-%     removing the current worst one by one (K rows deleted alongside).
-%   * KF_pool = [0.1 1.0 0.5 1.0], KR_pool = [0.2 0.1 0.9 0.9]; setting
-%     probabilities start at [0.85 0.05 0.05 0.05] while nfes < 0.1*max_nfes
-%     and afterwards follow KW_ind = 0.95*KW_ind + 0.05*All_Imp
-%     (normalized), with the 0.05 floor / largest-gets-remainder rule.
-%   * Per-individual knowledge rate K: uniform(0,1) with prob 0.5, integer
-%     ceil(20*rand) with prob 0.5; D_junior = ceil(D*(1-nfes/max_nfes).^K).
+% problem, options and result: docs/reference/matlab_interface.md.
+% options.seed is required. Optional fields:
+%   fdb_case      FDB variant, integer 1..5 (default 1, the canonical case)
+%   np_init       initial NP (default 100; the reference driver uses 40*D)
+%   min_pop_size  final NP (default 12; must be >= 11)
+% Errors: fdb_agsk:options (no seed), fdb_agsk:invalid_case,
+% fdb_agsk_optimize:options (bad np_init or min_pop_size).
+% result.nfes and result.convergence.nfes are capped at max_nfes.
 %
-% Preserved quirks / notes:
-%   * The reference Case files never record the best-so-far SOLUTION during
-%     the initial population scan (only its fitness); this port records it
-%     there so result.best_x is always defined. Pure bookkeeping: no RNG
-%     draw or search-trajectory change (the reference would crash at its
-%     final disp(bsf_solution) if no child ever improved on the initial
-%     best).
-%   * The reference adaptive branch assumes np_init < 0.1*max_nfes (true for
-%     the reference configuration 40*D vs 1000*D); otherwise KW_ind would be
-%     its empty initial value when first updated and the reference code path
-%     errors. An `isempty(KW_ind)` guard on the phase condition makes this
-%     robust under reduced budgets; it is inert on the reference budget (the
-%     nfes condition fires first), so it is behavior-preserving.
-%   * dif_val is computed and never used, as written.
-%   * The reference runs on a simple sphere harness (problem.m); running
-%     FDB-AGSK on CEC suites through the generic problem interface is a
-%     framework-level extension (see README.md).
+% FDB cases (which donor index the FDB guide replaces):
+%   1  senior R2 = FDB best index (same guide for every row).
+%   2  senior R3 drawn from the tail of the descending FDB ranking
+%      (positions round(NP*0.95)+1..NP).
+%   3  junior R2 = RFDB roulette index, junior R3 = FDB best index.
+%   4  junior R1 = RFDB roulette index, junior R3 = FDB best index.
+%   5  junior R3 = FDB best index.
+% All other donors are standard AGSK: junior R1/R2 = rank neighbours, R3
+% random; senior R1/R2/R3 from the top 5% / middle / bottom 5%.
+% In cases 3-5 the injected indices replace the standard junior ones before
+% the junior collision loop. That loop then re-draws R3 wherever it equals
+% R0, R1 or R2, so the injected R3 is randomized there, as in the reference.
 %
-% Sanctioned modernization (the only one): deterministic seeding via
-% gsk_set_rng(options) (the reference relies on MATLAB session RNG state).
+% AGSK steps (as in the Case files):
+%   * Population reduction from np_init to min_pop_size:
+%     plan = round((min-max)*((nfes/max_nfes)^(1-nfes/max_nfes)) + max);
+%     the current worst is removed one at a time, with its row of K.
+%   * KF_pool = [0.1 1.0 0.5 1.0], KR_pool = [0.2 0.1 0.9 0.9]. Setting
+%     probabilities are [0.85 0.05 0.05 0.05] while nfes < 0.1*max_nfes,
+%     then KW_ind = 0.95*KW_ind + 0.05*All_Imp (normalized); All_Imp has a
+%     0.05 floor and its largest entry takes the remainder.
+%   * Knowledge rate K per individual: uniform(0,1) with prob 0.5, else the
+%     integer ceil(20*rand); D_junior = ceil(D*(1-nfes/max_nfes).^K).
 %
-% Interface: see docs/reference/matlab_interface.md. result = fdb_agsk_optimize(problem, options)
+% Notes on the port:
+%   * Seeding through gsk_set_rng(options) makes runs deterministic; the
+%     reference uses the MATLAB session RNG state. This is the only
+%     intended modernization.
+%   * The reference stores only the best fitness, not the solution, in the
+%     initial scan, and would crash at its final disp(bsf_solution) if no
+%     child ever beat the initial best. This port also stores the solution,
+%     so result.best_x is always set. Bookkeeping only: no RNG draw and no
+%     change to the search.
+%   * The reference assumes np_init < 0.1*max_nfes (true for 40*D vs
+%     1000*D); otherwise its first KW_ind update uses an empty KW_ind and
+%     errors. An isempty(KW_ind) test on the phase condition prevents this;
+%     on the reference budget the nfes test fires first, so results match.
+%   * dif_val is computed and never used, as in the reference.
+%   * The reference runs only on its sphere driver; running FDB-AGSK on the
+%     CEC suites through the problem interface is a toolkit extension (see
+%     README.md).
 
 start_time = tic;
 
 if ~isfield(options, 'seed') || isempty(options.seed)
     error('fdb_agsk:options', 'options.seed is required');
 end
-actual_seed = gsk_set_rng(options);   % direct-call default 'twister'; selects threefry|twister|seed|state
+actual_seed = gsk_set_rng(options);   % direct calls default to 'twister'; also threefry|seed|state
 
 fdb_case = 1;
 if isfield(options, 'fdb_case') && ~isempty(options.fdb_case)
@@ -89,19 +84,22 @@ problem_size = problem.dim;
 max_nfes = problem.max_nfes;
 lu = [problem.lb; problem.ub];
 
-pop_size = 100; % CEC2017 competition NP (matches GSK/AGSK; verified to reproduce fdb-agsk_cec2017_D10.csv to <0.2%). The 40*D reference-harness value is opt-in via options.np_init.
+% Default NP = 100, the CEC2017 competition value used by GSK/AGSK (verified
+% to reproduce fdb-agsk_cec2017_D10.csv within 0.2%). Set options.np_init
+% to 40*D for the reference driver value.
+pop_size = 100;
 if isfield(options, 'np_init') && ~isempty(options.np_init); pop_size = options.np_init; end
 
 KF_pool = [0.1 1.0 0.5 1.0];
 KR_pool = [0.2 0.1 0.9 0.9];
 
-%% Parameter settings for population size
+%% Population size settings
 max_pop_size = pop_size;
 min_pop_size = 12;
 if isfield(options, 'min_pop_size') && ~isempty(options.min_pop_size); min_pop_size = options.min_pop_size; end
-% The P = 0.05 senior partition needs non-empty best/worst blocks
-% (round(0.05*NP) >= 1 and NP - round(0.95*NP) >= 1), i.e. NP >= 11 for
-% every population size the reduction can reach. Checked before any RNG draw.
+% The P = 0.05 senior partition needs non-empty best and worst blocks
+% (round(0.05*NP) >= 1 and NP - round(0.95*NP) >= 1), so every NP the
+% reduction can reach must be >= 11. Checked before any RNG draw.
 if ~(isscalar(max_pop_size) && isscalar(min_pop_size) && ...
         min_pop_size >= 11 && max_pop_size >= min_pop_size)
     error('fdb_agsk_optimize:options', ...
@@ -110,44 +108,43 @@ if ~(isscalar(max_pop_size) && isscalar(min_pop_size) && ...
         mat2str(max_pop_size), mat2str(min_pop_size));
 end
 
-%% CREATE INITIAL POPULATION
-% Reference/reproduction runs do not pass X0, so this remains the original
-% one-draw initialization. Unified fair-comparison runs pass the runner-drawn
-% X0 plus the post-X0 RNG state; accepting both here lets every optimizer start
-% from the same population and same next random number for the same CEC cell.
+%% Initial population
+% Reproduction runs pass no X0 and use the original single rand draw.
+% Unified comparison runs pass the runner's X0 and the RNG state after it,
+% so every optimizer starts from the same population and the same next
+% random number on the same CEC cell.
 popold = gsk_initial_population_from_options(options, pop_size, lu(1, :), lu(2, :));
 gsk_restore_rng_after_initialization(options);
 pop = popold;
 
-fitness = problem.evaluate(pop); % reference evaluates row by row through problem(); same values
+fitness = problem.evaluate(pop); % same values as the reference's per-row loop
 
 nfes = 0;
 bsf_fit_var = 1e+300;
-bsf_solution = pop(1, :); % see header: reference records only the fitness here
+bsf_solution = pop(1, :); % not in the reference (see header)
 
 for i = 1:pop_size
     nfes = nfes + 1;
     if nfes > max_nfes; break; end
     if fitness(i) < bsf_fit_var
         bsf_fit_var = fitness(i);
-        bsf_solution = pop(i, :); % bookkeeping addition (reference omits; see header)
+        bsf_solution = pop(i, :); % bookkeeping only; not in the reference
     end
 end
 
-%% POSSIBLE VALUES FOR KNOWLEDGE RATE K
+%% Knowledge rate K (one per individual)
 K = [];
 KF = []; %#ok<NASGU>
 KR = []; %#ok<NASGU>
 Kind = rand(pop_size, 1);
-% K uniform rand (0,1) with prob 0.5 and uniform integer [1,20] with prob 0.5
+% K is uniform in (0,1) with prob 0.5, else a uniform integer in 1..20.
 K(Kind < 0.5, :) = rand(sum(Kind < 0.5), 1);
 K(Kind >= 0.5, :) = ceil(20 * rand(sum(Kind >= 0.5), 1));
 
-% Per-generation convergence recording (interface requirement). The
-% reference per-child counter reads max_nfes+1 when a generation crosses the
-% budget; only the RECORDED copies are clipped at max_nfes (bookkeeping only:
-% the loop counter that drives the KW phase, junior schedule and resize plan
-% is untouched).
+% Convergence record, one entry per generation (interface requirement).
+% The per-child counter reads max_nfes+1 when a generation crosses the
+% budget. Only the recorded copies are clipped at max_nfes; the loop counter
+% that drives the KW phase, junior schedule and resize plan is unchanged.
 max_records = ceil(max_nfes / max(min_pop_size, 1)) + 2;
 conv_nfes = zeros(max_records, 1);
 conv_fit = zeros(max_records, 1);
@@ -156,7 +153,7 @@ conv_nfes(n_rec) = min(nfes, max_nfes);
 conv_fit(n_rec) = bsf_fit_var;
 
 g = 0; %#ok<NASGU>
-%% main loop
+%% Main loop
 
 KW_ind = [];
 All_Imp = zeros(1, 4);
@@ -164,10 +161,10 @@ All_Imp = zeros(1, 4);
 while nfes < max_nfes
     g = g + 1; %#ok<NASGU>
 
-    % isempty guard: if np_init >= 0.1*max_nfes (e.g. a reduced budget),
-    % generation 1 would otherwise update an uninitialized KW_ind. On the
-    % validated runs the nfes condition fires first, so this is preserving.
-    if (isempty(KW_ind) || nfes < 0.1 * max_nfes) % initial probability values
+    % Pick a KF/KR setting (1..4) per individual with probabilities KW_ind.
+    % The isempty test guards np_init >= 0.1*max_nfes, where generation 1
+    % would update an empty KW_ind (see header); results are unchanged.
+    if (isempty(KW_ind) || nfes < 0.1 * max_nfes) % fixed initial probabilities
         KW_ind = [0.85 0.05 0.05 0.05];
         K_rand_ind = rand(pop_size, 1);
         K_rand_ind(K_rand_ind > sum(KW_ind(1:3)) & K_rand_ind <= sum(KW_ind(1:4))) = 4;
@@ -176,7 +173,7 @@ while nfes < max_nfes
         K_rand_ind(K_rand_ind > 0 & K_rand_ind <= KW_ind(1)) = 1;
         KF = KF_pool(K_rand_ind)';
         KR = KR_pool(K_rand_ind)';
-    else % updating probability values
+    else % adapt probabilities from last generation's All_Imp
         KW_ind = 0.95 * KW_ind + 0.05 * All_Imp;
         KW_ind = KW_ind ./ sum(KW_ind);
         K_rand_ind = rand(pop_size, 1);
@@ -188,12 +185,13 @@ while nfes < max_nfes
         KR = KR_pool(K_rand_ind)';
     end
 
-    %%% Junior and Senior Gaining-Sharing phases %%%
+    %%% Junior and senior gaining-sharing phases %%%
+    % Number of junior dimensions per individual; it shrinks as nfes grows.
     D_Gained_Shared_Junior = ceil((problem_size) * (1 - nfes / max_nfes).^K);
     D_Gained_Shared_Senior = problem_size - D_Gained_Shared_Junior; %#ok<NASGU>
-    pop = popold; % the old population becomes the current population
+    pop = popold;
 
-    %% Apply Fitness-Distance Balance (and Roulette FDB) methods, per case
+    %% FDB (and roulette FDB) guide indices for this case
     RfdbIndex = [];
     switch fdb_case
         case 1
@@ -210,6 +208,7 @@ while nfes < max_nfes
     [~, indBest] = sort(fitness, 'ascend');
     [Rg1, Rg2, Rg3] = fdb_junior_r1r2r3(indBest, fdb_case, fdbIndex, RfdbIndex);
     [R1, R2, R3] = fdb_senior_r1r2r3(indBest, fdb_case, fdbIndex);
+    % Junior trial: move toward Rg3 if it is better, away from it otherwise.
     R01 = 1:pop_size;
     Gained_Shared_Junior = zeros(pop_size, problem_size);
     ind1 = fitness(R01) > fitness(Rg3);
@@ -221,6 +220,7 @@ while nfes < max_nfes
     if (sum(ind1) > 0)
         Gained_Shared_Junior(ind1, :) = pop(ind1, :) + KF(ind1) .* (pop(Rg1(ind1), :) - pop(Rg2(ind1), :) + pop(ind1, :) - pop(Rg3(ind1), :));
     end
+    % Senior trial: move toward R2 if it is better, away from it otherwise.
     R0 = 1:pop_size;
     Gained_Shared_Senior = zeros(pop_size, problem_size);
 
@@ -236,6 +236,8 @@ while nfes < max_nfes
     Gained_Shared_Junior = boundConstraint(Gained_Shared_Junior, pop, lu);
     Gained_Shared_Senior = boundConstraint(Gained_Shared_Senior, pop, lu);
 
+    % Each dimension takes the junior trial with prob D_junior/D, else the
+    % senior trial; it then changes only with prob KR (else keeps pop).
     D_Gained_Shared_Junior_mask = rand(pop_size, problem_size) <= (D_Gained_Shared_Junior ./ problem_size);
     D_Gained_Shared_Senior_mask = ~D_Gained_Shared_Junior_mask;
 
@@ -249,9 +251,9 @@ while nfes < max_nfes
     ui(D_Gained_Shared_Junior_mask) = Gained_Shared_Junior(D_Gained_Shared_Junior_mask);
     ui(D_Gained_Shared_Senior_mask) = Gained_Shared_Senior(D_Gained_Shared_Senior_mask);
 
-    children_fitness = problem.evaluate(ui); % reference loops problem() per row; same values
+    children_fitness = problem.evaluate(ui); % same values as the reference's per-row loop
 
-    %%% Updating solutions %%%
+    %%% Count evaluations and update the best so far %%%
     for i = 1:pop_size
         nfes = nfes + 1;
         if nfes > max_nfes; break; end
@@ -261,11 +263,10 @@ while nfes < max_nfes
         end
     end
 
-    %%% Calculate the improvement of each settings %%%
+    %%% Improvement made by each KF/KR setting %%%
     dif = abs(fitness - children_fitness);
-    % I == 1: the parent is better; I == 2: the offspring is better
     Child_is_better_index = (fitness > children_fitness);
-    dif_val = dif(Child_is_better_index == 1); %#ok<NASGU> % computed but unused (as written)
+    dif_val = dif(Child_is_better_index == 1); %#ok<NASGU> % unused, as in the reference
 
     All_Imp = zeros(1, 4);
 
@@ -277,6 +278,8 @@ while nfes < max_nfes
         end
     end
 
+    % Normalize; each share except the largest gets a 0.05 floor and the
+    % largest takes the remainder. No improvement at all: equal shares.
     if (sum(All_Imp) ~= 0)
         All_Imp = All_Imp ./ sum(All_Imp);
         [~, Imp_Ind] = sort(All_Imp);
@@ -288,12 +291,14 @@ while nfes < max_nfes
         Imp_Ind = 1:length(All_Imp); %#ok<NASGU>
         All_Imp(:) = 1 / length(All_Imp);
     end
+    % Keep the better of parent and child. Child_is_better_index is now
+    % 1 (parent kept, also on ties) or 2 (child is better).
     [fitness, Child_is_better_index] = min([fitness, children_fitness], [], 2);
 
     popold = pop;
     popold(Child_is_better_index == 2, :) = ui(Child_is_better_index == 2, :);
 
-    %% for resizing the population size %%%
+    %% Population size reduction
     plan_pop_size = round((min_pop_size - max_pop_size) * ((nfes / max_nfes).^((1 - nfes / max_nfes))) + max_pop_size);
 
     if pop_size > plan_pop_size
@@ -301,6 +306,7 @@ while nfes < max_nfes
         if pop_size - reduction_ind_num < min_pop_size; reduction_ind_num = pop_size - min_pop_size; end
 
         pop_size = pop_size - reduction_ind_num;
+        % Remove the current worst, one at a time, with its row of K.
         for r = 1:reduction_ind_num
             [~, indBest] = sort(fitness, 'ascend');
             worst_ind = indBest(end);
@@ -312,13 +318,13 @@ while nfes < max_nfes
     end
 
     n_rec = n_rec + 1;
-    conv_nfes(n_rec) = min(nfes, max_nfes); % recorded copy clipped (see above)
+    conv_nfes(n_rec) = min(nfes, max_nfes); % clipped copy (see above)
     conv_fit(n_rec) = bsf_fit_var;
 end
 
 %% Result assembly (docs/reference/matlab_interface.md)
-% The reference Case files track no optimum/error; error semantics follow
-% the interface contract.
+% The reference tracks no error. Per the interface: error = best - optimum,
+% 0 when below target_error, NaN when the optimum is unknown.
 if ~isnan(problem.optimum)
     err = bsf_fit_var - problem.optimum;
     if ~isnan(problem.target_error) && err < problem.target_error
@@ -344,7 +350,7 @@ result.seed = actual_seed;
 result.best_x = bsf_solution;
 result.best_fitness = bsf_fit_var;
 result.error = err;
-result.nfes = min(nfes, max_nfes); % counted evaluations; reference counter may read max_nfes+1
+result.nfes = min(nfes, max_nfes); % the loop counter may read max_nfes+1
 result.termination = 'max_evaluations'; % the reference never stops early
 result.convergence = struct('nfes', conv_nfes(1:n_rec), 'best_fitness', conv_fit(1:n_rec));
 result.runtime_seconds = toc(start_time);
@@ -353,15 +359,19 @@ result.notes = '';
 end
 
 function [R1, R2, R3] = fdb_junior_r1r2r3(indBest, fdb_case, fdbIndex, RfdbIndex)
-%FDB_JUNIOR_R1R2R3 Junior donor indices, per-case faithful transcription of
-% the local Gained_Shared_Junior_R1R2R3 subfunctions in FDB_AGSK_Case1..5.m.
-% Cases 1-2: standard ring neighbors + uniform random R3.
-% Case 3: R2 overwritten by the RFDB roulette index, R3 by the FDB best
-%         index (constants for every row).
-% Case 4: R1 overwritten by the RFDB roulette index, R3 by the FDB best index.
-% Case 5: R3 overwritten by the FDB best index.
-% In every case the collision-regeneration loop then re-randomizes R3 where
-% it collides with R0/R1/R2, exactly as the reference.
+%FDB_JUNIOR_R1R2R3 Junior donor indices R1, R2, R3 for one FDB case.
+% Transcribes the local Gained_Shared_Junior_R1R2R3 of FDB_AGSK_Case1..5.m.
+% indBest: indices sorted by ascending fitness; fdbIndex: FDB best index
+% (used in cases 3-5); RfdbIndex: RFDB roulette index (cases 3-4).
+% Outputs are 1 x NP row vectors.
+% Standard: R1/R2 are the next better / next worse individual by rank (the
+% best uses ranks 2 and 3, the worst ranks NP-2 and NP-1); R3 is random.
+% Cases 1-2: standard.
+% Case 3: R2 = RFDB roulette index, R3 = FDB best index (same for every row).
+% Case 4: R1 = RFDB roulette index, R3 = FDB best index.
+% Case 5: R3 = FDB best index.
+% In every case R3 is then re-drawn wherever it equals R0, R1 or R2, as in
+% the reference.
 
 pop_size = length(indBest);
 R0 = 1:pop_size;
@@ -387,15 +397,12 @@ switch fdb_case
     case {1, 2}
         R3 = floor(rand(1, pop_size) * pop_size) + 1;
     case 3
-        % FDB and RFDB (Case3)
         R2 = ones(1, pop_size) * RfdbIndex;
         R3 = ones(1, pop_size) * fdbIndex;
     case 4
-        % FDB and RFDB (Case4)
         R1 = ones(1, pop_size) * RfdbIndex;
         R3 = ones(1, pop_size) * fdbIndex;
     case 5
-        % FDB (Case5)
         R3 = ones(1, pop_size) * fdbIndex;
 end
 
@@ -403,10 +410,10 @@ for i = 1:99999999
     pos = ((R3 == R2) | (R3 == R1) | (R3 == R0));
     if sum(pos) == 0
         break;
-    else % regenerate r3 if it collides
+    else % re-draw R3 where it collides
         R3(pos) = floor(rand(1, sum(pos)) * pop_size) + 1;
     end
-    if i > 1000 % this has never happened so far
+    if i > 1000 % safety limit; never reached so far
         error('Can not genrate R3 in 1000 iterations');
     end
 end
@@ -414,18 +421,21 @@ end
 end
 
 function [R1, R2, R3] = fdb_senior_r1r2r3(indBest, fdb_case, fdbIndex)
-%FDB_SENIOR_R1R2R3 Senior donor indices, per-case faithful transcription of
-% the local Gained_Shared_Senior_R1R2R3 subfunctions in FDB_AGSK_Case1..5.m.
-% Case 1: R2 = FDB best index (constant column); R1/R3 sampled from the
-%         best/worst 5% partitions.
-% Case 2: standard R1/R2; R3 sampled from the TAIL of the FDB descending
-%         ranking (positions round(NP*0.95)+1..NP).
-% Cases 3-5: standard AGSK senior partition (0.05 / middle / 0.95).
+%FDB_SENIOR_R1R2R3 Senior donor indices R1, R2, R3 for one FDB case.
+% Transcribes the local Gained_Shared_Senior_R1R2R3 of FDB_AGSK_Case1..5.m.
+% indBest: indices sorted by ascending fitness; fdbIndex: FDB best index
+% (cases 1, 3-5) or the descending FDB ranking (case 2). Outputs are NP x 1.
+% Standard AGSK: R1, R2, R3 are drawn at random from the top 5%, the middle
+% and the bottom 5% of indBest (split at round(0.05*NP), round(0.95*NP)).
+% Case 1: R2 = FDB best index for every row; R1, R3 standard.
+% Case 2: R1, R2 standard; R3 drawn from the tail of the FDB ranking
+%         (positions round(NP*0.95)+1..NP).
+% Cases 3-5: all standard.
 
 pop_size = length(indBest);
 
 if fdb_case == 2
-    fdbIndex = [fdbIndex]'; %#ok<NBRAK> % reference transposes the ranking to a column
+    fdbIndex = [fdbIndex]'; %#ok<NBRAK> % as a column, as in the reference
 end
 
 R1 = indBest(1:round(pop_size * 0.05));
@@ -434,27 +444,25 @@ R1 = R1(R1rand);
 
 switch fdb_case
     case 1
-        % FDB (Case1)
-        R2 = ones(pop_size, 1) * fdbIndex;
+        R2 = ones(pop_size, 1) * fdbIndex; % FDB guide
 
-        R3 = indBest(round(pop_size * 0.95) + 1:end); % orjinal
+        R3 = indBest(round(pop_size * 0.95) + 1:end);
         R3rand = ceil(length(R3) * rand(pop_size, 1));
         R3 = R3(R3rand);
     case 2
-        R2 = indBest(round(pop_size * 0.05) + 1:round(pop_size * 0.95)); % orjinal
+        R2 = indBest(round(pop_size * 0.05) + 1:round(pop_size * 0.95));
         R2rand = ceil(length(R2) * rand(pop_size, 1));
         R2 = R2(R2rand);
 
-        % FDB (Case2)
-        R3 = fdbIndex(round(pop_size * 0.95) + 1:end); % orjinal
+        R3 = fdbIndex(round(pop_size * 0.95) + 1:end); % FDB ranking tail
         R3rand = ceil(length(R3) * rand(pop_size, 1));
         R3 = R3(R3rand);
     otherwise % cases 3, 4, 5
-        R2 = indBest(round(pop_size * 0.05) + 1:round(pop_size * 0.95)); % orjinal
+        R2 = indBest(round(pop_size * 0.05) + 1:round(pop_size * 0.95));
         R2rand = ceil(length(R2) * rand(pop_size, 1));
         R2 = R2(R2rand);
 
-        R3 = indBest(round(pop_size * 0.95) + 1:end); % orjinal
+        R3 = indBest(round(pop_size * 0.95) + 1:end);
         R3rand = ceil(length(R3) * rand(pop_size, 1));
         R3 = R3(R3rand);
 end
@@ -462,17 +470,18 @@ end
 end
 
 function vi = boundConstraint(vi, pop, lu)
-%BOUNDCONSTRAINT Midpoint bound repair, transcribed from the local
-% boundConstraint subfunction embedded in FDB_AGSK_Case1..5.m.
+%BOUNDCONSTRAINT Move out-of-bound values halfway between parent and bound.
+% Transcribes the local boundConstraint of FDB_AGSK_Case1..5.m.
+% vi, pop: NP x D (trial and parent); lu: 2 x D, [lower; upper].
 
-[NP, ~] = size(pop); % the population size and the problem's dimension
+[NP, ~] = size(pop);
 
-% check the lower bound
+% Below the lower bound: (parent + lower) / 2.
 xl = repmat(lu(1, :), NP, 1);
 pos = vi < xl;
 vi(pos) = (pop(pos) + xl(pos)) / 2;
 
-% check the upper bound
+% Above the upper bound: (parent + upper) / 2.
 xu = repmat(lu(2, :), NP, 1);
 pos = vi > xu;
 vi(pos) = (pop(pos) + xu(pos)) / 2;

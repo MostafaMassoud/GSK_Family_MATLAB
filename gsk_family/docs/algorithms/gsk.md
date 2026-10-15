@@ -274,7 +274,7 @@ post-initialization RNG state for fair cross-family starts.
   cross-checked against the original `GSK.m` form) with identical defaults and
   draw order. Entry point and interface contract:
   [matlab_interface.md](../reference/matlab_interface.md); run instructions:
-  [runbook.md](../getting-started/runbook.md).
+  [command_reference.md](../getting-started/command_reference.md).
 - Tested for deterministic replay, fair-start reuse, convergence shape, budget
   crossing, and runner execution on smoke cells. See
   [validation_report.md](../research/validation_report.md) and

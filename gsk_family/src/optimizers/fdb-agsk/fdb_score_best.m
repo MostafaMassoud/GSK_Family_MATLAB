@@ -1,14 +1,16 @@
 function index = fdb_score_best(population, fitness)
-%FDB_SCORE_BEST Faithful port of the FDB-AGSK best-score selector.
+%FDB_SCORE_BEST Index of the individual with the highest FDB score.
 %
-% Source (transcribed verbatim):
-%   historical source: FDB-AGSK reference FDB_Func1.m
+%   index = fdb_score_best(population, fitness)
 %
-% Fitness-Distance Balance score: Manhattan distance of each individual to
-% the current best, normalized fitness 1-(f-min)/(max-min), normalized
-% distance (d-min)/(max-min), score = normFitness + normDistance; returns
-% the ARGMAX index. Degenerate flat-fitness population: uniform random
-% index via randi (consumes one RNG draw), exactly as the reference.
+% Faithful port of the FDB-AGSK reference FDB_Func1.m (historical source).
+% population: NP x D; fitness: NP values (lower is better).
+% Returns one row index into population.
+%
+% Fitness-Distance Balance (FDB) score = normalized fitness
+% 1-(f-min)/(max-min) + normalized Manhattan distance to the current best
+% (d-min)/(max-min). index is the argmax of the score. If all fitness
+% values are equal, index = randi(NP) (one RNG draw), as in the reference.
 
 [~, bestIndex] = min(fitness);
 best = population(bestIndex, :);
@@ -25,9 +27,8 @@ if min(fitness) == max(fitness)
 
 else
 
-    % Manhattan distance to best + normalization, vectorized. sum(...,2) sums
-    % over dimensions in the same order as the original inner j-loop, so the
-    % scores are bit-identical to the loop version.
+    % Vectorized distance and normalization. sum(...,2) adds the dimensions
+    % in the same order as the original loop, so scores match bit for bit.
     distances = sum(abs(best - population), 2).';
     f = fitness(:).';
     minFitness = min(f); maxMinFitness = max(f) - minFitness;

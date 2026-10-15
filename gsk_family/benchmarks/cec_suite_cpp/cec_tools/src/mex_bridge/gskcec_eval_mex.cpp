@@ -1,28 +1,30 @@
-// gskcec_eval: MATLAB MEX bridge to the standalone C++ CEC benchmark port.
+// gskcec_eval: MEX bridge from MATLAB to the C++ CEC benchmark port.
 //
-// The CEC benchmark library itself is MEX-free (project contract); this
-// OPTIONAL bridge exists so the MATLAB GSK optimizers evaluate the exact
-// same ported C++ code that the C++ tools validate. Built by
-// scripts/build_mex_bridge.ps1 into build/mex/gskcec_eval.mexw64.
+// The benchmark library itself does not use MEX (project rule). This
+// optional bridge lets the MATLAB GSK optimizers call the same C++ code that
+// the C++ tools validate. scripts/build_mex_bridge.ps1 builds it into
+// build/mex/gskcec_eval.mexw64.
 //
 // MATLAB API:
 //   h = gskcec_eval('new', suite, function_id, dimension, data_root)
-//   f = gskcec_eval('eval', h, X)   % X is D x NP (one candidate per column,
-//                                   % the classic cec17_func orientation);
-//                                   % returns 1 x NP fitness row.
+//   f = gskcec_eval('eval', h, X)   % X is column-major D x NP, one candidate
+//                                   % per column (as in cec17_func);
+//                                   % f is a 1 x NP fitness row.
 //   s = gskcec_eval('info', h)      % struct: suite, function_id, dimension,
 //                                   % lb (1xD), ub (1xD), optimum
-//   gskcec_eval('free', h)
-//   gskcec_eval('clear')            % drop every live problem handle
+//   gskcec_eval('free', h)          % unknown handle: no-op
+//   gskcec_eval('clear')            % free every live problem handle
 //
-// X must be a real, full (non-sparse) double matrix; function_id, dimension
-// and h must be finite integer-valued double scalars (gskcec:badInput).
+// X must be a real, full (non-sparse) double matrix. function_id, dimension
+// and h must be finite integer-valued double scalars. Bad input raises
+// gskcec:badInput; other error ids are gskcec:usage, gskcec:badHandle and
+// gskcec:error.
 //
 // While any handle is live the MEX is locked in memory (mexLock), so
 // 'clear mex' / 'clear functions' cannot unload it and restart handle ids at
-// 1 underneath MATLAB variables that still hold the old numbers. Freeing the
-// last handle (or gskcec_eval('clear')) unlocks it, after which 'clear mex'
-// unloads it (e.g. before rebuilding the bridge).
+// 1 under MATLAB variables that still hold old ids. Freeing the last handle
+// (or gskcec_eval('clear')) unlocks it; then 'clear mex' unloads it (e.g.
+// before rebuilding the bridge).
 
 #include "gskcec/benchmark/factory.hpp"
 
@@ -38,11 +40,13 @@
 
 namespace {
 
+// Live problems, keyed by handle id.
 std::map<int, std::unique_ptr<gskcec::BenchmarkProblem>>& registry() {
     static std::map<int, std::unique_ptr<gskcec::BenchmarkProblem>> problems;
     return problems;
 }
 
+// Next handle id: starts at 1 and is never reused while the MEX is loaded.
 int& next_handle() {
     static int next = 1;
     return next;
@@ -65,9 +69,10 @@ double get_scalar(const mxArray* arr, const char* what) {
     return mxGetScalar(arr);
 }
 
-// Integer arguments (function_id, dimension, handle): reject NaN/Inf,
-// non-integral and out-of-int-range values instead of truncating them (a
-// plain static_cast would turn 1.7 into 1 and is undefined for NaN/Inf).
+// Reads an integer argument (function_id, dimension, handle). Rejects
+// NaN/Inf, non-integers and values outside the int range instead of
+// truncating them (a plain static_cast turns 1.7 into 1 and is undefined for
+// NaN/Inf).
 int get_int(const mxArray* arr, const char* what) {
     const double v = get_scalar(arr, what);
     if (!std::isfinite(v) || v != std::floor(v) ||
@@ -86,9 +91,9 @@ gskcec::BenchmarkProblem& get_problem(int handle) {
     return *it->second;
 }
 
-// Keep the MEX locked exactly while the registry holds a live handle (see
-// the header comment). Locking only on the empty -> non-empty transition and
-// unlocking only on non-empty -> empty keeps the lock count at most 1.
+// Keeps the MEX locked exactly while a handle is live (see the file header).
+// It locks only when the registry goes from empty to non-empty and unlocks
+// only on the reverse, so the lock count is never above 1.
 void sync_lock() {
     const bool live = !registry().empty();
     if (live && !mexIsLocked()) {
@@ -98,6 +103,7 @@ void sync_lock() {
     }
 }
 
+// Frees every problem when MATLAB unloads the MEX.
 void cleanup_at_exit() {
     registry().clear();
 }
@@ -134,8 +140,8 @@ extern "C" __declspec(dllexport) void mexFunction(int nlhs, mxArray* plhs[], int
                 mexErrMsgIdAndTxt("gskcec:usage", "f = gskcec_eval('eval', h, X)  %% X is D x NP");
             }
             auto& problem = get_problem(get_int(prhs[1], "handle"));
-            // Sparse storage holds only the nonzeros: mxGetPr would return the
-            // compressed value buffer, not a dense D x NP block.
+            // Sparse storage holds only the nonzeros, so mxGetPr would return
+            // the compressed value buffer, not a dense D x NP block.
             if (!mxIsDouble(prhs[2]) || mxIsComplex(prhs[2]) || mxIsSparse(prhs[2])) {
                 mexErrMsgIdAndTxt("gskcec:badInput", "X must be a real, full (non-sparse) double matrix.");
             }

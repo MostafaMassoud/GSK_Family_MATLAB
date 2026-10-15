@@ -7,12 +7,10 @@
 #include <string>
 #include <system_error>
 
-// std::from_chars for floating-point is a C++17 feature. libstdc++ has
-// provided it since GCC 11; the WinLibs GCC 16.1 toolchain used here supports
-// it (verified via __cpp_lib_to_chars). If a future/older toolchain ever lacks
-// it, the GSKCEC_HAVE_FROM_CHARS_DOUBLE branch falls back to the original
-// std::stod-based parser, which produces the identical correctly-rounded
-// double, so results stay bit-identical either way.
+// Floating-point std::from_chars (C++17) is in libstdc++ since GCC 11 and in
+// the WinLibs GCC 16.1 toolchain used here (checked via __cpp_lib_to_chars).
+// A toolchain without it uses the std::stod fallback below. Both give the
+// same correctly rounded double, so results match bit for bit either way.
 #if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
 #define GSKCEC_HAVE_FROM_CHARS_DOUBLE 1
 #else
@@ -23,12 +21,10 @@ namespace gskcec {
 
 namespace {
 
-// Reads the entire file at @p path into a string in a single pass.
-//
-// Opened in binary mode so the byte count from the stream matches the size on
-// disk; '\r' is whitespace and is treated as a delimiter during tokenisation,
-// so this is equivalent to the text-mode behaviour of the previous
-// operator>>-based reader.
+// Reads the whole stream @p in into a string in one pass.
+// The caller opens the file in binary mode so the byte count matches the size
+// on disk. '\r' is whitespace and acts as a delimiter when tokenizing, so the
+// result is the same as a text-mode operator>> read.
 std::string read_file_contents(std::ifstream& in) {
     in.seekg(0, std::ios::end);
     const std::streamoff size = in.tellg();
@@ -40,25 +36,22 @@ std::string read_file_contents(std::ifstream& in) {
         in.read(contents.data(), static_cast<std::streamsize>(size));
         contents.resize(static_cast<std::size_t>(in.gcount()));
     } else {
-        // Non-seekable or reported zero/unknown size: fall back to a streamed
-        // read of the whole buffer.
+        // Size is zero or unknown (e.g. not seekable): stream to the end.
         contents.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
     }
     return contents;
 }
 
-// Matches the whitespace set skipped by std::istream::operator>> under the
-// classic "C" locale: space, '\t', '\n', '\v', '\f', '\r'. Commas and other
-// punctuation are NOT whitespace, exactly as before, so a token such as "1,2"
-// stays a single (invalid) token and is rejected identically.
+// The whitespace set that operator>> skips in the "C" locale: space, '\t',
+// '\n', '\v', '\f', '\r'. Commas and other punctuation are not whitespace,
+// so "1,2" stays one (invalid) token and is rejected.
 inline bool is_space_byte(char ch) {
     return std::isspace(static_cast<unsigned char>(ch)) != 0;
 }
 
-// Shared implementation for both public overloads.
-//
-// @p reserve_hint is an estimate of the value count used only to size the
-// output vector up front; it never changes which values are produced.
+// Shared body of both load_values_file overloads.
+// @p reserve_hint estimates the value count. It only presizes the output
+// vector and never changes the values returned.
 Vector load_values_impl(const std::filesystem::path& path, std::size_t reserve_hint) {
     require_file(path);
     std::ifstream in(path, std::ios::binary);
@@ -78,15 +71,14 @@ Vector load_values_impl(const std::filesystem::path& path, std::size_t reserve_h
     const char* pos = begin;
 
     while (pos != end) {
-        // Skip the run of whitespace separating tokens (mirrors the leading
-        // whitespace skip performed by operator>>).
+        // Skip whitespace between tokens, as operator>> does.
         if (is_space_byte(*pos)) {
             ++pos;
             continue;
         }
 
-        // [token_begin, token_end) is the next non-whitespace run, i.e. exactly
-        // the std::string that "in >> token" would have produced.
+        // [token_begin, token_end) is the next non-whitespace run: the same
+        // token that "in >> token" would read.
         const char* const token_begin = pos;
         while (pos != end && !is_space_byte(*pos)) {
             ++pos;
@@ -94,12 +86,10 @@ Vector load_values_impl(const std::filesystem::path& path, std::size_t reserve_h
         const char* const token_end = pos;
 
 #if GSKCEC_HAVE_FROM_CHARS_DOUBLE
-        // std::from_chars(general) does not accept a leading '+', whereas the
-        // previous std::stod did. Skip a single leading '+' so such tokens are
-        // accepted with the identical value; the rest of the accept-set (signed
-        // decimal/scientific, "inf", "nan") already matches std::stod, and the
-        // parsed double is correctly rounded just like std::stod, hence
-        // bit-identical.
+        // std::from_chars rejects a leading '+' but std::stod accepts it, so
+        // skip one leading '+'. All other accepted forms (signed decimal or
+        // scientific, "inf", "nan") match std::stod, and both round
+        // correctly, so the value is bit-identical to std::stod's.
         const char* parse_begin = token_begin;
         if (parse_begin != token_end && *parse_begin == '+') {
             ++parse_begin;
@@ -115,8 +105,8 @@ Vector load_values_impl(const std::filesystem::path& path, std::size_t reserve_h
         }
         values.push_back(value);
 #else
-        // Fallback: original std::stod-based parsing. Produces the identical
-        // correctly-rounded double, so results remain bit-identical.
+        // Fallback: std::stod parser. It gives the same correctly rounded
+        // double, so results match bit for bit.
         const std::string token(token_begin, token_end);
         try {
             std::size_t consumed = 0;
@@ -147,10 +137,10 @@ void require_file(const std::filesystem::path& path) {
 }
 
 Vector load_values_file(const std::filesystem::path& path) {
-    // Estimate the value count from the file size to size the vector once.
-    // The smallest a value plus its delimiter can be is ~2 bytes ("1 "), so
-    // size/2 is a safe upper bound that avoids reallocations without grossly
-    // over-allocating; file_size failures (errors) simply skip the hint.
+    // Presize the vector from the file size. A value plus its delimiter takes
+    // at least about 2 bytes ("1 "), so size/2 is a safe upper bound that
+    // avoids reallocation without over-allocating much. If file_size fails,
+    // no hint is used.
     std::size_t reserve_hint = 0;
     std::error_code ec;
     const std::uintmax_t file_size = std::filesystem::file_size(path, ec);
@@ -161,7 +151,7 @@ Vector load_values_file(const std::filesystem::path& path) {
 }
 
 Vector load_values_file(const std::filesystem::path& path, std::size_t expected_count) {
-    // The exact count is known here, so use it directly as the reserve hint.
+    // The exact count is known, so use it as the reserve hint.
     Vector values = load_values_impl(path, expected_count);
     if (values.size() < expected_count) {
         throw std::runtime_error("Data file " + path.string() + " holds " + std::to_string(values.size()) +

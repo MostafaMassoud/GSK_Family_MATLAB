@@ -5,7 +5,8 @@
 > paths, reference mismatches, the eGSK toolbox requirement, and
 > parallel-vs-serial determinism.
 > **For:** anyone whose run did not behave as [tutorial.md](tutorial.md),
-> [user_guide.md](user_guide.md), or [runbook.md](runbook.md) describes.
+> [user_guide.md](user_guide.md), [RUNBOOK.md](../../../RUNBOOK.md), or
+> [command_reference.md](command_reference.md) describes.
 > **Prerequisites:** none. Terms used here are defined in
 > [glossary.md](../reference/glossary.md).
 > **After reading:** you will be able to diagnose and resolve the common
@@ -253,7 +254,7 @@ documented fair-start exception). The metadata says so -
 `self-init (fair-start exception)`. In a unified campaign DT-GSK therefore shares
 the other optimizers' seeds (so `verify_unified_seed_schedule` still compares
 it) but not their initial population; state that when you report a fair-start
-comparison. See [runbook.md](runbook.md#37-dt-gsk) and
+comparison. See [command_reference.md](command_reference.md#37-dt-gsk) and
 `src/optimizers/dt-gsk/README.md`.
 
 ## The Per-Run Comparison Needs The Statistics Toolbox

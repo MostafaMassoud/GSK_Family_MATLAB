@@ -49,9 +49,9 @@ std::optional<Real> optional_real(const std::vector<std::string>& cells, Index i
         return std::nullopt;
     }
     const std::string cell = trim(cells[index]);
-    // Missing-statistic markers used across the imported reference tables:
-    // empty cell, a dash, NaN, or N/A (the AGSK CEC2020 D=5 table reports
-    // N/A for functions the source paper did not evaluate).
+    // Markers for a missing statistic in the imported reference tables: an
+    // empty cell, "-", NaN, N/A or NA (any case). The AGSK CEC2020 D=5 table
+    // uses N/A for functions its source paper did not evaluate.
     const std::string lowered = lower_ascii(cell);
     if (cell.empty() || cell == "-" || lowered == "nan" || lowered == "n/a" || lowered == "na") {
         return std::nullopt;
@@ -72,9 +72,9 @@ std::optional<Index> column_index(const std::map<std::string, Index>& columns, c
 }
 
 bool is_reference_summary_path(const std::filesystem::path& path) {
-    // Imported summary tables live directly under cec*/<optimizer>/.
-    // Nested CSV/TXT files such as curves/Figure_*.csv are auxiliary data and
-    // do not use the Function/Best/Median/Mean/Worst/SD schema.
+    // Summary tables sit directly in cec*/<optimizer>/. Deeper CSV/TXT files
+    // (e.g. curves/Figure_*.csv) are extra data without the
+    // Function/Best/Median/Mean/Worst/SD columns, so they are skipped.
     const auto optimizer_dir = path.parent_path();
     const auto suite_dir = optimizer_dir.parent_path();
     const std::string suite = lower_ascii(suite_dir.filename().string());

@@ -41,7 +41,7 @@ reference location.
 
 DT-GSK is the exception (`is_unified_only`): under every `seed_policy` the
 runner gives it `get_cec_seed(base_seed, dim, func, run)` and `threefry`, as its
-Python reference campaign did, and draws no `X0` for it. DT-GSK samples its own
+reference campaign did, and draws no `X0` for it. DT-GSK samples its own
 `NP = 5*D` population from Threefry substreams of that seed; the metadata
 records this as `initial_population_policy`.
 

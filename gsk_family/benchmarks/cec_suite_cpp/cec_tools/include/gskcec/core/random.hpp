@@ -8,6 +8,10 @@
 
 namespace gskcec {
 
+/// Seeded std::mt19937_64 engine with uniform real and integer draws.
+/// uniform01() draws from [0, 1) and uniform_real() from [lower, upper);
+/// uniform_index() includes both ends. uniform_real() and uniform_index()
+/// throw std::invalid_argument if lower > upper.
 class RandomEngine {
 public:
     explicit RandomEngine(Seed seed)
@@ -44,13 +48,12 @@ private:
     std::mt19937_64 engine_;
 };
 
-// C++ mirror of MATLAB get_cec_seed.m for any C++-side diagnostics that need a
-// CEC run seed. The seed deliberately depends only on the campaign base seed
-// and the benchmark coordinates. It must not include optimizer name/index,
-// suite hash, population size, max evaluations, or any other algorithm-specific
-// value; those would make a cross-family comparison start from different random
-// streams. MATLAB remains the optimizer execution path, but keeping this helper
-// aligned prevents stale algorithm-hashed seed logic from reappearing in tools.
+// Per-run CEC seed; same formula as MATLAB get_cec_seed.m (keep the two in
+// sync). Result is in [1, 2147483646]. The seed depends only on the base seed
+// and the (dimension, function, run) cell, never on the optimizer, suite,
+// population size, max_nfes or any other algorithm setting, so every
+// optimizer gets the same random stream on the same cell. MATLAB runs the
+// optimizers; this copy serves C++-side tools and diagnostics.
 inline Seed make_run_seed(Seed base_seed,
                           int dimension,
                           int function_id,

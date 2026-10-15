@@ -1,7 +1,6 @@
-// Validation tests for the CEC2013 Large-Scale Global Optimization suite
-// adapter (gskcec::cec2013lsgo). Run from anywhere with the project root as
-// argv[1] (default "."): data files are resolved explicitly, never via the
-// current working directory.
+// Tests for the CEC2013-LSGO (large-scale global optimization) suite adapter
+// (gskcec::cec2013lsgo). Pass the project root as argv[1] (default "."); data
+// paths are built from it, never from the current working directory.
 
 #include "gskcec/benchmark/cec2013lsgo.hpp"
 #include "gskcec/benchmark/data_loading.hpp"
@@ -34,9 +33,9 @@ struct ExpectedFunction {
     double upper;
 };
 
-// Native dimensions and bounds taken from the reference suite code
-// (F<id>.cpp constructors: minX/maxX/dimension). Note F9 is [-100, 100] in
-// the reference code even though the technical report lists [-5, 5].
+// Native dimensions and bounds from the reference suite code (F<id>.cpp
+// constructors: minX/maxX/dimension). F9 is [-100, 100] in the reference
+// code, although the technical report lists [-5, 5].
 constexpr ExpectedFunction kExpected[] = {
     {1, 1000, -100.0, 100.0}, {2, 1000, -5.0, 5.0},     {3, 1000, -32.0, 32.0},
     {4, 1000, -100.0, 100.0}, {5, 1000, -5.0, 5.0},     {6, 1000, -32.0, 32.0},
@@ -45,8 +44,9 @@ constexpr ExpectedFunction kExpected[] = {
     {13, 905, -100.0, 100.0}, {14, 905, -100.0, 100.0}, {15, 1000, -100.0, 100.0},
 };
 
-// Deterministic in-bounds probe point: x_j = ((-1)^j) * min(5 + j mod 17, b) * 0.3
-// where b is the upper bound, so |x_j| <= 0.3 * b stays strictly inside bounds.
+// Fixed in-bounds probe point: x_j = ((-1)^j) * min(5 + j mod 17, b) * 0.3,
+// with j 0-based and b the upper bound, so |x_j| <= 0.3 * b is strictly
+// inside the bounds.
 std::vector<double> pattern_vector(int dimension, double upper_bound) {
     std::vector<double> x(static_cast<std::size_t>(dimension));
     for (int j = 0; j < dimension; ++j) {
@@ -105,20 +105,18 @@ int main(int argc, char** argv) {
 
         check(problem->optimum() == 0.0, tag + "optimum is 0");
 
-        // --- f(xopt) == 0 where the construction implies it ---
-        //
-        // f1..f11, f13, f15: the shift makes z = x - xopt = 0 at x = xopt and
-        //   every base function (elliptic/rastrigin/ackley/schwefel/sphere,
-        //   including the weighted rotated subcomponents, where R * 0 = 0)
-        //   evaluates to 0 at z = 0.
-        // f12 (Rosenbrock): the minimum of sum(100 (z_j^2 - z_{j+1})^2 +
-        //   (z_j - 1)^2) is at z = 1, so f(xopt) = D - 1; the optimum point is
-        //   xopt + 1 and f(xopt + 1) == 0 is asserted instead.
+        // --- f(xopt) == 0 (to 1e-6) where the construction guarantees it ---
+        // f1..f11, f13, f15: z = x - xopt = 0 at x = xopt, and every base
+        //   function (elliptic/rastrigin/ackley/schwefel/sphere, including
+        //   the weighted rotated subcomponents, since R * 0 = 0) is 0 at z = 0.
+        // f12 (Rosenbrock): sum(100 (z_j^2 - z_{j+1})^2 + (z_j - 1)^2) has its
+        //   minimum at z = 1, so f(xopt) = D - 1. The optimum is xopt + 1, so
+        //   the test checks f(xopt + 1) == 0 instead.
         // f14 (conflicting overlapping Schwefel): F14-xopt.txt holds 1000
-        //   per-subcomponent shift values for 20 groups that share overlapped
-        //   coordinates of the 905-dim x; the groups conflict by design, so no
-        //   single x zeroes every subcomponent and no f(xopt) identity exists.
-        //   Excluded; smoke-checked below like every other function.
+        //   shift values for 20 subcomponents that share overlapping
+        //   coordinates of the 905-dim x. They conflict by design, so no single
+        //   x zeroes them all and there is no f(xopt) identity. f14 is skipped
+        //   here but still gets the smoke checks below.
         if (expected.id != 14) {
             const std::filesystem::path xopt_path =
                 data_root / ("F" + std::to_string(expected.id) + "-xopt.txt");
@@ -137,7 +135,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        // --- finite smoke: all-zeros and deterministic pattern vector ---
+        // --- smoke test: finite values at all-zeros and the pattern vector ---
         const std::vector<double> zeros(static_cast<std::size_t>(expected.dim), 0.0);
         const double f_zeros = problem->evaluate(zeros);
         check(std::isfinite(f_zeros), tag + "f(zeros) finite");
@@ -146,7 +144,7 @@ int main(int argc, char** argv) {
         const double f_pattern = problem->evaluate(pattern);
         check(std::isfinite(f_pattern), tag + "f(pattern) finite");
 
-        // --- determinism: identical results for the same point ---
+        // --- determinism: the same point gives the same result ---
         check(problem->evaluate(pattern) == f_pattern, tag + "deterministic evaluation");
         check(problem->evaluate(zeros) == f_zeros, tag + "deterministic evaluation (zeros)");
 

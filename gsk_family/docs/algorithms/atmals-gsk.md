@@ -369,7 +369,7 @@ helps, compare against [AGSK](agsk.md) or [APGSK](apgsk.md)/[FDB-AGSK](fdb-agsk.
 The other local-search variant uses an SQP polish instead of memory-based
 perturbation — see [eGSK](egsk.md). For the un-tuned baseline that every variant
 extends, see [GSK](gsk.md). See
-**[../getting-started/runbook.md](../getting-started/runbook.md)** to run it;
+**[../getting-started/command_reference.md](../getting-started/command_reference.md)** to run it;
 interface contract: [matlab_interface.md](../reference/matlab_interface.md).
 
 ## Benchmark suites

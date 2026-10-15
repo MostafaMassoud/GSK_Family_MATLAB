@@ -1,3 +1,16 @@
+# Builds the C++ tools with CMake, runs ctest, then runs gsk_run on each config.
+#
+# Usage:
+#   powershell -File scripts\run_all.ps1 [-Full] [-Configs <yml>,...] [options]
+#
+# Runs from the project root. By default builds into build\ (MinGW Makefiles,
+# Release; change with -BuildDir, -Generator, -BuildType) and runs
+# configs\smoke.yml. -Full runs smoke, all_cec2017, all_cec2011 and
+# agsk_cec2020 unless -Configs is given. -SkipBuild and -SkipTests skip those
+# steps. -DryRun, -Overwrite, -NoVerify, -Matlab, -Output, -Reference,
+# -SeedPolicy and -RandGenerator are passed to gsk_run.
+# Stops with an error if gsk_run.exe or a config is missing, or at the first
+# config whose gsk_run fails. The cmake and ctest exit codes are not checked.
 param(
     [string]$BuildDir = "build",
     [string]$Generator = "MinGW Makefiles",
@@ -12,9 +25,9 @@ param(
     [string]$Matlab = "",
     [string]$Output = "",
     [string]$Reference = "",
-    # Empty = each config's own seed_policy / rand_generator applies (gsk_run
-    # falls back to reference + threefry when a config omits them). Pass a
-    # value only to override every config.
+    # Empty = use each config's seed_policy / rand_generator (gsk_run uses
+    # reference + threefry when a config omits them). Set a value only to
+    # override every config.
     [string]$SeedPolicy = "",
     [string]$RandGenerator = ""
 )

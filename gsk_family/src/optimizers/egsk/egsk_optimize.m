@@ -1,86 +1,89 @@
 function result = egsk_optimize(problem, options)
-%EGSK_OPTIMIZE Faithful MATLAB port of eGSK (Enhanced Gaining-Sharing
-%Knowledge-based algorithm; Jawad, Roshdy & Mohamed,
-%https://doi.org/10.1016/j.rico.2025.100542).
+%EGSK_OPTIMIZE Enhanced Gaining-Sharing Knowledge based optimizer (eGSK).
 %
-% Historical source notes (transcribed line by line):
+%   result = egsk_optimize(problem, options)
+%
+% MATLAB port of eGSK (Jawad, Roshdy & Mohamed,
+% https://doi.org/10.1016/j.rico.2025.100542), transcribed line by line from:
 %   historical source: egsk/egsk/finaleGSK2023/eGSK.m
 %   historical source: egsk/egsk/finaleGSK2023/IP.m
-%       (ported as egsk_ip_refine.m)
+%       -> egsk_ip_refine.m
 %   historical source: egsk/egsk/finaleGSK2023/Gained_Shared_Junior_R1R2R3.m
-%       (behaviorally identical to the shared src/common copy -- the only
-%        textual difference is a cosmetic comma after "if i > 1000"; the
-%        shared Gained_Shared_Junior_R1R2R3 is therefore called directly)
+%       Same behavior as the shared src/common copy (only a cosmetic comma
+%       after "if i > 1000" differs), so the shared helper is called.
 %   historical source: egsk/egsk/finaleGSK2023/Gained_Shared_Senior_R1R2R3.m
-%       (takes only indBest and uses fixed round(0.1/0.9) partition
-%        boundaries, which DIFFER from the shared Senior(indBest, P) helper;
-%        kept as the local copy egsk_gained_shared_senior.m)
+%       Takes only indBest and hard-codes round(0.1/0.9) partition
+%       boundaries, unlike the shared Senior(indBest, P) helper; kept as
+%       the local copy egsk_gained_shared_senior.m.
 %   historical source: egsk/egsk/finaleGSK2023/boundConstraint.m
-%       (transcribed as the boundConstraint local function below)
+%       -> local function boundConstraint below.
 %
-% Transcribed behaviors (preserved exactly, do NOT "fix"):
-%   * KF1 = KF2 = 0.5*ones(NP,1) separate junior/senior knowledge factors;
-%     KR = 1; K = 10 (scalar knowledge rate, so D_Gained_Shared_Junior is a
-%     scalar broadcast over the population).
-%   * Late-stage trigger: every generation with g >= 0.75*G_Max (where
-%     G_Max = fix(max_nfes/NP)) recomputes KF1 per individual from a
-%     triangular membership over (fitness(Rg1), fitness(Rg3), fitness(Rg2))
-%     and KF2 from scalar anchors fitness(min(R1)), fitness(min(R2)),
-%     fitness(min(R3)) -- min over the INDEX vectors, as written -- followed
-%     by forcing out-of-range memberships to zero: KF(KF>=1)=0; KF(KF<=0)=0.
-%   * Population-level selection twist: if sum(fitness) < sum(children)
-%     the parent population is the base and improving children are copied
-%     in; otherwise the CHILD population is the base and better parents are
-%     restored. Both branches keep the pairwise best, but tie-breaking
-%     favors the base population -- transcribed as written, not replaced by
+% Fields of problem, options and result: docs/reference/matlab_interface.md.
+% options.seed is required (error 'egsk:options'). Optional: np (100),
+% kf1 (0.5), kf2 (0.5), kr (1), k (10), use_fmincon (true). The run never
+% stops early; termination is always 'max_evaluations'.
+%
+% Reference behaviors kept exactly as written (do NOT "fix"):
+%   * Separate junior/senior knowledge factors KF1 = KF2 = 0.5*ones(NP,1);
+%     KR = 1; K = 10. K is a scalar, so D_Gained_Shared_Junior is one value
+%     for the whole population.
+%   * Late stage: every generation with g >= 0.75*G_Max
+%     (G_Max = fix(max_nfes/NP)) recomputes KF1 per individual from a
+%     triangular membership over (fitness(Rg1), fitness(Rg3), fitness(Rg2)),
+%     and KF2 from the scalar anchors fitness(min(R1)), fitness(min(R2)),
+%     fitness(min(R3)) - min over the INDEX vectors, as written. Memberships
+%     >= 1 or <= 0 are then set to zero: KF(KF>=1)=0; KF(KF<=0)=0.
+%   * Selection: if sum(fitness) < sum(children), the parents are the base
+%     and better children are copied in; otherwise the CHILDREN are the
+%     base and better parents are restored. Both keep the pairwise best,
+%     but ties go to the base population, so do not replace this with
 %     plain pairwise selection.
 %   * IP local refinement (fmincon SQP, budget ceil(0.002*max_nfes)) runs in
-%     the same late stage whenever the best-so-far error is still above the
-%     target and std([a2 b2 c2])*1e-2 <= 1; the refined point replaces the
-%     incumbent at row NO_i (the row index that produced the current
-%     best-so-far), and fitness(NO_i) is overwritten -- exactly as eGSK.m.
+%     the late stage whenever the best-so-far error is above the target and
+%     std([a2 b2 c2])*1e-2 <= 1. The refined point replaces row NO_i (the
+%     row that produced the current best-so-far), and fitness(NO_i) is
+%     overwritten, exactly as in eGSK.m.
 %
-% Toolbox policy: the reference IP stage requires fmincon. Default runs require
-% license('test','Optimization_Toolbox') && exist('fmincon','file'); otherwise
-% the run errors before the search starts. options.use_fmincon=false is kept only
-% as an explicit non-reference diagnostic opt-out.
+% Toolbox: the reference IP stage needs fmincon. By default the run requires
+% license('test','Optimization_Toolbox') && exist('fmincon','file') and
+% otherwise raises 'egsk:fminconUnavailable' before the search starts.
+% options.use_fmincon = false is only an explicit, non-reference diagnostic
+% opt-out.
 %
-% Unknown optimum: the reference escape trigger compares
+% Unknown optimum: the reference escape trigger tests
 % bsf_fit_var > optimum + val_2_reach (val_2_reach = 1e-8). With
-% problem.optimum == NaN the target can never be confirmed reached, so the
-% trigger is treated as satisfied; the tolerance is problem.target_error
-% when set, otherwise the reference constant 1e-8.
+% problem.optimum = NaN the target can never be confirmed, so the trigger
+% counts as satisfied. The tolerance is problem.target_error when set,
+% else the reference constant 1e-8.
 %
-% Sanctioned modernization (the only one): the reference wall-clock seeding
-% rand('seed', sum(100*clock)) is replaced by gsk_set_rng(options) in
-% reference runs. options.rand_generator can select threefry, twister, or the
-% deterministic legacy 'seed' (v4) / 'state' (v5) streams.
-%
-% Interface: see docs/reference/matlab_interface.md. result = egsk_optimize(problem, options)
+% The only deliberate change in reference runs: the wall-clock seeding
+% rand('seed', sum(100*clock)) is replaced by gsk_set_rng(options).
+% options.rand_generator selects threefry, twister, or the deterministic
+% legacy 'seed' (v4) / 'state' (v5) streams.
 
 start_time = tic;
 
 if ~isfield(options, 'seed') || isempty(options.seed)
     error('egsk:options', 'options.seed is required');
 end
-actual_seed = gsk_set_rng(options);   % direct-call default 'twister'; selects threefry|twister|seed|state
+actual_seed = gsk_set_rng(options);   % options.rand_generator, default twister
 
 problem_size = problem.dim;
 max_nfes = problem.max_nfes;
 lu = [problem.lb; problem.ub];
 has_optimum = ~isnan(problem.optimum);
 
-% Reference constant val_2_reach = 10^(-8); the runner-provided
-% problem.target_error plays that role when set.
+% Target tolerance: problem.target_error when set, else the reference
+% constant val_2_reach = 10^(-8).
 if ~isnan(problem.target_error)
     val_2_reach = problem.target_error;
 else
     val_2_reach = 10^(-8);
 end
 
-% fmincon availability. The published eGSK reference always calls fmincon when
-% IP triggers, so the default/reference path requires it. The only supported
-% no-IP path is an explicit low-level diagnostic opt-out.
+% The published eGSK always calls fmincon when IP triggers, so the default
+% path requires it. The only way to skip IP is the explicit diagnostic
+% opt-out options.use_fmincon = false.
 fmincon_available = license('test', 'Optimization_Toolbox') && exist('fmincon', 'file') > 0;
 notes = '';
 if isfield(options, 'use_fmincon') && ~isempty(options.use_fmincon)
@@ -109,21 +112,23 @@ if isfield(options, 'np') && ~isempty(options.np); pop_size = options.np; end
 G_Max = fix(max_nfes / pop_size);
 
 %% Initialize the main population (reference one-liner, or runner X0)
-% Reference/reproduction runs do not pass X0, so this remains the original
-% one-draw initialization. Unified fair-comparison runs pass the runner-drawn
-% X0 plus the post-X0 RNG state; accepting both here lets every optimizer start
-% from the same population and same next random number for the same CEC cell.
+% Reference runs pass no X0 and keep the original single draw. Unified
+% fair-comparison runs pass the runner's X0 and the RNG state right after
+% drawing it, so every optimizer starts from the same population and the
+% same next random number for a given CEC cell.
 popold = gsk_initial_population_from_options(options, pop_size, lu(1, :), lu(2, :));
 gsk_restore_rng_after_initialization(options);
-pop = popold; % the old population becomes the current population
+pop = popold;
 
 fitness = problem.evaluate(pop);
 
 nfes = 0;
 bsf_fit_var = 1e+300;
-bsf_solution = pop(1, :); % defined-before-use guard; overwritten identically by the loop below
+bsf_solution = pop(1, :); % defined before use; the loop's first pass sets the same row
 NO_i = 1;
 
+% Initial best-so-far scan, as in the reference: count each evaluation and
+% stop once nfes exceeds max_nfes. NO_i is the row of the best-so-far.
 for i = 1:pop_size
     nfes = nfes + 1;
     if nfes > max_nfes; break; end
@@ -134,7 +139,7 @@ for i = 1:pop_size
     end
 end
 
-%% Parameter settings (reference values; overrides keep reference defaults)
+%% Parameter settings (reference defaults; options can override them)
 KF1 = 0.5 * ones(pop_size, 1); % junior Knowledge Factor
 KF2 = 0.5 * ones(pop_size, 1); % senior Knowledge Factor
 KR = 1;                        % Knowledge Ratio
@@ -144,7 +149,7 @@ if isfield(options, 'kf2') && ~isempty(options.kf2); KF2 = options.kf2 * ones(po
 if isfield(options, 'kr') && ~isempty(options.kr); KR = options.kr; end
 if isfield(options, 'k') && ~isempty(options.k); K = options.k; end
 
-% Per-generation convergence recording (interface requirement)
+% Convergence log: one row after initialization, then one per generation.
 max_records = ceil(max_nfes / pop_size) + 2;
 conv_nfes = zeros(max_records, 1);
 conv_fit = zeros(max_records, 1);
@@ -156,10 +161,10 @@ g = 0;
 %% main loop
 while nfes < max_nfes
     g = g + 1;
-    D_Gained_Shared_Junior = ceil((problem_size) * (1 - g / G_Max).^K); % scalar (K is scalar in eGSK)
+    D_Gained_Shared_Junior = ceil((problem_size) * (1 - g / G_Max).^K); % scalar, since K is a scalar
 
     D_Gained_Shared_Senior = problem_size - D_Gained_Shared_Junior; %#ok<NASGU>
-    pop = popold; % the old population becomes the current population
+    pop = popold;
 
     [~, indBest] = sort(fitness, 'ascend');
     [Rg1, Rg2, Rg3] = Gained_Shared_Junior_R1R2R3(indBest);
@@ -213,7 +218,7 @@ while nfes < max_nfes
         end
     end
 
-    %% Selection (1) -- population-level twist, transcribed as written
+    %% Selection (1): population-level rule, as written (see header)
     if sum(fitness) < sum(children_fitness)
         [fitness, Child_is_better_index] = min([fitness, children_fitness], [], 2);
         popold = pop;
@@ -240,7 +245,7 @@ while nfes < max_nfes
             else
                 y1(k) = 0;
             end
-            KF1 = y1; % reference re-assigns the whole vector inside the loop (as written)
+            KF1 = y1; % the reference reassigns the whole vector inside the loop
         end
         KF1(KF1 >= 1) = 0;
         KF1(KF1 <= 0) = 0;
@@ -278,7 +283,7 @@ while nfes < max_nfes
                     popold(NO_i, :) = bsf_solution;
                     fitness(NO_i, :) = bsf_fit_var;
                 end
-                % else: explicit non-reference diagnostic mode; IP is skipped.
+                % else: diagnostic mode (use_fmincon = false); IP is skipped.
             end
         end
     end
@@ -286,11 +291,11 @@ while nfes < max_nfes
     n_rec = n_rec + 1;
     conv_nfes(n_rec) = nfes;
     conv_fit(n_rec) = bsf_fit_var;
-end % end while loop
+end
 
 %% Result assembly (docs/reference/matlab_interface.md)
-% Reference driver: bsf_error_val = bsf_fit_var - optimum; zeroed below
-% val_2_reach.
+% Reference driver: bsf_error_val = bsf_fit_var - optimum, set to 0 when
+% below the target (here problem.target_error, if set).
 if has_optimum
     err = bsf_fit_var - problem.optimum;
     if ~isnan(problem.target_error) && err < problem.target_error
@@ -330,10 +335,13 @@ result.notes = notes;
 end
 
 function vi = boundConstraint(vi, pop, lu)
-%BOUNDCONSTRAINT Midpoint bound repair, transcribed from the reference
-% boundConstraint.m next to eGSK.m (byte-identical to the ATMALS-GSK copies).
+%BOUNDCONSTRAINT Midpoint bound repair.
+% Transcribed from the reference boundConstraint.m next to eGSK.m
+% (byte-identical to the ATMALS-GSK copies). vi and pop are NP x D and
+% lu = [lb; ub]. An entry of vi outside [lb, ub] moves to the midpoint of
+% the parent value in pop and the violated bound.
 
-[NP, ~] = size(pop); % the population size and the problem's dimension
+[NP, ~] = size(pop); % population size
 
 % check the lower bound
 xl = repmat(lu(1, :), NP, 1);

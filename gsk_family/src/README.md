@@ -25,7 +25,7 @@ Rules:
 - Keep provenance notes in local README/help text and `docs/reference/porting_notes.md`.
 - Do not translate GSK-family optimizers into C++.
 - Do not put CEC suite code, CEC input data, or CEC C++ tooling here.
-- Do not add Python scripts or Python wrappers.
+- Do not add scripts or wrappers in other languages.
 - Keep experiment seed scheduling in `src/runners`. Optimizers receive
   `options.seed` and `options.rand_generator`; under unified mode they may also
   receive runner-owned `options.initial_population` and

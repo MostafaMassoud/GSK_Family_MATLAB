@@ -3,26 +3,23 @@ function vi = gsk_bound_repair(vi, pop, lb, ub)
 %
 %   vi = gsk_bound_repair(vi, pop, lb, ub)
 %
-% Any component of vi below the lower bound is replaced by the midpoint of
-% the parent component and the lower bound; symmetrically for the upper
-% bound. Components inside the bounds are untouched. Consumes no random
-% numbers.
+% vi (candidates) and pop (parents) are NP x D; lb and ub are 1 x D rows.
+% A component of vi below lb becomes the midpoint of the parent component
+% and lb; likewise for ub. Violations use strict < and >; components inside
+% the bounds are unchanged. Draws no random numbers.
 %
-% Transcribed from boundConstraint.m, identical copies at:
-%   historical source: agsk/agsk/AGSK-CODE-FINAL/boundConstraint.m
-%   historical source: apgsk/apgsk/APGSK Code/boundConstraint.m
-%   historical source: atmalsgsk/atmalsgsk/cec2017/boundConstraint.m
-% and inlined with the same rule (0.5*(pop+bound)) in:
-%   historical source: gsk/gsk/GSK_Enhanced.m
+% Source: boundConstraint.m, identical copies in agsk/agsk/AGSK-CODE-FINAL/,
+% apgsk/apgsk/APGSK Code/ and atmalsgsk/atmalsgsk/cec2017/; inlined with the
+% same 0.5*(pop+bound) rule in gsk/gsk/GSK_Enhanced.m.
 
 [np, ~] = size(pop);
 
-% check the lower bound
+% Lower bound.
 xl = repmat(lb, np, 1);
 pos = vi < xl;
 vi(pos) = (pop(pos) + xl(pos)) / 2;
 
-% check the upper bound
+% Upper bound.
 xu = repmat(ub, np, 1);
 pos = vi > xu;
 vi(pos) = (pop(pos) + xu(pos)) / 2;

@@ -171,7 +171,7 @@ reference folder name.
 
 DT-GSK (`src/optimizers/dt-gsk/`) is the example of an optimizer whose
 reference is not a MATLAB release: it was ported from the DT-GSK reference
-implementation (Python, MIT license, v2.46). With no MATLAB original to diff
+implementation v2.46 (MIT license). With no MATLAB original to diff
 against, the unmodified reference code serves as the oracle. The route it took,
 recorded in `src/optimizers/dt-gsk/README.md`:
 
@@ -181,15 +181,15 @@ recorded in `src/optimizers/dt-gsk/README.md`:
    license is compatible with this project's GPL-3.0-or-later (MIT is) and
    record it in `LICENSES.md`.
 2. **Port line by line first.** Translate module by module, keeping the draw
-   order and the order of floating-point operations (DT-GSK keeps sequential
-   and NumPy-style pairwise sums and stable sorts).
+   order and the order of floating-point operations (DT-GSK keeps the
+   reference's sequential and pairwise sums and its stable sorts).
 3. **Verify against the oracle on identical random numbers.** Run the port and
    the unmodified reference on the same random numbers and compare
    generations, evaluations, per-stream draw counts and convergence traces, on
    every configuration branch (DT-GSK: all four dimension tiers). Expect
    agreement to round-off until a last-bit difference flips a discrete
    decision (exact ties, one-ulp improvements). The oracle harness and the
-   foreign code stay outside this repository; no Python is committed.
+   foreign code stay outside this repository; none of it is committed.
 4. **Reproduce the reference's own golden values** and keep them in the smoke
    test (DT-GSK: seed 12345, 3,000 evaluations, reproduced to `1e-13`;
    `src/tests/test_dt_gsk_smoke.m` checks the sphere cells).
@@ -197,8 +197,9 @@ recorded in `src/optimizers/dt-gsk/README.md`:
    line-by-line port bit for bit (DT-GSK: best point, fitness, `nfes` and full
    trace on 25 full-budget runs across every tier, plus 42 problems aimed at
    rare branches).
-6. **Document RNG differences.** MATLAB's Threefry and the Python replica give
-   the same 64-bit words but convert them to doubles differently (at most
+6. **Document RNG differences.** MATLAB's Threefry generator produces the same
+   64-bit words as the reference implementation's generator, but the two
+   convert them to doubles differently (at most
    `2^-53` per uniform draw), so live campaigns are compared statistically, not
    bit for bit.
 7. **Mirror the reference protocol in the runner** rather than forcing the
@@ -248,7 +249,7 @@ existing suite meets, and
    suite.
 
 Keep `cec2013` and `cec2013lsgo` distinct; do not introduce a path ending in
-`cec2013.cpp` (a repo check forbids that Cython artifact name).
+`cec2013.cpp` (a repo check forbids that generated-binding file name).
 
 ## Add An Output Artifact
 
@@ -289,4 +290,4 @@ pattern.
    path.
 4. Rebuild the C++ tree, add a unit test under
    `benchmarks/cec_suite_cpp/cec_tools/tests/`, run `ctest`, and update the
-   [runbook](../getting-started/runbook.md).
+   [Command Reference](../getting-started/command_reference.md).

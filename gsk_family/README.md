@@ -3,22 +3,25 @@
 `gsk_family` is a self-contained hybrid MATLAB/C++ research project around the
 Gaining-Sharing Knowledge (GSK) algorithm family and the CEC benchmark suites.
 
+**Start here:** [RUNBOOK.md](../RUNBOOK.md) - prerequisites, your first run step by
+step, and parallel runs in MATLAB.
+
 - CEC benchmark suites (CEC2011, CEC2013, CEC2013LSGO, CEC2017, CEC2020)
-  are standalone C++20 ports under `benchmarks/` - no MATLAB, R, MEX or
-  Python needed to evaluate them.
+  are standalone C++20 ports under `benchmarks/` - no MATLAB, R or MEX
+  needed to evaluate them.
 - The seven GSK-family optimizers (gsk, agsk, apgsk, atmals-gsk, egsk,
   fdb-agsk, dt-gsk) are MATLAB implementations under `src/`, with provenance and
   known behavior differences documented in `docs/`. DT-GSK, the seventh, is a
-  MATLAB port of the DT-GSK reference implementation (Python, MIT license,
-  v2.46); its record is
+  MATLAB port of the DT-GSK reference implementation v2.46 (MIT license);
+  its record is
   [src/optimizers/dt-gsk/README.md](src/optimizers/dt-gsk/README.md) and its
   algorithm page [docs/algorithms/dt-gsk.md](docs/algorithms/dt-gsk.md).
 - Public optimizer IDs, CLI/config names, result folders, and reference folders
   use hyphenated slugs (`atmals-gsk`, `fdb-agsk`, `dt-gsk`). MATLAB entry-point
   function names keep underscores where MATLAB requires valid identifiers, for
   example `atmals_gsk_optimize`, `fdb_agsk_optimize` and `dt_gsk_optimize`.
-- Python code, wrappers, generated Cython bindings and Python tooling are
-  not part of this project.
+- The project is MATLAB and C++ only (no other languages or generated
+  bindings; helper scripts are PowerShell or MATLAB).
 
 Start with [docs/reference/project_structure.md](docs/reference/project_structure.md) (folder
 map), [docs/reference/architecture.md](docs/reference/architecture.md) (layers and execution
@@ -53,7 +56,7 @@ in [CITATION.cff](CITATION.cff) and [codemeta.json](codemeta.json).
 | ATMALS-GSK | Alfadli, N. M.; Oun, E. M.; Mohamed, A. W. "Auto-Tuning Memory-Based Adaptive Local Search Gaining-Sharing Knowledge-Based Algorithm for Solving Optimization Problems." *Algorithms*, 18(7), 398, 2025. DOI: [10.3390/a18070398](https://doi.org/10.3390/a18070398). |
 | eGSK | Jawad, M. A.; Roshdy, H. S. M.; Mohamed, A. W. "Enhanced Gaining-Sharing Knowledge-based algorithm." *Results in Control and Optimization*, 19, 100542, 2025. DOI: [10.1016/j.rico.2025.100542](https://doi.org/10.1016/j.rico.2025.100542). |
 | FDB-AGSK | Bakir, H.; Duman, S.; Guvenc, U.; Kahraman, H. T. "Improved adaptive gaining-sharing knowledge algorithm with FDB-based guiding mechanism for optimization of optimal reactive power flow problem." *Electrical Engineering*, 105, 3121-3160, 2023. DOI: [10.1007/s00202-023-01803-9](https://doi.org/10.1007/s00202-023-01803-9). |
-| DT-GSK | Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm." *Algorithms* (MDPI), 2026 (accepted, in production; DOI pending). Reference implementation: DT-GSK v2.46 (Python, MIT license), <https://github.com/MostafaMassoud/DT-GSK>. |
+| DT-GSK | Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm." *Algorithms* (MDPI), 2026 (accepted, in production; DOI pending). Reference implementation: DT-GSK v2.46 (MIT license), <https://github.com/MostafaMassoud/DT-GSK>. |
 
 FDB-AGSK also depends conceptually on the Fitness-Distance Balance selection
 idea: Kahraman, H. T.; Aras, S.; Gedikli, E. "Fitness-distance balance (FDB): a
@@ -63,7 +66,7 @@ new selection method for meta-heuristic search algorithms."
 
 ## Documentation
 
-The full project documentation is a browsable HTML site (generated, no Python):
+The full project documentation is a browsable HTML site (generated):
 
 ```powershell
 powershell -File scripts\build_docs.ps1   # -> docs\html\index.html
@@ -71,14 +74,15 @@ powershell -File scripts\build_docs.ps1   # -> docs\html\index.html
 
 It assembles every page below into a navigable site with a sidebar, per-page
 tables of contents, a separate page per algorithm, diagrams, and the Doxygen
-C++ API. The step-by-step **[runbook](docs/getting-started/runbook.md)** (also rendered to HTML)
+C++ API. The step-by-step **[Command Reference](docs/getting-started/command_reference.md)** (also rendered to HTML)
 explains how to run every algorithm from **both** the MATLAB IDE and Windows
 Terminal. The Markdown sources are the source of truth; the site is rebuildable
 at any time.
 
-New here? Read in this order:
+New here? To set up and run, start with [RUNBOOK.md](../RUNBOOK.md). To
+understand the project, read in this order:
 
-1. [docs/getting-started/explainer.md](docs/getting-started/explainer.md) - **start here.** Plain-language
+1. [docs/getting-started/explainer.md](docs/getting-started/explainer.md) - plain-language
    "what is this and why," for a reader with no background in GSK, the CEC
    benchmarks, C++, or MATLAB. Includes the GSK idea, the benchmark suites,
    what this toolkit uniquely provides, and conceptual diagrams.
@@ -188,7 +192,7 @@ This creates `build\mex\gskcec_eval.mexw64`, linked fully static (no MinGW
 runtime DLL is needed on PATH when MATLAB loads it). The root `run_all_cec*.m`
 launchers (and `run_experiment` for CEC suites) check that this project-local
 file exists and actually loads before starting, and stop with a build hint if it
-is missing (`gskcec:mexMissing`) or cannot be loaded (`gskcec:mexNotLoadable`),
+is missing (`gskcec:mexMissingPrerequisite`) or cannot be loaded (`gskcec:mexNotLoadable`),
 preventing partial all-skipped result folders.
 Rebuild this MEX bridge after changes to CEC suite source files or
 `benchmarks/cec_suite_cpp/cec_tools/src/mex_bridge/`; MATLAB CEC experiments use
@@ -216,7 +220,7 @@ initial population once in the runner, restores the post-initialization RNG
 state inside each optimizer, and uses `threefry` when MATLAB supports it
 (otherwise `twister`) for the whole family.
 DT-GSK is unified-only: under every `--seed-policy` it is scheduled with the
-unified seed and `threefry` (as in its Python reference campaign), and it
+unified seed and `threefry` (as in its reference campaign), and it
 samples its own `NP = 5*D` initial population instead of the runner's `X0`
 (the documented fair-start exception).
 The unified seed formula is:
@@ -277,7 +281,7 @@ For a run-level check, `scripts/compare_reference_runs.m` compares two
 `per_run.csv` sets per (dimension, function) with Wilcoxon rank-sum tests and
 Holm-adjusted p-values (needs the Statistics and Machine Learning Toolbox); see
 [scripts/README.md](scripts/README.md). The DT-GSK port was verified against the
-unmodified Python reference on identical random numbers and reproduces its
+unmodified reference implementation on identical random numbers and reproduces its
 golden values; the validation and the CEC2017 campaign results are recorded in
 [src/optimizers/dt-gsk/README.md](src/optimizers/dt-gsk/README.md).
 

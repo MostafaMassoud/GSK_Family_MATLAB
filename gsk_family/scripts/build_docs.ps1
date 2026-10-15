@@ -1,12 +1,14 @@
-# Builds the comprehensive HTML documentation site for gsk_family.
+# Builds the HTML documentation site for gsk_family.
 #
-# No Python (project contract). Primary renderer is Pandoc 3.8 or newer; if
-# Pandoc is absent, or older than 3.8 (it lacks --syntax-highlighting), a
-# built-in minimal Markdown->HTML fallback is used so the script always
-# produces a navigable site. Doxygen (if present) generates the C++ API
-# reference and is linked in. Mermaid diagrams render client-side via mermaid.js.
+# Renders with Pandoc 3.8 or newer. If Pandoc is missing or older than 3.8
+# (no --syntax-highlighting option), a small built-in Markdown-to-HTML
+# fallback is used, so the script always produces a working site. If Doxygen
+# is available it builds the C++ API reference, linked from the sidebar.
+# Mermaid diagrams render in the browser with mermaid.js.
 #
-# Sources: the tracked Markdown files under docs/ (the source of truth).
+# Sources: the tracked Markdown files under docs/ (the source of truth),
+# LICENSES.md, and RUNBOOK.md in the repository root (one level above
+# gsk_family). Pages whose source is missing are skipped with a warning.
 # Output:  docs/html/ (generated; gitignored). Rebuild with one command:
 #
 #   powershell -File scripts\build_docs.ps1
@@ -28,9 +30,9 @@ $docsDir = Join-Path $projectRoot "docs"
 $outDir = Join-Path $docsDir "html"
 
 function Resolve-Tool([string]$given, [string]$name) {
-    # An explicitly-passed path is only honored if it exists; otherwise fall
-    # back to PATH (and then to "" -> the documented degraded path) instead of
-    # crashing later when the tool is invoked.
+    # Returns the given path if it exists, else the tool on PATH, else ""
+    # (the caller then uses the fallback renderer or skips the API docs).
+    # A bad path gives a warning here instead of a crash later.
     if ($given -ne "") {
         if (Test-Path $given) { return $given }
         Write-Warning "$name path '$given' not found; falling back to PATH."
@@ -42,10 +44,10 @@ function Resolve-Tool([string]$given, [string]$name) {
 $pandocExe = Resolve-Tool $Pandoc "pandoc"
 $doxygenExe = Resolve-Tool $Doxygen "doxygen"
 
-# The Pandoc call below passes --syntax-highlighting=none, an option added in
-# Pandoc 3.8; older releases reject it ("Unknown option") and would abort the
-# build on the first page. Treat an older (or unidentifiable) Pandoc like a
-# missing one: use the built-in fallback renderer and say why at the end.
+# The Pandoc call below passes --syntax-highlighting=none, added in Pandoc 3.8;
+# older versions reject it ("Unknown option") and the build would stop on the
+# first page. An older or unidentifiable Pandoc is treated as missing: the
+# fallback renderer is used and a warning at the end says why.
 $pandocMinVersion = [version]"3.8"
 $pandocRejected = ""
 if ($pandocExe -ne "") {
@@ -66,15 +68,17 @@ if ($pandocExe -ne "") {
 if ($Clean -and (Test-Path $outDir)) { Remove-Item -Recurse -Force $outDir }
 New-Item -ItemType Directory -Force $outDir | Out-Null
 
-# ---- Page list: ordered, grouped; Out is a FLAT html name so all pages sit at
-# the top of docs/html and link to each other without ../ depth juggling. -------
+# ---- Page list ----
+# In sidebar order, by group. Out is a flat file name: every page sits at the
+# top of docs/html, so pages link to each other without ../ paths.
 $pages = @(
     @{ Src = "docs/index.md"; Out = "index.html"; Title = "Home"; Group = "" },
 
+    @{ Src = "../RUNBOOK.md";                           Out = "runbook.html";                         Title = "Runbook";         Group = "Getting Started" },
     @{ Src = "docs/getting-started/explainer.md";       Out = "getting-started_explainer.html";       Title = "Explainer";       Group = "Getting Started" },
     @{ Src = "docs/getting-started/tutorial.md";        Out = "getting-started_tutorial.html";        Title = "Tutorial";        Group = "Getting Started" },
     @{ Src = "docs/getting-started/user_guide.md";      Out = "getting-started_user_guide.html";      Title = "User Guide";      Group = "Getting Started" },
-    @{ Src = "docs/getting-started/runbook.md";         Out = "getting-started_runbook.html";         Title = "Runbook";         Group = "Getting Started" },
+    @{ Src = "docs/getting-started/command_reference.md"; Out = "getting-started_command_reference.html"; Title = "Command Reference"; Group = "Getting Started" },
     @{ Src = "docs/getting-started/configuration.md";   Out = "getting-started_configuration.html";   Title = "Configuration";   Group = "Getting Started" },
     @{ Src = "docs/getting-started/troubleshooting.md"; Out = "getting-started_troubleshooting.html"; Title = "Troubleshooting"; Group = "Getting Started" },
 
@@ -123,24 +127,24 @@ $pages = @(
     @{ Src = "docs/research/numerical_examples.md";  Out = "research_numerical_examples.html";  Title = "Numerical Examples";  Group = "Research" }
 )
 
-# Map absolute source path -> flat output name, for rewriting cross-links.
+# Absolute source path -> flat output name, for rewriting cross-links.
 $srcToOut = @{}
 foreach ($p in $pages) {
     $abs = [System.IO.Path]::GetFullPath((Join-Path $projectRoot $p.Src))
     $srcToOut[$abs.ToLowerInvariant()] = $p.Out
 }
 
-# Fallback map keyed by unique file basename. Pages now live in subfolders, so a
-# moved page may still carry an old relative link (e.g. ../explainer.md). When the
-# resolved-path lookup misses, Repair-Html falls back to this basename map. Every
-# source basename in $pages is unique, so this is unambiguous.
+# Fallback map keyed by file basename. A page may still carry an old relative
+# link (e.g. ../explainer.md); when the full-path lookup misses, Repair-Html
+# uses this map. Every source basename in $pages is unique, so it is
+# unambiguous.
 $baseToOut = @{}
 foreach ($p in $pages) {
     $base = [System.IO.Path]::GetFileName($p.Src).ToLowerInvariant()
     if (-not $baseToOut.ContainsKey($base)) { $baseToOut[$base] = $p.Out }
 }
 
-# ---- Sidebar nav (shared by every page). --------------------------------------
+# ---- Sidebar nav (the same on every page) ----
 $navSb = [System.Text.StringBuilder]::new()
 $lastGroup = $null
 foreach ($p in $pages) {
@@ -293,9 +297,9 @@ footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--border);color
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}nav.sidebar{transition:none}}
 '@
 
-# ---- Browser-side UX helpers: theme toggle, mobile nav, active link, copy. -----
-# Written to docs/html/app.js. No dependencies, no '$' tokens (kept out of the
-# pandoc template's variable namespace).
+# ---- Browser helpers: theme toggle, mobile nav, active link, copy button ----
+# Written to docs/html/app.js. No dependencies and no '$' characters (kept
+# clear of Pandoc template variables).
 $js = @'
 /* gsk_family docs - small UX helpers (theme, nav, copy). No dependencies. */
 (function () {
@@ -368,9 +372,10 @@ $js = @'
 })();
 '@
 
-# ---- Pandoc HTML template -----------------------------------------------------
-# The inline head script applies the saved/preferred theme before first paint
-# (no flash). style.css and app.js are written once into docs/html (below).
+# ---- Pandoc HTML template ----
+# The inline head script applies the saved or preferred theme before the first
+# paint (no flash). __NAV__ is replaced with the sidebar nav below. style.css
+# and app.js are written once into docs/html (below).
 $template = @'
 <!DOCTYPE html>
 <html lang="en"><head>
@@ -408,8 +413,8 @@ mermaid.initialize({ startOnLoad: true, theme: document.documentElement.classLis
 </body></html>
 '@
 
-# Write the shared stylesheet and script once into the output root. Flat pages
-# reference them as ./style.css and ./app.js. UTF-8 without BOM.
+# Write the shared stylesheet and script once into the output root, as UTF-8
+# without a BOM. Every page links them as style.css and app.js.
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText((Join-Path $outDir 'style.css'), $css, $utf8NoBom)
 [System.IO.File]::WriteAllText((Join-Path $outDir 'app.js'), $js, $utf8NoBom)
@@ -418,7 +423,9 @@ $templateResolved = $template.Replace("__NAV__", $nav)
 $templatePath = Join-Path $env:TEMP "gskcec_doc_template.html"
 [System.IO.File]::WriteAllText($templatePath, $templateResolved, $utf8NoBom)
 
-# ---- Minimal fallback Markdown->HTML (used if Pandoc is absent or < 3.8). ------
+# ---- Fallback Markdown-to-HTML (used when Pandoc is missing or < 3.8) ----
+# Handles only #..#### headings, - / * lists, fenced code, `code`, **bold**,
+# links and paragraphs. No tables and no page TOC.
 function Convert-MarkdownFallback([string]$md) {
     $lines = $md -split "`r?`n"
     $html = [System.Text.StringBuilder]::new()
@@ -444,9 +451,10 @@ function Convert-MarkdownFallback([string]$md) {
 }
 Add-Type -AssemblyName System.Web
 
-# ---- Rewrite cross-page links (.md -> flat .html) and fix mermaid blocks. ------
+# ---- Post-process: cross-page links (.md -> flat .html), mermaid, tables ----
 function Repair-Html([string]$html, [string]$srcDir) {
-    # href="...something.md[#anchor]"  ->  flat output name
+    # href="...something.md[#anchor]" -> flat output name. URLs and unknown
+    # targets are left unchanged.
     $html = [regex]::Replace($html, 'href="([^"]+?\.md)(#[^"]*)?"', {
         param($m)
         $target = $m.Groups[1].Value; $anchor = $m.Groups[2].Value
@@ -461,13 +469,13 @@ function Repair-Html([string]$html, [string]$srcDir) {
     # Pandoc emits <pre class="mermaid"><code>...</code></pre>; mermaid.js wants
     # the diagram text directly inside <pre class="mermaid">.
     $html = [regex]::Replace($html, '<pre class="mermaid"><code>(.*?)</code></pre>', '<pre class="mermaid">$1</pre>', [System.Text.RegularExpressions.RegexOptions]::Singleline)
-    # Wrap tables so wide ones scroll inside a rounded frame instead of
-    # overflowing the article column.
+    # Wrap tables so wide ones scroll inside a frame instead of overflowing
+    # the article column.
     $html = [regex]::Replace($html, '(<table[\s\S]*?</table>)', '<div class="table-wrap">$1</div>', [System.Text.RegularExpressions.RegexOptions]::Singleline)
     return $html
 }
 
-# ---- Convert each page. -------------------------------------------------------
+# ---- Convert each page ----
 $built = 0; $skipped = @()
 foreach ($p in $pages) {
     $srcPath = Join-Path $projectRoot $p.Src
@@ -489,31 +497,133 @@ foreach ($p in $pages) {
     $built++
 }
 
-# ---- Doxygen C++ API into docs/html/api. --------------------------------------
+# ---- Standalone RUNBOOK.html next to RUNBOOK.md (repository root) ----
+# One simple, self-contained page (no sidebar, no external files) that a
+# newcomer can open straight from the repository. Links to Markdown files stay
+# as they are, so they work in any checkout. The first heading becomes the
+# page title; a small script adds copy buttons and moves the contents list
+# below the introduction.
+$runbookSrc = [System.IO.Path]::GetFullPath((Join-Path $projectRoot "../RUNBOOK.md"))
+$runbookBuilt = ""
+if (Test-Path $runbookSrc) {
+    $runbookOut = [System.IO.Path]::ChangeExtension($runbookSrc, ".html")
+    $runbookTemplate = @'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$title$ - GSK Family</title>
+<style>
+:root{--bg:#ffffff;--fg:#1f2328;--muted:#59636e;--border:#d8dee4;--soft:#f6f8fa;--accent:#0969da;--code:#eff1f3;color-scheme:light}
+@media (prefers-color-scheme: dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--border:#30363d;--soft:#161b22;--accent:#4493f8;--code:#1f242c;color-scheme:dark}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:820px;margin:0 auto;padding:48px 20px 72px}
+h1.title{font-size:2.2rem;line-height:1.2;margin:0 0 .4em;letter-spacing:-.01em}
+h1:not(.title){font-size:1.5rem;line-height:1.3;margin:2.4em 0 .7em;padding-top:1em;border-top:1px solid var(--border)}
+h2{font-size:1.2rem;margin:1.8em 0 .5em}
+p,ul,ol{margin:.7em 0}
+li{margin:.25em 0}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+strong{font-weight:650}
+code{font:.88em/1.45 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;background:var(--code);padding:.12em .38em;border-radius:5px}
+pre{position:relative;background:var(--soft);border:1px solid var(--border);border-radius:8px;padding:14px 72px 14px 16px;overflow-x:auto;margin:1em 0}
+pre code{background:none;padding:0;font-size:.85em;line-height:1.55}
+:not(pre)>code{overflow-wrap:anywhere}
+table{border-collapse:collapse;display:block;overflow-x:auto;margin:1.1em 0;font-size:.94em}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;vertical-align:top}
+th{background:var(--soft);font-weight:650}
+hr{border:0;border-top:1px solid var(--border);margin:2em 0}
+nav#TOC{background:var(--soft);border:1px solid var(--border);border-radius:8px;padding:14px 22px;margin:1.6em 0 0}
+nav#TOC strong{display:block;margin-bottom:.3em}
+nav#TOC ul{margin:0;padding-left:1.1em}
+nav#TOC li{margin:.15em 0}
+.copy{position:absolute;top:8px;right:8px;font:12px/1 -apple-system,"Segoe UI",sans-serif;padding:5px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--muted);cursor:pointer}
+.copy:hover{color:var(--fg)}
+footer{color:var(--muted);font-size:.85em;margin-top:3.5em;border-top:1px solid var(--border);padding-top:1em}
+@media (max-width:600px){body{font-size:16px}main{padding:28px 16px 56px}h1.title{font-size:1.8rem}}
+@media print{.copy{display:none}body{font-size:11pt}main{max-width:none;padding:0}pre{white-space:pre-wrap}}
+</style>
+</head>
+<body>
+<main>
+<h1 class="title">$title$</h1>
+$if(toc)$
+<nav id="TOC" aria-label="Contents"><strong>Contents</strong>
+$table-of-contents$
+</nav>
+$endif$
+$body$
+<footer>This page is generated from RUNBOOK.md by gsk_family/scripts/build_docs.ps1. To change it, edit RUNBOOK.md and rebuild.</footer>
+</main>
+<script>
+(function () {
+  var toc = document.getElementById('TOC'), hr = document.querySelector('main > hr');
+  if (toc && hr) { hr.parentNode.insertBefore(toc, hr); hr.parentNode.removeChild(hr); }
+  document.querySelectorAll('pre').forEach(function (pre) {
+    var b = document.createElement('button');
+    b.className = 'copy'; b.type = 'button'; b.textContent = 'Copy';
+    b.addEventListener('click', function () {
+      var code = pre.querySelector('code'), text = (code || pre).innerText;
+      var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { selectText(code || pre); });
+      } else { selectText(code || pre); }
+    });
+    pre.appendChild(b);
+  });
+  function selectText(el) {
+    var r = document.createRange(); r.selectNodeContents(el);
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  }
+})();
+</script>
+</body>
+</html>
+'@
+    if ($pandocExe -ne "") {
+        $rbTemplatePath = Join-Path $env:TEMP "gskcec_runbook_template.html"
+        [System.IO.File]::WriteAllText($rbTemplatePath, $runbookTemplate, $utf8NoBom)
+        & $pandocExe $runbookSrc -f gfm -t html5 -s --syntax-highlighting=none --template $rbTemplatePath `
+            --shift-heading-level-by=-1 --toc --toc-depth=2 -o $runbookOut
+        if ($LASTEXITCODE -ne 0) { throw "pandoc failed on RUNBOOK.md" }
+    } else {
+        $md = [System.IO.File]::ReadAllText($runbookSrc, [System.Text.Encoding]::UTF8)
+        $md = [regex]::Replace($md, '^#\s+[^\r\n]*\r?\n', '')   # the title is printed by the template
+        $page = $runbookTemplate.Replace('$title$', 'Runbook').Replace('$body$', (Convert-MarkdownFallback $md))
+        $page = [regex]::Replace($page, '(?s)\$if\(toc\)\$.*?\$endif\$', '')
+        [System.IO.File]::WriteAllText($runbookOut, $page, $utf8NoBom)
+    }
+    $runbookBuilt = $runbookOut
+}
+
+# ---- Doxygen C++ API into docs/html/api ----
 $apiBuilt = $false
 if ($doxygenExe -ne "" -and (Test-Path (Join-Path $docsDir "Doxyfile"))) {
     Push-Location $projectRoot
     try {
-        # Override output to docs/html/api regardless of the Doxyfile setting.
-        # Write a temp config as UTF-8 WITHOUT a BOM (a BOM makes Doxygen choke
-        # on "unknown character" at line 1).
-        # OUTPUT_DIRECTORY/HTML_OUTPUT -> docs/html/api (Doxygen only regenerates
-        # the api/ subdir; the other docs/html pages are left untouched).
-        # HAVE_DOT=NO: Graphviz is optional and often absent; without it Doxygen
-        # would error on every graph. Disabling it yields clean, fast HTML
-        # (call/include graphs are simply omitted).
+        # Temp copy of the Doxyfile with overrides appended:
+        # - OUTPUT_DIRECTORY/HTML_OUTPUT -> docs/html/api, whatever the Doxyfile
+        #   says. Only api/ is regenerated; other docs/html pages are untouched.
+        # - HAVE_DOT=NO: Graphviz is optional and often missing, and without it
+        #   Doxygen errors on every graph. Call/include graphs are omitted.
+        # Written as UTF-8 WITHOUT a BOM: a BOM makes Doxygen fail with
+        # "unknown character" at line 1.
         $cfg = [System.IO.File]::ReadAllText((Join-Path $docsDir "Doxyfile"), [System.Text.Encoding]::UTF8) +
                "`nOUTPUT_DIRECTORY=docs/html`nHTML_OUTPUT=api`nGENERATE_LATEX=NO`nHAVE_DOT=NO`nSEARCHENGINE=NO`nQUIET=YES`n"
         $tmpCfg = Join-Path $env:TEMP "gskcec_Doxyfile.tmp"
         [System.IO.File]::WriteAllText($tmpCfg, $cfg, (New-Object System.Text.UTF8Encoding($false)))
-        # Doxygen writes warnings to stderr; with $ErrorActionPreference='Stop'
-        # the merged 2>&1 stream would raise a terminating error and kill
-        # Doxygen after only the crawl file. Relax it for this call and send
-        # Doxygen's output to a log instead of the error stream.
+        # Doxygen writes warnings to stderr. With $ErrorActionPreference='Stop'
+        # the merged 2>&1 stream raises a terminating error that stops Doxygen
+        # after only the crawl file. So relax it for this call and send all
+        # Doxygen output to a log file.
         $prevEap = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
-        # Keep the doxygen run log (which records absolute source paths) OUT of
-        # docs/html so the generated site stays free of machine-specific paths.
+        # Keep the log (it records absolute source paths) out of docs/html, so
+        # the site has no machine-specific paths.
         $doxLog = Join-Path $env:TEMP "gskcec_doxygen.log"
         & $doxygenExe $tmpCfg > $doxLog 2>&1
         $ErrorActionPreference = $prevEap
@@ -523,6 +633,7 @@ if ($doxygenExe -ne "" -and (Test-Path (Join-Path $docsDir "Doxyfile"))) {
 }
 
 Write-Host ("build_docs: {0} page(s) -> {1}" -f $built, $outDir)
+if ($runbookBuilt -ne "") { Write-Host ("build_docs: standalone runbook -> {0}" -f $runbookBuilt) }
 if ($pandocRejected -ne "") { Write-Warning "$pandocRejected; used the minimal fallback renderer (upgrade Pandoc for full fidelity)." }
 elseif ($pandocExe -eq "") { Write-Warning "Pandoc not found; used the minimal fallback renderer (install Pandoc for full fidelity)." }
 if (-not $apiBuilt) { Write-Warning "C++ API (Doxygen) not generated; the API link will 404 until 'doxygen docs/Doxyfile' is available." }

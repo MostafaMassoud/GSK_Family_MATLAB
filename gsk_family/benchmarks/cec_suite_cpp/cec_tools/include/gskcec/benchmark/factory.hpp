@@ -9,36 +9,37 @@
 
 namespace gskcec {
 
-/// Static description of one CEC suite exposed by the factory.
+/// Fixed description of one CEC suite in the factory.
 struct SuiteInfo {
     std::string name;
     std::vector<int> functions;
     std::vector<int> dimensions; ///< Empty when dimensions are fixed per function (cec2011, cec2013lsgo).
 };
 
-/// Names of all suites known to the factory, sorted alphabetically.
+/// Names of all suites in the factory, in alphabetical order.
 std::vector<std::string> list_suites();
 
-/// Static description of @p suite.
+/// Description of @p suite.
 /// @throws std::invalid_argument for unknown suite names.
 SuiteInfo suite_info(const std::string& suite);
 
-/// Creates a benchmark problem instance.
+/// Creates a benchmark problem for @p suite.
 ///
-/// For suites with per-function fixed dimensions (cec2011, cec2013lsgo)
-/// pass @p dimension 0 to use the native dimension, or the exact native
-/// dimension; any other value is rejected.
+/// For suites where each function has a fixed dimension (cec2011,
+/// cec2013lsgo), pass @p dimension 0 (meaning "use the fixed dimension")
+/// or that exact value; any other value is rejected.
 ///
 /// @throws std::invalid_argument for unknown suites or unsupported
 ///         function/dimension combinations.
-/// @throws std::runtime_error when required data files are missing/bad.
+/// @throws std::runtime_error when a required data file is missing or bad.
 std::unique_ptr<BenchmarkProblem> make_problem(const std::string& suite,
                                                int function_id,
                                                int dimension,
                                                const std::filesystem::path& data_root);
 
-/// Conventional input-data directory for @p suite below @p project_root
-/// (benchmarks/cec_suite_cpp/<suite>/input_data).
+/// Standard input-data folder for @p suite:
+/// <project_root>/benchmarks/cec_suite_cpp/<suite>/input_data.
+/// @throws std::invalid_argument for unknown suite names.
 std::filesystem::path default_data_root(const std::string& suite,
                                         const std::filesystem::path& project_root);
 

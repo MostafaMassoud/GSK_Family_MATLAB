@@ -3,35 +3,50 @@ function report = compare_reference_runs(generated, reference, varargin)
 %
 %   report = compare_reference_runs(generated, reference)
 %   report = compare_reference_runs(..., 'alpha', 0.05, 'out', 'comparison.csv', ...
-%                                   'zero_tol', 1e-8, 'decades', 1)
+%                                   'zero_tol', 1e-8, 'decades', 1, 'sig_digits', 11)
 %
 % generated / reference: a per_run.csv path, or a folder containing
-% summary/per_run.csv or per_run.csv (the schema of docs/reference/result_schema.md:
+% summary/per_run.csv or per_run.csv (schema in docs/reference/result_schema.md:
 % optimizer,suite,function,dimension,run,seed,best_fitness,error,...).
-% Typical use: compare a MATLAB campaign against an imported reference
-% campaign of the same optimizer, e.g. DT-GSK against the Python reference
-% under benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv.
+% Typical use: compare a MATLAB campaign with an imported reference campaign
+% of the same optimizer, e.g. DT-GSK against the reference implementation's
+% runs in benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv.
+%
+% Options: 'alpha' (0.05) rank-sum test level; 'out' ('') CSV file for the
+% table; 'zero_tol' (1e-8) |v| below it counts as 0; 'decades' (1) allowed
+% gap in orders of magnitude; 'sig_digits' (11) significant digits both sides
+% are rounded to before comparing (0 = no rounding); 'verbose' (true) prints
+% the table. The default 11 is the precision of reference per_run.csv files
+% (written with %.10e): without it, a plateau cell such as 100.00000000000045
+% vs 1.0000000000e+02 looks like a complete separation to the rank-sum test.
 %
 % For every (dimension, function) cell present in both sets it reports the
-% Best / Median / Mean of the per-run values (errors for known-optimum suites,
-% raw objectives otherwise), and judges agreement two ways:
-%   magnitude : Median and Mean agree to within 'decades' orders of magnitude
-%               (values with |v| < zero_tol count as 0; two zeros agree)
+% Best / Median / Mean of the per-run values (errors for known-optimum suites;
+% best_fitness where the error is not finite) and checks agreement two ways:
+%   magnitude : Best, Median and Mean each agree within 'decades' orders of
+%               magnitude (values with |v| < zero_tol count as 0; two zeros
+%               agree); best_ok / median_ok / mean_ok show which one failed
 %   rank-sum  : two-sided Wilcoxon rank-sum test (ranksum) at level alpha; a
 %               cell whose values are identical on both sides gets p = 1
-% When both sets carry the same seed for each run (same seed schedule), the
-% paired Wilcoxon signed-rank p-value is reported too (informational).
-% verdict = MATCH when both checks pass, else DIFFERS.
+% verdict = MATCH when both checks pass, else DIFFERS. When both sets use the
+% same seed for each run, the paired signed-rank p-value (p_signrank) is
+% reported too, for information only. p_holm holds Holm-adjusted rank-sum
+% p-values across all cells (counted in holm_significant, not in the verdict).
 %
-% Duplicate rows for one (dimension, function, run) - append/resume history in
-% per_run.csv - keep the LAST row, matching run_experiment's resume rules.
-% Requires the Statistics and Machine Learning Toolbox (ranksum/signrank).
+% report: struct with table, alpha, cells, matches, differs, holm_significant.
+%
+% Duplicate rows for one (dimension, function, run), left by append/resume in
+% per_run.csv, keep the LAST row, as run_experiment's resume rules do.
+% Requires the Statistics and Machine Learning Toolbox (ranksum, signrank).
+% Errors: compare_reference_runs:toolbox (no ranksum), :missing (no
+% per_run.csv found), :schema (a required column is missing).
 
 p = inputParser;
 p.addParameter('alpha', 0.05, @(x) isnumeric(x) && isscalar(x) && x > 0 && x < 1);
 p.addParameter('out', '', @(x) ischar(x) || isstring(x));
 p.addParameter('zero_tol', 1e-8, @(x) isnumeric(x) && isscalar(x) && x >= 0);
 p.addParameter('decades', 1, @(x) isnumeric(x) && isscalar(x) && x > 0);
+p.addParameter('sig_digits', 11, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x == round(x));
 p.addParameter('verbose', true, @(x) islogical(x) || isnumeric(x));
 p.parse(varargin{:});
 o = p.Results;
@@ -46,11 +61,14 @@ keys = intersect(unique(G(:, 1:2), 'rows'), unique(R(:, 1:2), 'rows'), 'rows');
 
 rows = struct('dim', {}, 'func', {}, 'n_gen', {}, 'n_ref', {}, ...
               'best_gen', {}, 'best_ref', {}, 'median_gen', {}, 'median_ref', {}, ...
-              'mean_gen', {}, 'mean_ref', {}, 'magnitude_ok', {}, 'p_ranksum', {}, ...
+              'mean_gen', {}, 'mean_ref', {}, 'best_ok', {}, 'median_ok', {}, ...
+              'mean_ok', {}, 'magnitude_ok', {}, 'p_ranksum', {}, ...
               'p_signrank', {}, 'verdict', {});
 for k = 1:size(keys, 1)
     g = G(G(:, 1) == keys(k, 1) & G(:, 2) == keys(k, 2), :);
     r = R(R(:, 1) == keys(k, 1) & R(:, 2) == keys(k, 2), :);
+    g(:, 5) = round_sig(g(:, 5), o.sig_digits);
+    r(:, 5) = round_sig(r(:, 5), o.sig_digits);
     gv = zero_cut(g(:, 5), o.zero_tol);
     rv = zero_cut(r(:, 5), o.zero_tol);
     s = struct();
@@ -62,8 +80,10 @@ for k = 1:size(keys, 1)
     s.median_gen = median(gv);  s.median_ref = median(rv);
     s.mean_gen = zero_cut(mean(gv), o.zero_tol);
     s.mean_ref = zero_cut(mean(rv), o.zero_tol);
-    s.magnitude_ok = same_magnitude(s.median_gen, s.median_ref, o.decades) && ...
-                     same_magnitude(s.mean_gen, s.mean_ref, o.decades);
+    s.best_ok = same_magnitude(s.best_gen, s.best_ref, o.decades);
+    s.median_ok = same_magnitude(s.median_gen, s.median_ref, o.decades);
+    s.mean_ok = same_magnitude(s.mean_gen, s.mean_ref, o.decades);
+    s.magnitude_ok = s.best_ok && s.median_ok && s.mean_ok;
     if isequal(sort(gv), sort(rv))
         s.p_ranksum = 1;
     else
@@ -89,7 +109,7 @@ end
 
 T = struct2table(rows);
 % Holm step-down adjustment across all cells: with many cells, about
-% alpha * cells raw rank-sum rejections are expected by chance alone.
+% alpha * cells raw rank-sum rejections are expected by chance.
 T.p_holm = holm(T.p_ranksum);
 report = struct('table', T, 'alpha', o.alpha, 'cells', height(T), ...
                 'matches', sum(strcmp(T.verdict, 'MATCH')), ...
@@ -106,6 +126,8 @@ end
 % ---- helpers ------------------------------------------------------------------
 
 function path = resolve_path(x)
+% x is a per_run.csv file, or a folder holding summary/per_run.csv or
+% per_run.csv (tried in that order).
 x = char(x);
 if isfile(x)
     path = x;
@@ -156,7 +178,17 @@ function v = zero_cut(v, tol)
 v(abs(v) < tol) = 0;
 end
 
+function v = round_sig(v, n)
+% Round to n significant digits (n = 0: unchanged). Zeros and non-finite
+% values pass through.
+if n > 0
+    ok = isfinite(v) & v ~= 0;
+    v(ok) = round(v(ok), n, 'significant');
+end
+end
+
 function tf = same_magnitude(a, b, decades)
+% True if a and b are both 0, or share a sign and differ by <= decades in log10.
 if a == 0 && b == 0
     tf = true;
 elseif a == 0 || b == 0 || sign(a) ~= sign(b)
@@ -167,17 +199,19 @@ end
 end
 
 function print_report(T, report, o)
-fprintf('\n%-5s %-4s %4s  %11s %11s  %11s %11s  %11s %11s  %5s %8s %8s  %s\n', 'Dim', 'Func', 'n', ...
+fprintf('\n%-5s %-4s %4s  %11s %11s  %11s %11s  %11s %11s  %3s %8s %8s  %s\n', 'Dim', 'Func', 'n', ...
         'Best(gen)', 'Best(ref)', 'Median(gen)', 'Median(ref)', 'Mean(gen)', 'Mean(ref)', ...
-        'mag', 'p_rank', 'p_pair', 'verdict');
+        'BMm', 'p_rank', 'p_pair', 'verdict');
+flag = 'xo';   % magnitude flags per statistic: o = agrees, x = differs
 for i = 1:height(T)
-    fprintf('%-5d F%-3d %4d  %11.3e %11.3e  %11.3e %11.3e  %11.3e %11.3e  %5s %8.3g %8.3g  %s\n', ...
+    fprintf('%-5d F%-3d %4d  %11.3e %11.3e  %11.3e %11.3e  %11.3e %11.3e  %3s %8.3g %8.3g  %s\n', ...
             T.dim(i), T.func(i), T.n_gen(i), T.best_gen(i), T.best_ref(i), ...
             T.median_gen(i), T.median_ref(i), T.mean_gen(i), T.mean_ref(i), ...
-            char(string(T.magnitude_ok(i))), T.p_ranksum(i), T.p_signrank(i), T.verdict{i});
+            flag([T.best_ok(i), T.median_ok(i), T.mean_ok(i)] + 1), ...
+            T.p_ranksum(i), T.p_signrank(i), T.verdict{i});
 end
-fprintf('\n%d cell(s): %d MATCH, %d DIFFERS (rank-sum alpha = %g, magnitude within %g decade(s), zero_tol = %g)\n', ...
-        report.cells, report.matches, report.differs, o.alpha, o.decades, o.zero_tol);
+fprintf('\n%d cell(s): %d MATCH, %d DIFFERS (rank-sum alpha = %g, Best/Median/Mean within %g decade(s), zero_tol = %g, %d significant digits)\n', ...
+        report.cells, report.matches, report.differs, o.alpha, o.decades, o.zero_tol, o.sig_digits);
 fprintf('Holm-adjusted rank-sum: %d of %d cell(s) significant at alpha = %g (about %.1f raw rejections expected by chance)\n', ...
         report.holm_significant, report.cells, o.alpha, o.alpha * report.cells);
 end

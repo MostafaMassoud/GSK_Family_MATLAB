@@ -11,7 +11,7 @@
 
 The overriding rule: contributions must preserve reference-compatible behavior
 and the reference evidence trail. "Reference" here means the upstream MATLAB or
-CEC implementation each component ports (for DT-GSK, the Python DT-GSK
+CEC implementation each component ports (for DT-GSK, the DT-GSK
 reference implementation v2.46); "evidence trail" means the imported
 reference-result tables under `benchmarks/cec_reference_results` that generated
 output is checked against. Preserved quirks are deliberate - read
@@ -25,7 +25,8 @@ before the local gate (step 4) is green.
 
 1. Work on a branch. Keep commits small and focused, each with a clear message
    that explains the change. Stay inside the language boundary: MATLAB GSK code
-   under `src/`, C++ CEC code under `benchmarks/`, no Python anywhere.
+   under `src/`, C++ CEC code under `benchmarks/`, no other languages or
+   generated bindings.
 2. Update documentation alongside the code it describes. For example, an
    optimizer behavior change updates its help block and the relevant page under
    `docs/`.

@@ -1,32 +1,32 @@
-# Documentation Parity Prompt (keep the MATLAB docs mirrored with the Python docs)
+# Documentation Parity Prompt (keep the MATLAB docs mirrored with the sibling project's docs)
 
 Use this prompt when asking an LLM agent to AUDIT, MAINTAIN, REBUILD, or EXTEND
-the `gsk_family` documentation set so it stays mirrored to the sibling Python
-project's docs (`<gsk-family-python>\docs`) in
+the `gsk_family` documentation set so it stays mirrored to the sibling
+project's docs (`<sibling-project>\docs`) in
 structure, page coverage, navigation, and style - while every fact stays correct
 for this MATLAB + C++ project.
 
-The INITIAL migration is DONE. The MATLAB docs already live in the Python
-five-folder taxonomy (`getting-started/`, `reference/`, `development/`,
+The INITIAL migration is DONE. The MATLAB docs already live in the sibling
+project's five-folder taxonomy (`getting-started/`, `reference/`, `development/`,
 `research/`, `algorithms/`) plus a MATLAB-side `prompts/` folder and a
 `docs/index.html` redirect. So treat this as a parity MAINTENANCE-and-rebuild
 prompt: it should keep the existing mirror true as either project drifts, and it
 must still be usable to redo the mirror from scratch or to extend it when the
-Python side adds a page. Most pages exist, so the default verb is now ALIGN or
+sibling side adds a page. Most pages exist, so the default verb is now ALIGN or
 VERIFY, not MOVE or NEW.
 
 This prompt is aligned with the current repository layout:
 
-- The Python docs use five themed folders plus root `index.md` and `LICENSES.md`,
-  and keep their LLM prompts in `docs/prompt/`. The MATLAB docs use the plural
-  `docs/prompts/` folder (this is a deliberate MATLAB-side divergence) and a
-  `docs/index.html` that redirects into `docs/html/`.
+- The sibling project's docs use five themed folders plus root `index.md` and
+  `LICENSES.md`, and keep their LLM prompts in `docs/prompt/`. The MATLAB docs
+  use the plural `docs/prompts/` folder (this is a deliberate MATLAB-side
+  divergence) and a `docs/index.html` that redirects into `docs/html/`.
 - The MATLAB docs site is built by `scripts/build_docs.ps1` (PowerShell + Pandoc
   3.8+ primary + a built-in fallback renderer used when Pandoc is absent or older
-  than 3.8 + Doxygen, no Python). The Python `scripts/build_docs_html.py` is NOT
+  than 3.8 + Doxygen). The sibling project's own docs build script is NOT
   ported - only its OUTPUT features are matched.
 - Facts (seed policy, budgets, paths, formulas) come from the MATLAB code and
-  the existing MATLAB docs, never from the Python wording.
+  the existing MATLAB docs, never from the sibling project's wording.
 - Generated folders (`build/`, `results/`, `docs/html/`) are not source of truth
   and are never hand-edited.
 
@@ -34,7 +34,7 @@ Copy everything inside the block below into the agent.
 
 ```text
 # Expert Documentation Parity Prompt (maintenance + rebuild)
-# Goal: keep gsk_family/docs mirrored to 00-GSK_Family_Python/docs,
+# Goal: keep gsk_family/docs mirrored to <sibling-project>/docs,
 #       with every fact correct for the MATLAB + C++ project.
 
 You are working directly in (the TARGET, and the source of truth for FACTS):
@@ -43,7 +43,7 @@ You are working directly in (the TARGET, and the source of truth for FACTS):
 
 The STRUCTURAL TEMPLATE to mirror (source of truth for layout/style ONLY):
 
-  <gsk-family-python>\docs
+  <sibling-project>\docs
 
 Act as a multidisciplinary documentation board with expertise in:
 
@@ -59,28 +59,28 @@ Act as a multidisciplinary documentation board with expertise in:
 - developer onboarding
 
 Mission:
-The MATLAB docs are ALREADY reorganized into the Python five-folder taxonomy
-(plus a MATLAB-side prompts/ folder). Your job is to KEEP them mirrored: audit
-the existing set against the Python template, fix every drift in STRUCTURE, PAGE
-COVERAGE, NAVIGATION, and STYLE, and prove that every FACT, command, path,
-formula, and code citation is correct for THIS MATLAB + C++ project. If the
-Python side has added or renamed a page, mirror that change here. If a page is
-missing or off-template, repair it. Preserve all algorithm, benchmark, seed,
-evaluation-budget, and result-schema behavior. This is a documentation +
-docs-build-script task only - do not change any code behavior.
+The MATLAB docs are ALREADY reorganized into the sibling project's five-folder
+taxonomy (plus a MATLAB-side prompts/ folder). Your job is to KEEP them mirrored:
+audit the existing set against the sibling template, fix every drift in
+STRUCTURE, PAGE COVERAGE, NAVIGATION, and STYLE, and prove that every FACT,
+command, path, formula, and code citation is correct for THIS MATLAB + C++
+project. If the sibling side has added or renamed a page, mirror that change
+here. If a page is missing or off-template, repair it. Preserve all algorithm,
+benchmark, seed, evaluation-budget, and result-schema behavior. This is a
+documentation + docs-build-script task only - do not change any code behavior.
 
 ## Two Sources Of Truth (read this twice)
 
-1. STRUCTURE / TAXONOMY / STYLE come from the Python docs (the template): the
-   five-folder layout, the set of pages, the per-page section skeletons, the
-   mandatory opening callout, the goal-based index, the diagrams gallery, the
-   numerical-examples hub, and the grouped sidebar.
+1. STRUCTURE / TAXONOMY / STYLE come from the sibling project's docs (the
+   template): the five-folder layout, the set of pages, the per-page section
+   skeletons, the mandatory opening callout, the goal-based index, the diagrams
+   gallery, the numerical-examples hub, and the grouped sidebar.
 
 2. FACTS come from the MATLAB code and the existing MATLAB docs (the ground
-   truth). NEVER copy a statement from the Python docs that is false for this
-   project. Translate every Python-specific detail to its MATLAB/C++ equivalent
-   (see "Python -> MATLAB Translation Rules"). When the two disagree on a fact,
-   the MATLAB CODE wins; cite the .m or .cpp line as file.m:line.
+   truth). NEVER copy a statement from the sibling project's docs that is false
+   for this project. Translate every sibling-specific detail to its MATLAB/C++
+   equivalent (see "Sibling -> MATLAB Translation Rules"). When the two disagree
+   on a fact, the MATLAB CODE wins; cite the .m or .cpp line as file.m:line.
 
 When the template and the target conflict on STRUCTURE, the template wins and you
 change the MATLAB docs to match (unless the difference is an explicit MATLAB-side
@@ -89,23 +89,25 @@ conflict on a FACT, the MATLAB code wins and you change the prose.
 
 ## First Read These Files
 
-Template (Python docs - for STRUCTURE and FEATURES only, never for facts):
-1. ...\01-Python\00-GSK_Family_Python\docs\index.md
+Template (sibling project's docs - for STRUCTURE and FEATURES only, never for
+facts):
+1. <sibling-project>\docs\index.md
 2. that project's docs\getting-started\*, reference\*, development\*, research\*,
    and algorithms\* pages. Note the folder taxonomy, every page's section
-   skeleton, the opening-callout dialects, and where the Python side keeps its
+   skeleton, the opening-callout dialects, and where the sibling side keeps its
    LLM prompts (in docs\prompt\, e.g. documentation_parity_prompt). Build a list
-   of Python pages and diff it against the MATLAB tree below: any Python page
+   of sibling pages and diff it against the MATLAB tree below: any sibling page
    with no MATLAB counterpart is a parity gap to mirror (unless it is a
-   Python-only page such as the build_docs_html walkthrough).
-3. that project's scripts\build_docs_html.py - study only the FEATURES it
+   sibling-only page such as its docs-build-script walkthrough).
+3. that project's own docs build script - study only the FEATURES it
    produces (grouped sidebar, per-page TOC, nav filter, mermaid, callouts,
    copy buttons, light/dark toggle), then IGNORE it as an implementation. You
-   keep the PowerShell build. Do NOT port any Python.
+   keep the PowerShell build. Do NOT port it.
 
 Target and ground truth (MATLAB):
-4. README.md, SKILL.md, LICENSES.md  (LICENSES.md is root-level; there is NO
-   docs\LICENSES.md - the build pulls the root file)
+4. README.md, RUNBOOK.md (top-level beginner runbook), SKILL.md, LICENSES.md
+   (LICENSES.md is root-level; there is NO docs\LICENSES.md - the build pulls
+   the root file)
 5. docs\index.md, docs\index.html (the redirect), and every page under
    docs\getting-started\, docs\reference\, docs\algorithms\, docs\development\,
    docs\research\, docs\prompts\
@@ -134,11 +136,13 @@ Target and ground truth (MATLAB):
 
 ## Repository Contract And Non-Negotiable Preservation Rules
 
-- NO Python anywhere in this project - not in code, tooling, or the docs build.
+- MATLAB and C++ only (no other languages or generated bindings) in code;
+  the scripts\ helpers are MATLAB or PowerShell, and the docs build is PowerShell.
   The site is built by scripts\build_docs.ps1 (PowerShell + Pandoc 3.8+ primary,
   a built-in fallback renderer Convert-MarkdownFallback used when Pandoc is
   absent or older than 3.8, and Doxygen for the C++ API). DO NOT port the
-  Python build_docs_html.py. Mirror its OUTPUT features; keep the toolchain.
+  sibling project's own docs build script. Mirror its OUTPUT features; keep the
+  toolchain.
 - Preserve reference behavior and documented quirks. Read
   reference\porting_notes.md before describing any benchmark; never "fix" a quirk
   in prose.
@@ -148,7 +152,7 @@ Target and ground truth (MATLAB):
   forms correct.
 - The two CEC2013 suites (cec2013, cec2013lsgo) are separate and never merged.
 - SEED POLICY FACTS must be MATLAB-correct - verify against code, do not trust
-  Python wording:
+  the sibling project's wording:
     * base_seed default = 20240620, centralized in run_experiment.m
       (run_experiment.m ~:56, also the parameter default ~:64).
     * The policy switch (pick_run_seed, run_experiment.m ~:1356) handles
@@ -163,8 +167,8 @@ Target and ground truth (MATLAB):
     * reference per-optimizer seeds (run_experiment.m ~:1356-1370): gsk, egsk, and
       atmals-gsk use base_seed + 9973*func + (run-1); agsk, apgsk, fdb-agsk use
       D*func*run. dt-gsk is unified-only (is_unified_only ~:1402): it gets the
-      unified seed and 'threefry' under EVERY seed_policy, mirroring the Python
-      reference's UNIFIED_ONLY_OPTIMIZERS.
+      unified seed and 'threefry' under EVERY seed_policy, mirroring the
+      reference implementation's UNIFIED_ONLY_OPTIMIZERS.
     * effective_rand_generator (run_experiment.m ~:1377-1400): dt-gsk always
       'threefry'; otherwise, under reference,
       agsk/apgsk/fdb-agsk/egsk/atmals-gsk use the legacy 'seed' stream (mcg16807)
@@ -200,34 +204,35 @@ Target and ground truth (MATLAB):
   are never hand-edited. docs\index.html is a hand-maintained redirect into
   docs\html\ and IS source (the build does not generate or overwrite it).
 
-## Intentional MATLAB-Side Divergences (do NOT "fix" these toward Python)
+## Intentional MATLAB-Side Divergences (do NOT "fix" these toward the sibling project)
 
 These are deliberate and must be preserved, not reconciled away:
 
 - A sixth docs folder, docs\prompts\, holds the MATLAB prompt family:
   REVIEW_PROMPT, DOCS_DEEP_REVIEW_PROMPT, INLINE_DOCUMENTATION_REVIEW_PROMPT,
   llm_review_prompt, documentation_review_prompt, and documentation_parity_prompt.
-  The Python project keeps its prompt set under docs\prompt\. Keep the MATLAB
+  The sibling project keeps its prompt set under docs\prompt\. Keep the MATLAB
   prompts under docs\prompts\ and the sidebar "Prompts" group.
 - docs\index.html is a meta-refresh redirect into docs\html\index.html; the
-  Python project has no such redirect. Keep it and keep it accurate (its
+  sibling project has no such redirect. Keep it and keep it accurate (its
   fallback text lists the sidebar groups).
-- The API tier is C++ Doxygen, not Python autodoc. reference\api.md is a Doxygen
-  how-to and reference\matlab_interface.md is the MATLAB optimizer contract;
-  together they replace the Python ast-autodoc api\ tree.
-- MATLAB-only pages with no Python counterpart stay (see KEEP tags below).
+- The API tier is C++ Doxygen, not the sibling project's generated autodoc.
+  reference\api.md is a Doxygen how-to and reference\matlab_interface.md is the
+  MATLAB optimizer contract; together they replace the sibling project's
+  auto-generated api\ tree.
+- MATLAB-only pages with no sibling counterpart stay (see KEEP tags below).
 
-## Target Documentation Tree (current state - mirror of the Python taxonomy)
+## Target Documentation Tree (current state - mirror of the sibling taxonomy)
 
 The folders and pages below ALREADY EXIST. Tags now mean:
   ALIGN  = page exists; re-check its sections against the template and rewrite
            any drift (this is the common case).
   VERIFY = page exists; confirm its FACTS against code and its links resolve, but
-           it has no Python section template to track (MATLAB-specific content).
-  KEEP   = MATLAB-only page with no Python equivalent; preserve it in place.
-  NEW    = author from scratch (only if the Python side adds a page and the
+           it has no sibling section template to track (MATLAB-specific content).
+  KEEP   = MATLAB-only page with no sibling equivalent; preserve it in place.
+  NEW    = author from scratch (only if the sibling side adds a page and the
            MATLAB tree is missing the counterpart).
-  REMOVE = delete only if the Python template drops it AND nothing here needs it.
+  REMOVE = delete only if the sibling template drops it AND nothing here needs it.
 
   docs/
     index.md                       ALIGN  (goal-based map; reading paths + folders)
@@ -237,13 +242,17 @@ The folders and pages below ALREADY EXIST. Tags now mean:
       explainer.md                 ALIGN
       tutorial.md                  ALIGN
       user_guide.md                ALIGN
-      runbook.md                   VERIFY (operational runbook; MATLAB-specific)
+      command_reference.md         VERIFY (Command Reference; MATLAB-specific)
       configuration.md             ALIGN  (YAML config subset + configs/README link)
       troubleshooting.md           VERIFY (MEX/build/validation failure catalogue)
+      (RUNBOOK.md is at the repository root, one level above gsk_family
+       (../RUNBOOK.md, with RUNBOOK.html beside it): the short beginner
+       runbook - prerequisites, first run, parallel runs in MATLAB; VERIFY it;
+       there is no docs/getting-started/RUNBOOK.md)
     reference/
       architecture.md              ALIGN
-      matlab_interface.md          ALIGN  (MATLAB analogue of Python's
-                                          python_optimizer_interface.md - keep name)
+      matlab_interface.md          ALIGN  (MATLAB analogue of the sibling project's
+                                          optimizer-interface page - keep name)
       api.md                       VERIFY (C++ Doxygen how-to; MATLAB-only flavor)
       module_dependencies.md       ALIGN  (MATLAB src/ + C++ layer dep direction)
       workflows.md                 ALIGN
@@ -253,7 +262,7 @@ The folders and pages below ALREADY EXIST. Tags now mean:
       benchmark_mapping.md         VERIFY (runner -> gskcec_eval MEX bridge -> C++;
                                           the D x NP column-major shape contract)
       diagrams.md                  ALIGN  (mermaid gallery; MATLAB/C++ reality)
-      project_structure.md         ALIGN  (Python name is project_structure)
+      project_structure.md         ALIGN  (sibling name is project_structure)
       reference_inventory.md       KEEP   (MATLAB-only provenance inventory)
       porting_notes.md             KEEP   (MATLAB-only C++ port fidelity record)
       cec2011_port_plan.md         KEEP   (MATLAB-only port dossier)
@@ -272,8 +281,8 @@ The folders and pages below ALREADY EXIST. Tags now mean:
       maintenance_guide.md         ALIGN
       extension_guide.md           ALIGN  (add-an-optimizer / suite / artifact / CLI)
       code_reading_guide.md        ALIGN
-    prompts/                       (MATLAB-side plural folder; Python keeps its
-                                    prompt set in docs/prompt/)
+    prompts/                       (MATLAB-side plural folder; the sibling project
+                                    keeps its prompt set in docs/prompt/)
       REVIEW_PROMPT.md             ALIGN  (canonical whole-project review prompt)
       DOCS_DEEP_REVIEW_PROMPT.md   ALIGN  (deep docs/pedagogy prompt)
       documentation_review_prompt.md  VERIFY (final consistency gate)
@@ -283,7 +292,7 @@ The folders and pages below ALREADY EXIST. Tags now mean:
     research/
       researcher_handbook.md       ALIGN
       reproducibility.md           ALIGN
-      performance.md               ALIGN  (Python name is performance)
+      performance.md               ALIGN  (sibling name is performance)
       validation_report.md         VERIFY (automated validation, verification.json
                                           verdicts; pull from porting_notes status)
       numerical_examples.md        ALIGN  (hand-checkable arithmetic hub; see below)
@@ -295,14 +304,14 @@ The folders and pages below ALREADY EXIST. Tags now mean:
 ## Per-Page Requirements
 
 - EVERY page opens with one H1, then a mandatory blockquote callout. Match the
-  Python dialect exactly:
+  sibling project's dialect exactly:
     * getting-started, reference, research, and algorithms pages use the
       four-field form:
       "> **What this is:** ... **For:** ... **Prerequisites:** ... **After reading:** ..."
     * development pages use the orientation form:
       "> **Orientation.** ..."
     * prompts pages: keep the MATLAB house style already in use (a one- or
-      two-line "what this prompt is / when to use it" lead); these have no Python
+      two-line "what this prompt is / when to use it" lead); these have no sibling
       template.
 
 - index.md: a "## Reading paths" section with the five goal-based routes
@@ -310,20 +319,20 @@ The folders and pages below ALREADY EXIST. Tags now mean:
   Contribute code; Look something up), each an arrow chain of relative links;
   then one H2 per folder (Getting Started, Reference, Algorithm Guides,
   Development, Prompts, Research) listing its pages with one-line descriptions.
-  Point readers to the rendered site at html/index.html. Mirror the Python index
-  structure, with the MATLAB pages and the extra Prompts group.
+  Point readers to the rendered site at html/index.html. Mirror the sibling
+  project's index structure, with the MATLAB pages and the extra Prompts group.
 
 - index.html: keep it a zero-delay meta-refresh to html/index.html, and keep its
   visible fallback text listing the current sidebar groups (Getting Started,
   Reference, Algorithm Guides, Development, Prompts, Research, C++ API) and the
   build command. Update it if the group set changes.
 
-- Algorithm pages: adopt the Python section skeleton, in this exact order:
-  Intuition; Mathematical formulation; Pseudocode; Parameters; Worked example;
-  Update cycle (a mermaid flowchart TD of one generation); Bounds, budget, and
-  determinism; Complexity; When to use; Source and validation. The MATLAB pages
-  additionally carry a "Preserved reference quirks" H2 placed just before
-  "Source and validation" - keep that section; it is where the documented
+- Algorithm pages: adopt the sibling project's section skeleton, in this exact
+  order: Intuition; Mathematical formulation; Pseudocode; Parameters; Worked
+  example; Update cycle (a mermaid flowchart TD of one generation); Bounds,
+  budget, and determinism; Complexity; When to use; Source and validation. The
+  MATLAB pages additionally carry a "Preserved reference quirks" H2 placed just
+  before "Source and validation" - keep that section; it is where the documented
   reference-fidelity quirks live and has no harm to parity. GSK is the canonical
   base; the five variants document only their delta and cross-link gsk.md. The
   Parameters table has six columns:
@@ -341,7 +350,7 @@ The folders and pages below ALREADY EXIST. Tags now mean:
   configuration loading; seed and RNG flow; parallel (parfor) execution; logging
   and reporting; optimizer update cycle; validation workflow; testing workflow.
   Every diagram must depict the MATLAB + C++ reality (run_experiment.m, the MEX
-  bridge, parfor, gsk_run.exe), not the Python design.
+  bridge, parfor, gsk_run.exe), not the sibling project's design.
 
 - research/numerical_examples.md: the shared hand-checkable hub - small, tiny-D
   worked arithmetic for the mechanics every optimizer shares (population init =
@@ -355,39 +364,42 @@ The folders and pages below ALREADY EXIST. Tags now mean:
   text, as both projects already do. Mermaid is the only rendered diagram tech.
   Use no raster images.
 
-## Python -> MATLAB Translation Rules (apply to every page you port or audit)
+## Sibling -> MATLAB Translation Rules (apply to every page you port or audit)
 
-- Commands: Python console scripts gsk-run / gsk-list / gsk-validate and
-  "python -m gsk_family.cli.*" become the C++ CLIs build\gsk_run.exe /
-  gsk_list.exe / gsk_validate.exe AND the MATLAB launchers run_all_cec*.m plus
-  direct run_experiment(...).
-- Install and environment: pip / venv / numba become MATLAB R2025b + MinGW-w64
+- Commands: the sibling project's console scripts gsk-run / gsk-list /
+  gsk-validate and its module-style gsk_family.cli.* invocations become the C++
+  CLIs build\gsk_run.exe / gsk_list.exe / gsk_validate.exe AND the MATLAB
+  launchers run_all_cec*.m plus direct run_experiment(...).
+- Install and environment: the sibling project's package install, virtual
+  environment, and JIT compiler become MATLAB R2025b + MinGW-w64
   g++ (C++20) + CMake; cmake --build build; scripts\build_mex_bridge.ps1; ctest.
-- Code snippets: fences tagged python become matlab (or cpp), rewritten to the
-  real MATLAB structs and C++ APIs - never left as Python.
-- API tier: the Python ast-autodoc api/ pages become the C++ Doxygen api/ tree
-  (reference/api.md + docs/Doxyfile) PLUS reference/matlab_interface.md for the
-  MATLAB optimizer contract. Do NOT invent a Python-style autodoc for MATLAB.
-- Performance: numba kernels, ProcessPool, and warmup become MATLAB parfor +
-  native MEX, plus the -ffp-contract=off fidelity note (use the
-  performance.md facts).
-- RNG: the Python threefry_rng / reference_rng modules become gsk_set_rng.m,
-  choose_cec_rng_generator.m, and the threefry RandStream (which controls rand,
-  randi, AND randperm).
+- Code snippets: fences in the sibling project's language become matlab (or
+  cpp), rewritten to the real MATLAB structs and C++ APIs - never left in the
+  sibling's language.
+- API tier: the sibling project's auto-generated api/ pages become the C++
+  Doxygen api/ tree (reference/api.md + docs/Doxyfile) PLUS
+  reference/matlab_interface.md for the MATLAB optimizer contract. Do NOT
+  invent a sibling-style autodoc for MATLAB.
+- Performance: the sibling project's JIT-compiled kernels, process pool, and
+  warmup become MATLAB parfor + native MEX, plus the -ffp-contract=off fidelity
+  note (use the performance.md facts).
+- RNG: the sibling project's threefry_rng / reference_rng modules become
+  gsk_set_rng.m, choose_cec_rng_generator.m, and the threefry RandStream (which
+  controls rand, randi, AND randperm).
 - Result paths: launcher output is results/_run_all/<optimizer>/<suite>; direct
   runs write results/<optimizer>/<suite> (match result_schema.md exactly).
 - Reruns: overwrite=false resumes/appends; overwrite=true archives the previous
   active tree under _overwrite_archive/<suite>_<timestamp>/ and starts clean.
 - Graphs: write_graphs=false is the default; numeric curves and gen_logs are
   still written, while PNG files under curves/graphs are opt-in.
-- Mandatory callout dialect (above) is itself a translation rule: the Python
-  four-field and orientation callouts must appear on the MATLAB pages, reworded
-  for MATLAB, not dropped.
+- Mandatory callout dialect (above) is itself a translation rule: the sibling
+  project's four-field and orientation callouts must appear on the MATLAB pages,
+  reworded for MATLAB, not dropped.
 - Keep the MATLAB seed story native: in THIS project the reference and
   native/derived paths ARE the platform-compatibility story, not an exception
-  bolted onto a Python default.
+  bolted onto a sibling-project default.
 
-## Build Script Maintenance (scripts\build_docs.ps1) - PowerShell only, no Python
+## Build Script Maintenance (scripts\build_docs.ps1) - PowerShell only
 
 The script is already on the five-folder + prompts taxonomy. Keep it that way:
 
@@ -420,10 +432,10 @@ The script is already on the five-folder + prompts taxonomy. Keep it that way:
     <div class="navgroup">C++ API</div>
     <ul><li><a href="api/index.html">C++ API (Doxygen)</a></li></ul>
   So the rendered group order is: Getting Started; Reference; Algorithm Guides;
-  Development; Prompts; Research; C++ API. This mirrors the Python sidebar and
-  replaces Python's "Python API" group with "C++ API". Keep the Prompts group and
-  the appended C++ API group. Group labels come from the Group field; the
-  Title field is the visible link text (e.g. "MATLAB Optimizer Interface",
+  Development; Prompts; Research; C++ API. This mirrors the sibling project's
+  sidebar and replaces its language-specific API group with "C++ API". Keep the
+  Prompts group and the appended C++ API group. Group labels come from the Group
+  field; the Title field is the visible link text (e.g. "MATLAB Optimizer Interface",
   "C++ API (how-to)", "Provenance Inventory", "License and Provenance").
 - Rendering: Pandoc is primary (gfm -> html5, standalone, --toc --toc-depth=3,
   shared template); Convert-MarkdownFallback is the built-in renderer used when
@@ -432,8 +444,8 @@ The script is already on the five-folder + prompts taxonomy. Keep it that way:
   docs/Doxyfile) emits the C++ API into docs/html/api with
   OUTPUT_DIRECTORY=docs/html, HTML_OUTPUT=api. The
   -Clean switch wipes docs/html first. Keep the light/dark toggle, per-page TOC,
-  copy buttons, mermaid, table wrapping, and no-BOM assets. Add nothing that
-  requires Python.
+  copy buttons, mermaid, table wrapping, and no-BOM assets. Add no build
+  dependency outside the PowerShell + Pandoc + Doxygen toolchain.
 - The script does NOT touch docs/index.html (the redirect). Leave that file to be
   maintained by hand; do not add it to $pages.
 - If you relocate configs/README.md content into getting-started/configuration.md,
@@ -475,13 +487,13 @@ The script is already on the five-folder + prompts taxonomy. Keep it that way:
   C++ API entry are present in the nav.
 - Every algorithm page has a heading slugged worked-example, and every page that
   links #worked-example resolves to it.
-- No page claims a Python fact (pip, numba, gsk-run, a .py module, ProcessPool)
-  for THIS project.
+- No page claims a sibling-project tooling fact (its package install, JIT
+  kernels, gsk-run, its source modules, its process pool) for THIS project.
 
 ## Suggested Order Of Work
 
-1. Read the template and the ground truth; diff the Python page list against the
-   MATLAB tree and list any parity gaps (added/renamed/removed Python pages).
+1. Read the template and the ground truth; diff the sibling page list against the
+   MATLAB tree and list any parity gaps (added/renamed/removed sibling pages).
 2. For each existing MATLAB page, ALIGN its sections and opening callout to the
    template; VERIFY MATLAB-only pages for fact-correctness and live links.
 3. Re-confirm the seven algorithm pages against the section skeleton (incl. the
@@ -505,11 +517,12 @@ Run and report the output of each:
   Doxygen api\ tree built (docs\html\api\index.html).
 - Search docs\html for unresolved links: there must be 0 occurrences of href to a
   .md file (every .md link must have been rewritten to a flat .html name).
-- Search the sources and the built site for stale tokens that would describe THIS
-  project: python, pip, numba, gsk-run, .py, ProcessPool - none should remain in
-  prose about this project (a token inside the parity prompt's own translation
-  rules is allowed, and so is a provenance citation of the DT-GSK Python
-  reference implementation).
+- Search the sources and the built site for stale sibling-project tokens that
+  would describe THIS project: the sibling's language name, its package-manager,
+  JIT-compiler, and process-pool names, gsk-run, and its source-file extension -
+  none should remain in prose about this project (a token inside the parity
+  prompt's own translation rules is allowed, and so is a provenance citation of
+  the DT-GSK reference implementation).
 - Spot-check at least ten cross-links per folder in docs\html, including several
   #worked-example links.
 - git status must show NO changes under src\ or benchmarks\ - this is docs-only,
@@ -517,7 +530,7 @@ Run and report the output of each:
 
 ## Deliverables
 
-1. A parity-gap report: the Python page list diffed against the MATLAB tree, with
+1. A parity-gap report: the sibling page list diffed against the MATLAB tree, with
    each gap classified ALIGN / VERIFY / NEW / REMOVE / KEEP.
 2. The maintained docs/ tree: every page on the template's section skeleton and
    opening callout, every MATLAB-only page fact-checked, any missing counterpart
@@ -538,9 +551,10 @@ Run and report the output of each:
 
 - P0: a wrong or contradictory fact (seed, budget, path, formula, the
   native/derived alias, the ATMALS reporting exception, a default entry point), a
-  broken build, a broken link, or any Python claim made about this project.
+  broken build, a broken link, or any sibling-project tooling claim made about
+  this project.
 - P1: a missing required page or required section; an algorithm page off the
-  skeleton or missing the worked-example slug; a Python page added with no MATLAB
+  skeleton or missing the worked-example slug; a sibling page added with no MATLAB
   counterpart; wrong nav grouping or order; a missing Prompts or C++ API nav group.
 - P2: callout-dialect, terminology, or style drift; a weak worked example; thin
   diagram coverage; an outdated index.html group list.
@@ -549,10 +563,10 @@ Run and report the output of each:
 ## Final Requirement
 
 Every fact must match the MATLAB code and the existing MATLAB docs - cite the
-line. Mirror the Python STRUCTURE, never its Python-specific facts, and preserve
-the intentional MATLAB-side divergences (the prompts/ folder, the index.html
-redirect, the C++ Doxygen API tier). Keep the project's no-Python contract: the
-site is built only by scripts\build_docs.ps1. Rebuild docs\html and confirm
-docs\html\index.html exists, the Doxygen api\ tree built, and 0 unresolved .md
-links remain before declaring done.
+line. Mirror the sibling project's STRUCTURE, never its language-specific facts,
+and preserve the intentional MATLAB-side divergences (the prompts/ folder, the
+index.html redirect, the C++ Doxygen API tier). Keep the project's MATLAB and
+C++ only contract: the site is built only by scripts\build_docs.ps1. Rebuild
+docs\html and confirm docs\html\index.html exists, the Doxygen api\ tree built,
+and 0 unresolved .md links remain before declaring done.
 ```

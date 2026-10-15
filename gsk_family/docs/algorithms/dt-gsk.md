@@ -1,5 +1,31 @@
 # DT-GSK — Dimension-Tiered Gaining-Sharing Knowledge
 
+DT-GSK is GSK with extra control parts that switch on according to the problem
+dimension `D`. Every run picks its parameters adaptively (ACE), shrinks its
+population, escapes or restarts when the search stalls, and refines the best
+points near the end; block crossover starts at `D = 10`. From `D = 20` it also
+keeps separate parameter memories for the better and worse halves and adds a
+DE/rand/1 option; from `D = 50` it learns which coordinates improve together
+(SGSM) and ends with a compass polish; from `D = 100` it adds a local-search
+budget rule, a population floor, novelty-based restarts and late-run
+controllers, and drops the DE option. It has no tuning options: give it a
+problem and a seed, and it always uses the full evaluation budget.
+
+**How to run it.** New to the project? Follow the [Runbook](../../../RUNBOOK.md)
+first (setup, build, first run). Then, in MATLAB:
+
+```matlab
+cd('<repo>/gsk_family/src/runners')
+run_experiment('optimizer','dt-gsk', 'suite','cec2017', 'functions',[1 3], ...
+    'dimensions',[10], 'runs',3, 'project_root','<repo>/gsk_family', ...
+    'output_dir','<repo>/gsk_family/results/dt-gsk/cec2017')
+```
+
+or, from a terminal in `gsk_family`:
+`build\gsk_run.exe --optimizer dt-gsk --suite cec2017 --dimension 10 --function 1 --runs 3`.
+The full run guide (options, outputs, comparison) is in
+[Command Reference 3.7](../getting-started/command_reference.md#37-dt-gsk).
+
 > **What this is:** the seventh member of the family — GSK's junior/senior
 > operators plus a control stack that the published `pub` profile switches on and
 > tunes by problem dimension (adaptive configuration selection, nonlinear
@@ -14,7 +40,7 @@
 > Reference: Masoud, Roshdy & Mohamed, "DT-GSK: Dimension-Tiered Adaptive
 > Configuration Selection and Deterministic Refinement for Gaining-Sharing
 > Knowledge-Based Optimization Algorithm", *Algorithms* (MDPI), 2026 (accepted;
-> DOI pending); reference implementation DT-GSK v2.46 (Python, MIT license),
+> DOI pending); reference implementation DT-GSK v2.46 (MIT license),
 > <https://github.com/MostafaMassoud/DT-GSK>.
 
 ## Intuition
@@ -344,7 +370,7 @@ recorded in the [DT-GSK README](../../src/optimizers/dt-gsk/README.md).
 
 ## Benchmark suites
 
-Reference results imported from the Python reference cover all five suites:
+Reference results imported from the reference implementation cover all five suites:
 CEC2017 (D 10/30/50/100, 51 runs), CEC2013 (D 10/30/50, 51 runs), CEC2020
 (D 5/10/15/20, 30 runs), CEC2011 (native dimensions, 25 runs), and CEC2013LSGO
 (D 1000/905, 25 runs), all with the `pub` profile, unified seeds, and full
@@ -359,9 +385,9 @@ every optimizer. See [benchmark_protocol.md](../reference/benchmark_protocol.md)
   nine streams are created (`:73-90`); `Rg3` is the first valid entry of an
   `NP x 32` candidate draw with a smallest-valid-index fallback (`:764-786`);
   scalar masks come from one fused `3*n*D` draw (`:849-856`).
-- **Arithmetic.** As in the reference (`:30-32`): left-to-right (`seqsum`) and NumPy
-  pairwise sums (`np_rowsum`; `np_sum` in `dt_gsk_graph.m`), stable sorts, NumPy
-  `argmin` (a `NaN` wins), round-half-up `floor(x + 0.5)` sizes (`:187`, `:792`),
+- **Arithmetic.** As in the reference (`:30-32`): left-to-right (`seqsum`) and
+  pairwise sums (`pairwise_rowsum`; `pairwise_sum` in `dt_gsk_graph.m`), stable sorts, the
+  reference's `argmin` rule (a `NaN` wins), round-half-up `floor(x + 0.5)` sizes (`:187`, `:792`),
   and different zero-span guards for archive and basin distances (`:134-139`).
 - **Acceptance.** Not-worse children replace parents (`<=`) in selection, Cauchy
   kick, and local search (`:321`, `:470`, `:569`); every trial changes at least
@@ -369,26 +395,28 @@ every optimizer. See [benchmark_protocol.md](../reference/benchmark_protocol.md)
 - **Scope.** Only the `pub` profile is ported; options no `pub` tier selects,
   research hooks, and telemetry are left out (`:41-45`).
 
-MATLAB's Threefry stream and the Python replica produce the same 64-bit words but
-convert them to doubles slightly differently, so uniform draws differ by at most
-`2^-53`; integer, permutation, and mask draws coincide.
+MATLAB's Threefry generator produces the same 64-bit words as the reference
+implementation's generator but converts them to doubles slightly differently, so
+uniform draws differ by at most `2^-53`; integer, permutation, and mask draws
+coincide.
 
 ## Source and validation
 
 - Kernel: `src/optimizers/dt-gsk/dt_gsk_optimize.m` (the whole optimizer, with
   local helpers), `dt_gsk_config.m` (the `pub` profile by tier), and
   `dt_gsk_graph.m` (the SGSM graph). Port of the DT-GSK reference implementation
-  v2.46 (Python, MIT license), <https://github.com/MostafaMassoud/DT-GSK>; MIT is
+  v2.46 (MIT license), <https://github.com/MostafaMassoud/DT-GSK>; MIT is
   compatible with this project's GPL-3.0-or-later, and the MATLAB port is part of
   this project ([LICENSES.md](../../LICENSES.md)). Interface:
   [matlab_interface.md](../reference/matlab_interface.md); running:
-  [runbook.md](../getting-started/runbook.md); validation overview:
-  [Validation Report](../research/validation_report.md).
-- Validation: a line-by-line port was checked against the unmodified Python code
-  on identical random numbers in all four tiers and reproduces the reference's
-  golden values to `1e-13`; these three files reproduce that port bit for bit on
-  25 full-budget runs and 42 rare-branch problems. Details, and the results of the
-  full CEC2017 campaign against the imported reference, are in the
+  [command_reference.md](../getting-started/command_reference.md); validation
+  overview: [Validation Report](../research/validation_report.md).
+- Validation: a line-by-line port was checked against the unmodified reference
+  implementation on identical random numbers in all four tiers and reproduces
+  the reference's golden values to `1e-13`; these three files reproduce that
+  port bit for bit on 25 full-budget runs and 42 rare-branch problems. On
+  CEC2017 (D10, D30 and D50 done, D100 still to run) all 87 functions agree
+  with the imported reference runs. Details and the campaign results are in the
   [DT-GSK README](../../src/optimizers/dt-gsk/README.md).
 - Tests: `src/tests/test_dt_gsk_smoke.m` checks the result contract, the exact
   full budget, the best-so-far trace, same-seed replay, that a supplied `X0` is

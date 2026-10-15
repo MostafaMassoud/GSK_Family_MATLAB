@@ -1,19 +1,19 @@
 // cec2011_problems_a.cpp -- CEC2011 work package A: problems 1-8 and 10.
 //
-// Standalone C++20 port of the MATLAB reference under
-//   historical source: CEC2011 real-world MATLAB package
-// Files ported here (per docs/reference/cec2011_port_plan.md section 5):
+// Standalone C++20 port of the CEC2011 real-world MATLAB package.
+// Source files (docs/reference/cec2011_port_plan.md section 5):
 //   bench_func.m cases 1-8     -> problems 1-8
 //   diffsolv.m + c_bifunc_data -> problem 3 ODE right-hand side
 //   intgrl.m                   -> problem 4 ODE right-hand side
 //   data6Bus.m                 -> problem 8 Garver 6-bus tables
 //   antennafunccircular.m, array_factorcir.m -> problem 10
-// plus a behavioral replica of MATLAB's ode45 (R2025b funfun/ode45.m code
-// path actually exercised by problems 3-4). All reference quirks flagged
-// [PRESERVE] in the port plan are reproduced and commented at the site.
+// Also holds a re-implementation of MATLAB's ode45 that follows the R2025b
+// funfun/ode45.m code path used by problems 3-4. Quirks of the original code
+// (marked [PRESERVE] in the port plan) are kept so results match; each one is
+// commented where it occurs.
 //
-// Every objective ends with detail::apply_reference_nan_rule (the
-// Calc_Fitx_2011.m lines 57-61 NaN->0 rule); Inf passes through unchanged.
+// Every objective ends with apply_reference_nan_rule (NaN -> 0, from
+// Calc_Fitx_2011.m lines 57-61); Inf passes through unchanged.
 
 #include "cec2011_detail.hpp"
 
@@ -42,11 +42,11 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 // MATLAB built-in pi (the IEEE double nearest to pi).
 constexpr double kPi = 3.141592653589793;
 
-// MATLAB `^` with a positive integer exponent (R2021b+ uses repeated
-// squaring). For the exponents used here (2, 3) every squaring scheme is
-// bit-identical; for problem 2's r^6 / r^12 the exact multiply order inside
-// MATLAB is undocumented, so agreement is ~1 ulp (far below the 1e-12
-// relative test gate).
+// base^exponent by repeated squaring, like MATLAB `^` with a positive integer
+// exponent (R2021b+). For the exponents 2 and 3 used in this file every
+// multiply order gives the same bits. For problem 2's r^6 and r^12 MATLAB's
+// multiply order is undocumented, so results agree to ~1 ulp (well inside
+// the 1e-12 relative test tolerance).
 double int_pow(double base, unsigned exponent) {
     double result = 1.0;
     double b = base;
@@ -63,15 +63,15 @@ double int_pow(double base, unsigned exponent) {
     return result;
 }
 
-// MATLAB max(a,0) semantics for the hinge penalties: NaN compares false and
-// yields 0 (MATLAB max ignores NaN), unlike std::max.
+// max(v, 0) as MATLAB computes it, for the hinge penalties: NaN gives 0
+// (MATLAB max ignores NaN), unlike std::max.
 double hinge_at_zero(double v) {
     return v > 0.0 ? v : 0.0;
 }
 
-// ---------------------------------------------------------------------------
-// Common base: dimension check + reference NaN->0 rule around each objective.
-// ---------------------------------------------------------------------------
+// ---- Common base ----
+// evaluate() checks x has D entries (else std::invalid_argument), then
+// applies the NaN rule to objective(x).
 
 class WpaProblem : public BenchmarkProblem {
 public:
@@ -102,9 +102,10 @@ private:
     Vector upper_;
 };
 
-// Bounds for problems 2, 5, 6 (define_boundaries.m cases 2/5/6): atom 1 in
-// [0,4]x[0,4]x[0,pi], later coordinates symmetric with width growing by 1/4
-// every atom: hi(j) = 4 + (1/4)*floor((j-4)/3), lo(j) = -hi(j) for j >= 4.
+// Bounds for problems 2, 5 and 6 (define_boundaries.m cases 2/5/6), D = 30
+// (10 atoms x 3 coordinates, j is 1-based). Atom 1 lies in
+// [0,4]x[0,4]x[0,pi]. For j >= 4 the box is symmetric and widens by 1/4 per
+// atom: hi(j) = 4 + (1/4)*floor((j-4)/3), lo(j) = -hi(j).
 std::pair<Vector, Vector> atom_cluster_bounds() {
     Vector lo(30), hi(30);
     for (int j = 1; j <= 30; ++j) {
@@ -126,9 +127,10 @@ std::pair<Vector, Vector> atom_cluster_bounds() {
     return {std::move(lo), std::move(hi)};
 }
 
-// Euclidean distance between atoms i and j (0-based) of a column-major
-// reshape(x,3,n)' layout: atom k = (x[3k], x[3k+1], x[3k+2]).
-// Matches MATLAB sqrt(sum((x(i,:)-x(j,:)).^2)) summation order.
+// Euclidean distance between atoms i and j (0-based). Atom k is
+// (x[3k], x[3k+1], x[3k+2]), i.e. row k+1 of MATLAB's column-major
+// reshape(x,3,n)'. Sums in the same order as MATLAB
+// sqrt(sum((x(i,:)-x(j,:)).^2)).
 double atom_distance(std::span<const Real> x, int i, int j) {
     const double d0 = x[static_cast<std::size_t>(3 * i)] - x[static_cast<std::size_t>(3 * j)];
     const double d1 = x[static_cast<std::size_t>(3 * i + 1)] - x[static_cast<std::size_t>(3 * j + 1)];
@@ -136,44 +138,41 @@ double atom_distance(std::span<const Real> x, int i, int j) {
     return std::sqrt((d0 * d0 + d1 * d1) + d2 * d2);
 }
 
-// ---------------------------------------------------------------------------
-// MATLAB-compatible ode45 (problems 3 and 4).
-//
-// Behavioral replica of MATLAB R2025b funfun/ode45.m + private/odearguments.m
-// + private/ntrp45split.m, restricted to the configuration the reference
-// exercises: two-element increasing tspan, scalar RelTol/AbsTol, no events /
-// mass matrix / NonNegative / NormControl / MaxStep / InitialStep, Refine=4.
-// The code below is an original implementation: the Dormand-Prince RK5(4)
-// tableau and the 4th-order interpolant are published mathematics
+// ---- MATLAB-compatible ode45 (problems 3 and 4) ----
+// Follows MATLAB R2025b funfun/ode45.m, private/odearguments.m and
+// private/ntrp45split.m, but only for the setup the reference uses: a
+// two-element increasing tspan, scalar RelTol/AbsTol, Refine = 4, and no
+// events, mass matrix, NonNegative, NormControl, MaxStep or InitialStep.
+// The code is written independently, not copied from MATLAB: the
+// Dormand-Prince RK5(4) tableau and 4th-order interpolant are published
 // (Dormand & Prince 1980; Shampine & Reichelt, SIAM J. Sci. Comp. 18-1,
-// 1997), and the controller constants/operation order were verified against
-// the shipped MATLAB sources.
+// 1997); the controller constants and operation order were checked against
+// the MATLAB sources.
 //
-// Faithfulness notes (each verified against ode45.m):
-//  * initial step: absh = min(hmax, htspan) capped by 1/rh with
+// Details that match ode45.m:
+//  * initial step: absh = min(hmax, htspan), capped at 1/rh with
 //    rh = ||f0 ./ max(|y0|,threshold)||_inf / (0.8*rtol^(1/5));
-//  * hmax = max(0.1*|tfinal-t0|, 16*eps*max(|t0|,|tfinal|)) (odearguments.m
-//    default MaxStep), hmin = 16*eps(t) recomputed every step;
-//  * stage sums use the scalar-coefficient grouping of R2025b ode45.m,
-//    y + h.*(b1.*f1 + ... ), evaluated left-to-right;
+//  * hmax = max(0.1*|tfinal-t0|, 16*eps*max(|t0|,|tfinal|)) (default MaxStep
+//    from odearguments.m); hmin = 16*eps(t), recomputed every step;
+//  * stage sums use ode45.m's scalar-coefficient grouping
+//    y + h.*(b1.*f1 + ... ), evaluated left to right;
 //  * error: err = absh * || fE ./ max(max(|y|,|ynew|),threshold) ||_inf with
 //    fE = f1*e1 + f3*e3 + f4*e4 + f5*e5 + f6*e6 + f7*e7;
-//  * reject: first failure absh = max(hmin, absh*max(0.1, 0.8*(rtol/err)^0.2)),
-//    later failures absh = max(hmin, 0.5*absh);
-//  * accept (only when no failure this step): temp = 1.25*(err/rtol)^0.2;
+//  * rejected step: first failure absh = max(hmin, absh*max(0.1,
+//    0.8*(rtol/err)^0.2)); later failures absh = max(hmin, 0.5*absh);
+//  * accepted step with no failure: temp = 1.25*(err/rtol)^0.2;
 //    absh = (temp > 0.2) ? absh/temp : 5*absh;
-//  * final step stretch: if 1.1*absh >= |tfinal - t| then h = tfinal - t and
-//    tnew is forced to tfinal exactly; h is re-purified as tnew - t;
-//  * output rows: y0, then per accepted step 3 interpolated points at
-//    s = 1/4, 2/4, 3/4 (ntrp45split Horner forms) followed by ynew, so
+//  * final-step stretch: if 1.1*absh >= |tfinal - t|, then h = tfinal - t,
+//    tnew is set to tfinal exactly and h is recomputed as tnew - t;
+//  * output rows: y0, then for each accepted step 3 interpolated points at
+//    s = 1/4, 2/4, 3/4 (ntrp45split Horner form) and ynew, so
 //    rows = 1 + 4*nsteps. Problem 4 sums over exactly these rows [PRESERVE].
-// Residual deviation vs MATLAB: only C-library vs MATLAB libm 1-ulp
-// differences in pow/exp inside step-size selection and the RHS; the
-// accept/reject sequence is insensitive to those at RelTol=0.1.
-// ---------------------------------------------------------------------------
+// The only remaining differences from MATLAB are 1-ulp differences between
+// the C library and MATLAB's libm in pow/exp (step-size selection and RHS).
+// At RelTol = 0.1 they do not change which steps are accepted or rejected.
 
-// MATLAB eps(x): spacing from |x| to the next larger double. eps(0) is the
-// smallest subnormal. (Not valid at realmax, never reached here: t <= 0.78.)
+// MATLAB eps(x): gap from |x| to the next larger double; eps(0) is the
+// smallest subnormal. Not valid at realmax (never reached here: t <= 0.78).
 double matlab_eps(double x) {
     x = std::fabs(x);
     if (x == 0.0) {
@@ -182,6 +181,10 @@ double matlab_eps(double x) {
     return std::nextafter(x, kInf) - x;
 }
 
+// Integrates y' = f(t, y) from t0 to tfinal (needs tfinal > t0) with scalar
+// RelTol = rtol and AbsTol = atol; rhs(t, y, dy) writes f into dy.
+// Returns the output rows described above (1 + 4*nsteps states). Throws
+// std::runtime_error if a step fails at the minimum step size hmin.
 template <std::size_t Neq, typename Rhs>
 std::vector<std::array<double, Neq>> ode45_matlab(const Rhs& rhs,
                                                   const std::array<double, Neq>& y0,
@@ -189,8 +192,8 @@ std::vector<std::array<double, Neq>> ode45_matlab(const Rhs& rhs,
                                                   double rtol, double atol) {
     using State = std::array<double, Neq>;
 
-    // Dormand-Prince RK5(4) tableau (published; same literal fractions as the
-    // reference, correctly rounded identically by IEEE division).
+    // Dormand-Prince RK5(4) tableau. Same literal fractions as the reference,
+    // so IEEE division rounds them to the same values.
     const double kPow = 1.0 / 5.0;
     const double a2 = 1.0 / 5.0, a3 = 3.0 / 10.0, a4 = 4.0 / 5.0, a5 = 8.0 / 9.0;
     const double b11 = 1.0 / 5.0;
@@ -212,7 +215,7 @@ std::vector<std::array<double, Neq>> ode45_matlab(const Rhs& rhs,
     const double bi62 = -11.0 / 7.0, bi63 = 11.0 / 3.0, bi64 = -55.0 / 28.0;
     const double bi72 = 3.0 / 2.0, bi73 = -4.0, bi74 = 5.0 / 2.0;
 
-    // odearguments.m: defaults for the options used by the suite.
+    // Defaults from odearguments.m for the options the suite uses.
     const double epsDouble = 2.220446049250313e-16;  // eps('double')
     const double htspan = std::fabs(tfinal - t0);
     const double threshold = atol / rtol;
@@ -230,7 +233,7 @@ std::vector<std::array<double, Neq>> ode45_matlab(const Rhs& rhs,
     rows.reserve(256);
     rows.push_back(y);
 
-    // Initial step size (ode45.m, InitialStep empty).
+    // Initial step size (ode45.m rule when InitialStep is empty).
     double tinystep = 16.0 * matlab_eps(t);
     double hmin = std::max(tinystep, userhmin);
     double hmax = std::max(tinystep, userhmax);
@@ -238,7 +241,7 @@ std::vector<std::array<double, Neq>> ode45_matlab(const Rhs& rhs,
     double rh = 0.0;
     for (std::size_t i = 0; i < Neq; ++i) {
         const double w = std::fabs(f1[i] / std::max(std::fabs(y[i]), threshold));
-        if (w > rh) {  // norm(.,inf); NaN compares false exactly like MATLAB max
+        if (w > rh) {  // norm(.,inf); NaN is skipped, as in MATLAB max
             rh = w;
         }
     }
@@ -257,9 +260,9 @@ std::vector<std::array<double, Neq>> ode45_matlab(const Rhs& rhs,
         hmin = std::max(tinystep, userhmin);
         hmax = std::max(tinystep, userhmax);
         absh = std::min(hmax, std::max(hmin, absh));
-        double h = absh;  // tdir == +1 for tspan [0, 0.78]
+        double h = absh;  // tdir == +1 (tspan is [0, 0.78])
 
-        // Stretch the step if within 10% of tfinal-t.
+        // Stretch the step to tfinal if within 10% of tfinal - t.
         if (1.1 * absh >= std::fabs(tfinal - t)) {
             h = tfinal - t;
             absh = std::fabs(h);
@@ -296,7 +299,7 @@ std::vector<std::array<double, Neq>> ode45_matlab(const Rhs& rhs,
             if (done) {
                 tnew = tfinal;  // Hit end point exactly.
             }
-            h = tnew - t;  // Purify h.
+            h = tnew - t;  // Purify h: recompute it from tnew.
 
             for (std::size_t i = 0; i < Neq; ++i) {
                 ynew[i] = y[i] +
@@ -319,9 +322,9 @@ std::vector<std::array<double, Neq>> ode45_matlab(const Rhs& rhs,
 
             if (err > rtol) {  // Failed step
                 if (absh <= hmin) {
-                    // The reference warns (IntegrationTolNotMet) and returns a
-                    // truncated solution; unreachable for the suite's smooth
-                    // RHS at RelTol=0.1. Surface it loudly instead.
+                    // MATLAB warns (IntegrationTolNotMet) and returns a
+                    // truncated solution. Never reached for the suite's
+                    // smooth RHS at RelTol = 0.1; throw instead.
                     throw std::runtime_error(
                         "cec2011 ode45: unable to meet integration tolerances without "
                         "reducing the step size below the smallest value allowed.");
@@ -365,7 +368,7 @@ std::vector<std::array<double, Neq>> ode45_matlab(const Rhs& rhs,
             break;
         }
 
-        // If there were no failures compute a new h.
+        // If this step had no failures, compute a new h.
         if (nofailed) {
             const double temp = 1.25 * std::pow(err / rtol, kPow);
             if (temp > 0.2) {
@@ -384,9 +387,7 @@ std::vector<std::array<double, Neq>> ode45_matlab(const Rhs& rhs,
     return rows;
 }
 
-// ---------------------------------------------------------------------------
-// Problem 1 -- FM sound-wave parameter estimation (bench_func.m case 1).
-// ---------------------------------------------------------------------------
+// ---- Problem 1: FM sound-wave parameter estimation (bench_func.m case 1) ----
 
 class FmSoundWaves final : public WpaProblem {
 public:
@@ -411,11 +412,10 @@ protected:
     }
 };
 
-// ---------------------------------------------------------------------------
-// Problem 2 -- Lennard-Jones potential, 10 atoms (bench_func.m case 2).
-// No r==0 guard [PRESERVE]: coincident atoms give 1/0 - 2/0 = Inf - Inf = NaN
-// which the reference NaN rule then maps to 0 (the mid probe exercises this).
-// ---------------------------------------------------------------------------
+// ---- Problem 2: Lennard-Jones potential, 10 atoms (bench_func.m case 2) ----
+// No guard for r == 0 [PRESERVE]: coincident atoms give 1/0 - 2/0 =
+// Inf - Inf = NaN, which the NaN rule maps to 0 (the test probe at the
+// bounds midpoint covers this).
 
 class LennardJones final : public WpaProblem {
 public:
@@ -437,15 +437,15 @@ protected:
     }
 };
 
-// ---------------------------------------------------------------------------
-// Problem 3 -- bifunctional catalyst blend optimal control
-// (bench_func.m case 3 + diffsolv.m + c_bifunc_data).
-// The reference reloads c_bifunc_data.mat on every RHS call; hoisted to
-// construction time (numerically identical, port plan section 3).
-// ---------------------------------------------------------------------------
+// ---- Problem 3: bifunctional catalyst blend optimal control ----
+// From bench_func.m case 3, diffsolv.m and c_bifunc_data. The reference
+// reloads c_bifunc_data.mat on every RHS call; here it is loaded once in the
+// constructor, which gives the same numbers (port plan section 3).
 
-// Reads the MATLAB-exported whitespace table, skipping '#' comment lines.
-// Layout: optional comments, then "rows cols", then rows*cols values.
+// Reads a whitespace-separated table exported from MATLAB, skipping '#'
+// comment lines. Layout: "rows cols", then rows*cols values. Returns every
+// number in file order (dimensions first). Throws std::runtime_error if the
+// file is missing or holds a non-numeric token.
 std::vector<double> load_commented_table(const std::filesystem::path& path) {
     require_file(path);
     std::ifstream in(path);
@@ -528,12 +528,10 @@ private:
     std::array<std::array<double, 4>, 10> c_{};
 };
 
-// ---------------------------------------------------------------------------
-// Problem 4 -- optimal control of a nonlinear stirred tank reactor
-// (bench_func.m case 4 + intgrl.m).
-// f = sum(sum(Y.^2,2) + 0.1*u*u) sums over the ode45 OUTPUT ROWS (the
-// refine=4 grid), so the value depends on the accepted-step count [PRESERVE].
-// ---------------------------------------------------------------------------
+// ---- Problem 4: optimal control of a nonlinear stirred tank reactor ----
+// From bench_func.m case 4 and intgrl.m. f = sum(sum(Y.^2,2) + 0.1*u*u) sums
+// over the ode45 output rows (the Refine = 4 grid), so f depends on the
+// number of accepted steps [PRESERVE].
 
 class StirredTankReactor final : public WpaProblem {
 public:
@@ -544,8 +542,8 @@ protected:
         const double u = x[0];
         const auto rhs = [u](double /*t*/, const std::array<double, 2>& s,
                              std::array<double, 2>& dy) {
-            // intgrl.m: the exp(...) subexpression is textually identical in
-            // both equations; computing it once is bit-identical.
+            // intgrl.m has the same exp(...) term in both equations;
+            // computing it once gives the same bits.
             const double e = std::exp(25.0 * s[0] / (s[0] + 2.0));
             dy[0] = -(2.0 + u) * (s[0] + 0.25) + (s[1] + 0.5) * e;
             dy[1] = (0.5 - s[1]) - (s[1] + 0.5) * e;
@@ -561,13 +559,11 @@ protected:
     }
 };
 
-// ---------------------------------------------------------------------------
-// Problems 5 and 6 -- Tersoff potentials Si(B) / Si(C)
-// (bench_func.m cases 5 and 6; identical code, different constants).
+// ---- Problems 5 and 6: Tersoff potentials Si(B) and Si(C) ----
+// From bench_func.m cases 5 and 6 (same code, different constants).
 // [PRESERVE] the law-of-cosines typo: ctheta uses rd3 CUBED, not squared.
-// Coincident atoms give ctheta = 0/0 = NaN which propagates to f and is then
-// zeroed by the reference NaN rule (the mid probe exercises this).
-// ---------------------------------------------------------------------------
+// Coincident atoms give ctheta = 0/0 = NaN, which reaches f and is then set
+// to 0 by the NaN rule (the test probe at the bounds midpoint covers this).
 
 struct TersoffConstants {
     double R1, R2, A, B, lemda1, lemda2, lemda3, c, d, n1, gama, h;
@@ -589,7 +585,7 @@ public:
 
 protected:
     Real objective(std::span<const Real> x) const override {
-        constexpr int NP = 10;
+        constexpr int NP = 10;  // number of atoms (not a population size)
         std::array<std::array<double, NP>, NP> r{}, fcr{}, VRr{}, VAr{};
         for (int i = 0; i < NP; ++i) {
             for (int j = 0; j < NP; ++j) {
@@ -646,12 +642,9 @@ private:
     TersoffConstants k_;
 };
 
-// ---------------------------------------------------------------------------
-// Problem 7 -- spread-spectrum radar polyphase code design
-// (bench_func.m case 7).
-// Empty j-ranges leave hsum(kk) = 0 (odd kk, i > d) or 0.5 (even kk, i >= d);
-// those entries still participate in the max [PRESERVE].
-// ---------------------------------------------------------------------------
+// ---- Problem 7: spread-spectrum radar polyphase code design ----
+// From bench_func.m case 7. Empty j-ranges leave hsum(kk) = 0 (odd kk, i > d)
+// or 0.5 (even kk, i >= d); these entries still count in the max [PRESERVE].
 
 class SpreadSpectrumRadar final : public WpaProblem {
 public:
@@ -686,8 +679,9 @@ protected:
             }
             hsum[static_cast<std::size_t>(kk - 1)] = acc;
         }
-        // f = max(hsum); MATLAB max ignores NaN. The even-kk 0.5 entries make
-        // the array never all-NaN, so a skip-NaN running max is exact.
+        // f = max(hsum), skipping NaN like MATLAB max. The constant 0.5
+        // entries (even kk, i >= d) are never NaN, so hsum is never all NaN
+        // and this running max gives the same result as MATLAB.
         double f = -kInf;
         for (const double v : hsum) {
             if (v > f) {
@@ -698,10 +692,8 @@ protected:
     }
 };
 
-// ---------------------------------------------------------------------------
-// Problem 8 -- Transmission Network Expansion Planning, Garver 6-bus
-// (bench_func.m case 8 + data6Bus.m).
-// ---------------------------------------------------------------------------
+// ---- Problem 8: transmission network expansion planning (TNEP) ----
+// Garver 6-bus system, from bench_func.m case 8 and data6Bus.m.
 
 struct TnepLine {
     int from;
@@ -711,8 +703,9 @@ struct TnepLine {
     double cost;
 };
 
-// data6Bus.m columns consumed by bench_func case 8: from(2), to(3), X(4),
-// Pijmax(6), cost(7). num_Line(5) and Overloads(8) are dead.
+// data6Bus.m columns used by bench_func case 8: from(2), to(3), X(4),
+// Pijmax(6), cost(7). num_Line(5) and Overloads(8) are unused. Bus numbers
+// are 1-based.
 constexpr std::array<TnepLine, 7> kTnepBaseLines = {{
     {1, 2, 0.4, 1.0, kInf},
     {1, 4, 0.6, 0.8, kInf},
@@ -744,11 +737,11 @@ constexpr std::array<TnepLine, 15> kTnepCandidates = {{
 constexpr std::array<double, 6> kTnepPgen = {0.5, 0.0, 1.65, 0.0, 0.0, 5.45};
 constexpr std::array<double, 6> kTnepPload = {0.8, 2.4, 0.4, 1.6, 2.4, 0.0};
 
-// MATLAB inv() stand-in for the 6x6 susceptance matrix: LU factorization with
-// partial pivoting (the LAPACK dgetrf family) and identity-column solves.
-// Not guaranteed bit-identical to MATLAB's LAPACK build in the last ulp;
-// agreement is ~1e-15 relative, far inside the 1e-12 probe gate. A singular
-// matrix flows through as Inf/NaN exactly like MATLAB's inv warning path.
+// Replaces MATLAB inv() for the 6x6 susceptance matrix: LU factorization with
+// partial pivoting (as LAPACK dgetrf), then one solve per identity column.
+// May differ from MATLAB's LAPACK in the last ulp; agreement is ~1e-15
+// relative, well inside the 1e-12 probe tolerance. A singular matrix gives
+// Inf/NaN, as MATLAB inv does (with a warning).
 void invert6(const std::array<std::array<double, 6>, 6>& a,
              std::array<std::array<double, 6>, 6>& inv) {
     std::array<std::array<double, 6>, 6> lu = a;
@@ -810,11 +803,11 @@ public:
 
 protected:
     Real objective(std::span<const Real> x) const override {
-        // sw = ceil(x) indexes Candidate(sw,:). The published bound includes
-        // x == 0, but the raw MATLAB statement Candidate(ceil(0),:) would use
-        // index 0. Treat the inclusive lower bound as the first discrete
-        // candidate, which keeps F8 usable for optimizers that legitimately
-        // land on lb while preserving the intended 15 candidate choices.
+        // sw = ceil(x) picks row Candidate(sw,:) (1-based). The bounds allow
+        // x == 0, where MATLAB Candidate(ceil(0),:) would use index 0, so sw
+        // is clamped to 1..15 and x == 0 maps to the first candidate. This
+        // keeps F8 usable when an optimizer lands on lb and keeps the 15
+        // candidate choices.
         std::array<int, 7> sw{};
         for (std::size_t kIdx = 0; kIdx < 7; ++kIdx) {
             const double c = std::ceil(x[kIdx]);
@@ -874,6 +867,8 @@ protected:
         }
         f = f + 30.0;
 
+        // Penalties: 5000*(|pij| - pijmax) for each overloaded line, plus
+        // 1000 for each candidate chosen more than 3 times.
         double pen = 0.0;
         for (std::size_t i = 0; i < 14; ++i) {
             pen = pen + 5000.0 * hinge_at_zero(std::fabs(pij[i]) - lines[i].pijmax);
@@ -893,22 +888,19 @@ protected:
     }
 };
 
-// ---------------------------------------------------------------------------
-// Problem 10 -- circular antenna array design
-// (Calc_Fitx_2011.m case 10 with null=[50 120], phi_desired=180,
-// distance=0.5; antennafunccircular.m + array_factorcir.m).
-//
-// Quirks preserved:
-//  * array_factorcir/antennafunccircular shadow pi with the truncated local
-//    constant 3.141592654 [PRESERVE]; trapezoidalcir has no such local, but
-//    it is not needed here (see below).
-//  * the null angles 50 and 120 are passed RAW to the array factor, i.e.
-//    interpreted as radians while the scan grid is degrees->radians
+// ---- Problem 10: circular antenna array design ----
+// From Calc_Fitx_2011.m case 10 (null = [50 120], phi_desired = 180,
+// distance = 0.5), antennafunccircular.m and array_factorcir.m.
+// Quirks kept:
+//  * array_factorcir and antennafunccircular use a truncated local
+//    pi = 3.141592654 instead of the built-in pi [PRESERVE]. trapezoidalcir
+//    does not, but it is not needed here (see below).
+//  * the null angles 50 and 120 go to the array factor unconverted, so they
+//    act as radians, while the scan grid is converted from degrees
 //    [PRESERVE].
-//  * the directivity term (trapezoidalcir + 2*pi*maxi^2/uavg) only feeds the
-//    write-only `global directivity` and never enters the returned objective,
-//    so it is intentionally not computed (port plan sections 1 and 5/P10).
-// ---------------------------------------------------------------------------
+//  * the directivity term (trapezoidalcir + 2*pi*maxi^2/uavg) is only stored
+//    in `global directivity`, which nothing reads, and never enters the
+//    objective, so it is not computed (port plan sections 1 and 5/P10).
 
 class CircularAntennaArray final : public WpaProblem {
 public:
@@ -919,8 +911,8 @@ protected:
         constexpr int num1 = 300;
         const double pl = 3.141592654;  // local pi [PRESERVE]
 
-        // phi = linspace(0,360,300): y(i) = ((i-1)*360)/299 with both
-        // endpoints forced exactly (MATLAB linspace.m general branch).
+        // phi = linspace(0,360,300) in degrees: y(i) = ((i-1)*360)/299 with
+        // both endpoints set exactly (MATLAB linspace.m general branch).
         std::array<double, num1> phi{};
         for (int i = 0; i < num1; ++i) {
             phi[static_cast<std::size_t>(i)] = (static_cast<double>(i) * 360.0) / 299.0;
@@ -943,7 +935,7 @@ protected:
             }
         }
 
-        // Sidelobe collection: endpoints first, then strict interior peaks.
+        // Collect sidelobes: endpoint peaks first, then strict interior peaks.
         std::vector<double> sidelobes;
         sidelobes.reserve(64);
         if (yax[0] > yax[num1 - 1] && yax[0] > yax[1]) {
@@ -961,13 +953,13 @@ protected:
         std::sort(sidelobes.begin(), sidelobes.end(), std::greater<double>());
         if (sidelobes.size() < 2) {
             // The reference would fail on sidelobes(2) (index out of range).
-            // Unreachable for real 12-element patterns (>= 2 local maxima).
+            // Not reached: real 12-element patterns have >= 2 local maxima.
             throw std::runtime_error("cec2011 f10: fewer than two pattern maxima "
                                      "(reference MATLAB code would error here).");
         }
         const double sllreturn = 20.0 * std::log10(sidelobes[1] / maxi);
 
-        // Beamwidth walks from phi_ref to the first local minimum each side.
+        // Beamwidth: walk from phi_ref to the first local minimum each side.
         double upper_bound = 180.0;
         double lower_bound = 180.0;
         for (int i = 1; i <= num1 / 2; ++i) {
@@ -1011,7 +1003,7 @@ protected:
             y3 = 0.0;
         }
 
-        // Beamwidth penalty.
+        // Beamwidth penalty above 80 degrees.
         double y = 0.0;
         if (bwfn > 80.0) {
             y = y + std::fabs(bwfn - 80.0);
@@ -1021,6 +1013,8 @@ protected:
     }
 
 private:
+    // Bounds: amplitudes x(1:6) in [0.2, 1], phases x(7:12) in [-180, 180]
+    // degrees.
     static Vector make_lower() {
         Vector lo(12);
         for (int j = 0; j < 12; ++j) {
@@ -1036,7 +1030,9 @@ private:
         return hi;
     }
 
-    // array_factorcir.m with dim=12, phi_desired=180, distance=0.5.
+    // array_factorcir.m with dim = 12, phi_desired = 180, distance = 0.5.
+    // Returns the array factor magnitude at angle phi (radians); x1(1:6) are
+    // amplitudes, x1(7:12) phases in degrees.
     static double array_factor(std::span<const Real> x1, double phi) {
         constexpr int dim = 12;
         const double pl = 3.141592654;  // local pi [PRESERVE]

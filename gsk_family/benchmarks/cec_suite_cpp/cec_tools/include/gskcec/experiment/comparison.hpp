@@ -9,7 +9,7 @@
 
 namespace gskcec {
 
-/// One row of a generated per-dimension summary table
+/// One row of a per-dimension summary table written by a run
 /// (results/<optimizer>/<suite>/summary/<optimizer>_<suite>_D<dim>.csv;
 /// see docs/reference/result_schema.md).
 struct SummaryRow {
@@ -17,7 +17,7 @@ struct SummaryRow {
     std::string suite;
     int function_id = 0;
     int dimension = 0;
-    int runs = 0;
+    int runs = 0; ///< Not stored in the summary file; load_summaries leaves it 0.
     Real best = 0.0;
     Real median = 0.0;
     Real mean = 0.0;
@@ -27,15 +27,16 @@ struct SummaryRow {
 };
 
 /// Loads every per-dimension summary table (summary/<opt>_<suite>_D<dim>.csv)
-/// found below @p results_root (recursive); optimizer, suite and dimension
-/// all come from the file name (not the enclosing folders). The
-/// dimensionless rollup and per_run.csv are skipped, and the runner's
+/// below @p results_root, searching subfolders. Optimizer, suite and
+/// dimension come from the file name, not the folder names. The rollup
+/// table without a dimension and per_run.csv are skipped, and the runner's
 /// archive folders (`_overwrite_archive/`, `_archive/`) below
-/// @p results_root are not descended into.
-/// @throws std::runtime_error naming file/line on schema problems.
+/// @p results_root are not searched.
+/// @throws std::runtime_error when @p results_root does not exist, or
+///         naming the file and line on a schema problem.
 std::vector<SummaryRow> load_summaries(const std::filesystem::path& results_root);
 
-/// Comparison of one generated row against one imported reference row.
+/// Comparison of one generated row with one imported reference row.
 struct ComparisonEntry {
     std::string optimizer;
     std::string suite;
@@ -48,6 +49,8 @@ struct ComparisonEntry {
     std::string verdict;            ///< "win" | "tie" | "loss" | "no_reference".
 };
 
+/// All comparison entries plus their win/tie/loss and missing-reference
+/// counts.
 struct ComparisonReport {
     std::vector<ComparisonEntry> entries;
     int wins = 0;
@@ -56,56 +59,56 @@ struct ComparisonReport {
     int missing_reference = 0;
 };
 
-/// Compares generated summaries against the imported reference tree.
+/// Compares generated summaries with the imported reference tables.
 ///
-/// Reference files are matched by (suite, algorithm, dimension) parsed
-/// from their paths (e.g. cec2017/agsk/agsk_cec2017_D10.csv; CEC2011
-/// files carry no dimension). The generated optimizer name is used as-is:
-/// summary file names carry run_experiment's canonical hyphenated slug
-/// (`atmals-gsk`, `fdb-agsk`), which is the reference folder name.
-/// Emits exactly one entry per generated row, in input order.
-/// Win/tie/loss uses the mean statistic, lower is better, tie at
-/// relative 1e-8.
+/// Reference files are matched by (suite, algorithm, dimension) taken from
+/// their paths (e.g. cec2017/agsk/agsk_cec2017_D10.csv). A file without a
+/// _D<dim> tag (e.g. CEC2011) serves any dimension with no exact match.
+/// The generated optimizer name is used as-is: summary file names carry
+/// run_experiment's hyphenated slug (`atmals-gsk`, `fdb-agsk`), which is
+/// also the reference folder name. Returns exactly one entry per generated
+/// row, in input order. The verdict compares means (lower is better); a
+/// relative difference <= 1e-8 is a tie.
 ComparisonReport compare_with_references(const std::vector<SummaryRow>& generated,
                                          const std::filesystem::path& reference_root);
 
-/// Writes the report as CSV (one entry per row) to @p out_path.
+/// Writes the report to @p out_path as CSV, one row per entry.
 void write_comparison_csv(const ComparisonReport& report, const std::filesystem::path& out_path);
 
-// --- Post-run verification (Mandate 1.1c / 3.1c) -----------------------------
+// --- Post-run verification ---------------------------------------------------
 
-/// Thresholds for the post-run verdict. Defaults match the prompt appendices.
+/// Thresholds for the post-run verdict.
 struct VerificationThresholds {
-    /// A best-error below this (known-optimum suites) means the optimizer
-    /// "beat" the known optimum - impossible if implemented correctly.
+    /// A best error below this (suites with a known optimum) means the
+    /// optimizer "beat" the known optimum, which a correct one cannot do.
     Real negative_error_floor = -1.0e-6;
-    /// Generated mean above gross_factor x reference mean (when the reference
-    /// is non-trivial) flags a gross implementation error. Applied as a hard
-    /// failure only for full-protocol runs; informational under reduced budget.
+    /// A generated mean above gross_factor x |reference mean| (non-trivial
+    /// references only) flags a gross implementation error. Hard failure
+    /// only for full-protocol runs; informational under a reduced budget.
     Real gross_factor = 1.0e6;
-    /// Reference means with magnitude at/below this are treated as "trivial"
-    /// (e.g. a converged 0), so the gross check is skipped for them.
+    /// Reference means with magnitude <= this count as trivial (e.g. a
+    /// converged 0); the gross check skips them.
     Real reference_trivial_floor = 1.0e-8;
 };
 
-/// Per-function outcome of the verification checks.
+/// Per-function result of the verification checks.
 struct FunctionCheck {
     int function_id = 0;
     int dimension = 0;
-    bool finite_ok = true;          ///< all generated statistics finite
+    bool finite_ok = true;          ///< all generated statistics are finite
     bool sign_ok = true;            ///< no impossible negative error
     bool magnitude_ok = true;       ///< not grossly worse than reference (full protocol only)
-    std::vector<std::string> failures; ///< human-readable reasons when a check fails
+    std::vector<std::string> failures; ///< reasons for failed checks, plus informational notes
 };
 
-/// Whole-run verdict produced after an optimizer/suite run.
+/// Verdict for a whole optimizer/suite run.
 struct RunVerification {
     std::string optimizer;          ///< comma-joined if the input mixes several
     std::string suite;              ///< comma-joined if the input mixes several
-    std::string verdict;            ///< "CONSISTENT" or "DEVIATES"
-    /// Win/tie/loss is always informational (never a hard failure). This flag
-    /// only downgrades the gross-deviation check to informational, since a
-    /// reduced-budget run is legitimately worse than the published table.
+    std::string verdict;            ///< "CONSISTENT", or "DEVIATES" when hard_failures > 0
+    /// Win/tie/loss never causes a hard failure. This flag only makes the
+    /// gross-deviation check informational, because a reduced-budget run
+    /// is expected to be worse than the published table.
     bool reduced_budget = false;
     int functions_checked = 0;
     int hard_failures = 0;
@@ -117,28 +120,30 @@ struct RunVerification {
     std::vector<FunctionCheck> checks;
 };
 
-/// True for suites that have known optima (errors meaningful, sign check applies).
+/// True for suites with known optima (cec2013, cec2017, cec2020), where
+/// errors are meaningful and the sign check applies. False for cec2011 and
+/// cec2013lsgo, whose reference tables report raw objective values.
 bool suite_has_known_optimum(const std::string& suite);
 
-/// The shared reduced-protocol rule used by gsk_run and gsk_validate
-/// --verify: a run is reduced when its budget was overridden
-/// (@p max_nfes_override != 0) or it has fewer than 25 runs.
+/// Reduced-protocol rule shared by gsk_run and gsk_validate --verify: a run
+/// is reduced when its budget was overridden (@p max_nfes_override != 0) or
+/// it has fewer than 25 runs.
 bool is_reduced_protocol(long long runs, long long max_nfes_override);
 
-/// Reads `runs` and `max_nfes_override` from a run's environment.json (as
-/// written by run_experiment.m) and applies is_reduced_protocol. Returns
+/// Reads `runs` and `max_nfes_override` from a run's environment.json
+/// (written by run_experiment.m) and applies is_reduced_protocol. Returns
 /// std::nullopt when the file cannot be read or lacks either field.
 std::optional<bool> reduced_protocol_from_environment(const std::filesystem::path& environment_json);
 
-/// Classifies one run's summaries against the imported references.
+/// Checks one run's summaries against the imported references.
 ///
-/// @param generated     summary rows, normally a single optimizer/suite run;
-///                      each row is judged under its own suite's rules and
-///                      against its own reference row.
+/// @param generated      summary rows, normally from one optimizer/suite run;
+///                       each row is judged by its own suite's rules and
+///                       against its own reference row.
 /// @param reference_root imported reference table tree.
-/// @param reduced_budget whether the run used a reduced (non-reference) budget;
-///                       when true the gross-deviation check and win/tie/loss
-///                       are informational rather than hard failures.
+/// @param reduced_budget true when the run used a reduced (non-reference)
+///                       budget; the gross-deviation check is then
+///                       informational. Win/tie/loss is always informational.
 RunVerification classify_run(const std::vector<SummaryRow>& generated,
                              const std::filesystem::path& reference_root,
                              bool reduced_budget,

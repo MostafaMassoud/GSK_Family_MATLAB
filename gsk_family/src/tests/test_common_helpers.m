@@ -1,11 +1,15 @@
 function test_common_helpers()
-%TEST_COMMON_HELPERS Unit checks for the shared GSK helpers (src/common).
+%TEST_COMMON_HELPERS Unit tests for the shared GSK helpers (src/common).
 %
-% Covers: midpoint bound repair (below/above/inside), fair-start X0 and
-% post-X0 RNG restore (including its guard), junior donor index
-% constraints, senior donor block partition, reduction survivor selection
-% (ties, and equivalence with the reference sequential removal loop).
-% Raises error() on any failure, returns nothing on success.
+% Covers:
+%   - gsk_bound_repair: midpoint repair below and above the bounds; values
+%     inside or on a bound stay unchanged,
+%   - gsk_init_population: shape and bounds,
+%   - fair-start X0 and the post-X0 RNG restore, including its guards,
+%   - junior donor index rules and senior donor rank blocks,
+%   - gsk_reduction_survivors: ties, and equality with the reference
+%     one-at-a-time worst-removal loop.
+% Raises error() on any failure; returns nothing on success.
 
 % ---------- gsk_bound_repair: midpoint rule ----------
 lb = [-5 -5];
@@ -16,7 +20,7 @@ out = gsk_bound_repair(vi, pop, lb, ub);
 expected = [(0 + -5) / 2, 3; (4 + 5) / 2, (-4 + -5) / 2];
 local_assert(isequal(out, expected), 'bound repair: midpoint values wrong');
 
-% exactly-on-bound values must be untouched (reference uses strict </>)
+% Values exactly on a bound stay unchanged (the reference uses strict < and >)
 vi2 = [-5 5; 5 -5];
 out2 = gsk_bound_repair(vi2, pop, lb, ub);
 local_assert(isequal(out2, vi2), 'bound repair: on-bound values must not change');
@@ -35,13 +39,14 @@ x0 = reshape(1:20, 5, 4);
 opts = struct('initial_population', x0);
 p1 = gsk_initial_population_from_options(opts, 3, lb4, ub4);
 local_assert(isequal(p1, x0(1:3, :)), 'init population option: did not use X0 prefix');
-% post-X0 RNG restore: the stream is advanced (and switched to another
-% generator) between capture and restore, so a no-op restore cannot pass
+% Post-X0 RNG restore: between capture and restore the test switches to
+% another seed and generator and draws from it, so a restore that does
+% nothing cannot pass.
 rng(101, 'twister');
 before = rng;
-opts.rng_state_after_initialization = before;   % opts already carries initial_population = x0
-expected_next = rand(1, 5);                     % reference draw from the captured point
-rng(303, 'combRecursive');                      % move away: other seed AND other generator
+opts.rng_state_after_initialization = before;   % opts already holds initial_population = x0
+expected_next = rand(1, 5);                     % expected draw right after the captured state
+rng(303, 'combRecursive');                      % move away: other seed and other generator
 rand(7, 3);
 gsk_restore_rng_after_initialization(opts);
 after = rng;
@@ -50,8 +55,8 @@ local_assert(strcmp(after.Type, before.Type) && isequal(before.State, after.Stat
 local_assert(isequal(rand(1, 5), expected_next), ...
     'post-initialization RNG restore: next draw mismatch');
 
-% guard: without initial_population (absent or empty) the helper must leave
-% the stream untouched instead of jumping to the captured state
+% Guard: with no initial_population (absent or empty) the helper must leave
+% the stream as it is and not jump to the captured state.
 guard_opts = {struct('rng_state_after_initialization', before), ...
     struct('initial_population', [], 'rng_state_after_initialization', before)};
 for gi = 1:numel(guard_opts)
@@ -63,7 +68,7 @@ for gi = 1:numel(guard_opts)
     local_assert(isequal(mid.State, after2.State) && ~isequal(before.State, after2.State), ...
         sprintf('RNG restore must be skipped when initial_population is absent/empty (case %d)', gi));
 end
-% guard: X0 without a captured state keeps the current stream as well
+% Guard: X0 without a captured state also keeps the current stream.
 rng(202, 'twister');
 mid = rng;
 gsk_restore_rng_after_initialization(struct('initial_population', x0));
@@ -79,7 +84,7 @@ fitness_sorted = (1:np)';                 % ascending: indBest = (1:np)'
 [~, indBest] = sort(fitness_sorted, 'ascend');
 local_assert(isequal(indBest, (1:np)'), 'junior: sorted fixture broken');
 [R1, R2, R3] = Gained_Shared_Junior_R1R2R3(indBest);
-% best gets the next-two-best, worst gets two-better, middles adjacent
+% Best -> ranks 2, 3; worst -> ranks np-2, np-1; others -> ranks i-1, i+1
 local_assert(R1(1) == 2 && R2(1) == 3, 'junior: best must use 2nd/3rd best');
 local_assert(R1(np) == np - 2 && R2(np) == np - 1, 'junior: worst must use two better');
 for i = 2:np - 1
@@ -133,9 +138,9 @@ fit = [3 1 2 5 4]';
 surv = gsk_reduction_survivors(fit, 2);
 local_assert(isequal(surv, [1; 2; 3]), 'reduction: must keep the 3 best in row order');
 
-% tie on the worst value: reference sequential removal drops the
-% highest-index tied row first (num_remove = 1 discriminates: a
-% lowest-index-first rule would keep [1;3;4])
+% Tie on the worst value: the reference removal loop drops the highest-index
+% tied row first. num_remove = 1 tells the rules apart: dropping the
+% lowest-index tied row first would keep [1;3;4].
 fit_tie = [1 5 5 2]';
 surv_tie1 = gsk_reduction_survivors(fit_tie, 1);
 local_assert(isequal(surv_tie1, [1; 2; 4]), ...
@@ -144,8 +149,8 @@ local_assert(isequal(surv_tie1, [1; 2; 4]), ...
 surv_tie = gsk_reduction_survivors(fit_tie, 2);
 local_assert(isequal(surv_tie, [1; 4]), 'reduction: tie handling mismatch (num_remove=2)');
 
-% equivalence with the reference one-at-a-time worst-removal loop on
-% heavily tied fixtures (integer fitness with many duplicates)
+% Must match the reference one-at-a-time worst-removal loop on heavily tied
+% fixtures (integer fitness 1-4 with many duplicates).
 rng(41, 'twister');
 for trial = 1:50
     n_fix = randi([2 15]);
@@ -165,7 +170,7 @@ end
 
 
 function local_check_r3(R1, R2, R3, np)
-%LOCAL_CHECK_R3 R3 must be in range and collision-free vs self, R1, R2.
+%LOCAL_CHECK_R3 Check R3 is an integer in 1..np that differs from self, R1, R2.
 local_assert(all(R3 >= 1 & R3 <= np), 'junior: R3 out of range');
 local_assert(all(R3 == floor(R3)), 'junior: R3 not integer');
 self_idx = 1:np;
@@ -175,8 +180,10 @@ end
 
 
 function survivors = local_reference_reduction(fitness, num_remove)
-%LOCAL_REFERENCE_REDUCTION Verbatim reference resize loop (Adaptive_GSK_ALI.m),
-% tracking original row ids so the survivors can be compared by index.
+%LOCAL_REFERENCE_REDUCTION Reference resize loop from Adaptive_GSK_ALI.m.
+% Same one-at-a-time worst-removal loop as the reference, applied to
+% fitness only; rows tracks the original row ids so the survivors can be
+% compared by index.
 rows = (1:numel(fitness))';
 for r = 1:num_remove
     [~, indBest] = sort(fitness, 'ascend');
@@ -189,7 +196,7 @@ end
 
 
 function local_check_senior(S1, S2, S3, indBest, top_end, mid_end, np, label)
-%LOCAL_CHECK_SENIOR Senior donors must come from their rank blocks.
+%LOCAL_CHECK_SENIOR Check each senior donor comes from its rank block.
 best_block = indBest(1:top_end);
 mid_block = indBest(top_end + 1:mid_end);
 worst_block = indBest(mid_end + 1:np);
@@ -205,7 +212,7 @@ end
 
 
 function local_assert(cond, message)
-%LOCAL_ASSERT error() on failed condition.
+%LOCAL_ASSERT Raise an error when cond is false.
 if ~cond
     error('test_common_helpers:failed', '%s', message);
 end

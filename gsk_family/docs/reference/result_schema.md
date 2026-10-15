@@ -55,7 +55,7 @@ but they are reference evidence, not live run output. The `summary` folder name
 is matched case-sensitively by the C++ tools; the runner always writes it
 lowercase, so this only matters if you hand-create directories.
 
-## summary/<optimizer>_<suite>_D<dim>.csv
+## `summary/<optimizer>_<suite>_D<dim>.csv`
 
 ```text
 Function,Best,Median,Mean,Worst,SD
@@ -112,6 +112,12 @@ so those run ids are re-run. The upgrade can only assign the last session's
 budget and generator; a legacy tree that already mixed budgets or generators
 should be rerun with `overwrite=true`.
 
+The imported DT-GSK reference evidence
+(`benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv`) also
+has the 11-column layout. It is read-only and never upgraded;
+`scripts/compare_reference_runs.m` reads columns by name, so it accepts both
+layouts.
+
 ## summary/seed_schedule.csv
 
 ```text
@@ -158,7 +164,7 @@ strict fair-start comparison. DT-GSK is unified-only, so its schedule holds
 these unified seeds under every `seed_policy` (and its `per_run.csv`
 `rand_generator` is always `threefry`).
 
-## curves/Figure_F<func>_D<dim>_Run#<run>.csv
+## `curves/Figure_F<func>_D<dim>_Run#<run>.csv`
 
 ```text
 Eval,BestError,Log10Error
@@ -176,7 +182,7 @@ PNG is moved to `curves/graphs/_archive/<timestamp>/` the same way (and redrawn
 from the median trace when `write_graphs=true`). If the median is an earlier run
 whose trace was never stored, the cell has no curve and the resume notes say so.
 
-## curves/graphs/Figure_F<func>_D<dim>.png
+## `curves/graphs/Figure_F<func>_D<dim>.png`
 
 One rendered PNG convergence graph per summarized `(function, dimension)` cell.
 PNG rendering is optional because MATLAB figure/export work can dominate the
@@ -187,7 +193,7 @@ Set `write_graphs=true` in `run_experiment` or a `run_all_cec*.m` launcher when
 publication figures are needed immediately. If graph generation fails, the
 numeric CSV artifacts remain authoritative and the run is still valid.
 
-## gen_logs/CheckpointErrors_<optimizer>_F<func>_D<dim>.csv
+## `gen_logs/CheckpointErrors_<optimizer>_F<func>_D<dim>.csv`
 
 ```text
 Run,Seed,E<c1>,E<c2>,...

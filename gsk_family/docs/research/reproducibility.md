@@ -71,8 +71,8 @@ There are four policies. The default depends on the entry point:
 
 **DT-GSK is unified-only.** Its reference campaigns were produced on the unified
 schedule, so `run_experiment` (`is_unified_only`) gives DT-GSK the unified seed
-and `threefry` under every policy above, mirroring the Python reference's
-`UNIFIED_ONLY_OPTIMIZERS`. DT-GSK derives named Threefry substreams from the
+and `threefry` under every policy above, mirroring the reference
+implementation's `UNIFIED_ONLY_OPTIMIZERS`. DT-GSK derives named Threefry substreams from the
 run seed and samples its own `NP = 5*D` initial population; the runner draws
 no `X0` for it, a supplied `options.initial_population` is ignored, and the run
 metadata records
@@ -89,7 +89,7 @@ src/runners/run_experiment.m      % chooses the policy, draws X0, records seeds
 ```
 
 The `unified` seed is optimizer-independent
-(`src/runners/get_cec_seed.m:80-90`):
+(`src/runners/get_cec_seed.m:35-39`):
 
 ```text
 seed = mod(base_seed + 1000003*dim + 1000033*func + 1000037*run, 2147483646) + 1
@@ -185,7 +185,7 @@ a small run works, then commit to the full campaign, then validate and archive.
    Where the reference ships per-run evidence (today the DT-GSK CEC2017
    `evidence/per_run.csv`), also compare run by run in MATLAB, from the project
    root with `scripts` on the path (Statistics and Machine Learning Toolbox; see
-   [Runbook 3.7](../getting-started/runbook.md#37-dt-gsk)):
+   [Command Reference 3.7](../getting-started/command_reference.md#37-dt-gsk)):
 
    ```matlab
    compare_reference_runs('results/_run_all/dt-gsk/cec2017', ...
@@ -237,15 +237,16 @@ Two toolbox-bound caveats:
 
 One cross-implementation caveat:
 
-- **DT-GSK** is a port of a Python reference, and its imported tables were
-  produced by that Python code. MATLAB's Threefry stream and the Python replica
-  produce the same 64-bit words but convert them to doubles slightly
-  differently (at most `2^-53` per uniform draw; integer, permutation and mask
-  draws coincide), so a live MATLAB run is not bit-identical to the Python run
-  with the same seed. A line-by-line port was verified against the unmodified
-  Python code on identical random numbers in all four dimension tiers, and the
-  compact shipped version reproduces that port bit for bit; agreement with the
-  imported campaigns is therefore judged statistically. The validation record
+- **DT-GSK** is a port of an external reference implementation, and its
+  imported tables were produced by that implementation. MATLAB's Threefry
+  generator produces the same 64-bit words as the reference implementation's
+  generator but converts them to doubles slightly differently (at most `2^-53`
+  per uniform draw; integer, permutation and mask draws coincide), so a live
+  MATLAB run is not bit-identical to the reference run with the same seed. A
+  line-by-line port was verified against the unmodified reference
+  implementation on identical random numbers in all four dimension tiers, and
+  the compact shipped version reproduces that port bit for bit; agreement with
+  the imported campaigns is therefore judged statistically. The validation record
   and the CEC2017 campaign results are recorded in
   [src/optimizers/dt-gsk/README.md](../../src/optimizers/dt-gsk/README.md).
 

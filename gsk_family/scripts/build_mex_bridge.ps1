@@ -1,14 +1,17 @@
-# Builds the optional gskcec_eval MEX bridge (MATLAB -> ported C++ CEC
-# benchmarks) with a C++20 MinGW-w64 toolchain, without requiring the
-# MATLAB 'mex' command or its (older) bundled compiler.
+# Builds the optional gskcec_eval MEX bridge, which lets MATLAB call the C++
+# CEC benchmarks. Uses a C++20 MinGW-w64 g++, so neither MATLAB's 'mex'
+# command nor its older bundled compiler is needed.
 #
 # Usage:
 #   powershell -File scripts\build_mex_bridge.ps1 `
 #       [-MatlabRoot "C:\Program Files\MATLAB\R2025b"] [-Gxx <path-to-g++.exe>]
 #
-# Defaults: MatlabRoot is derived from 'matlab' on PATH or the GSKCEC_MATLAB
-# environment variable; Gxx from g++ on PATH. Output: build\mex\gskcec_eval.mexw64
-# (fully statically linked: it needs no MinGW runtime DLL at load time).
+# Defaults: MatlabRoot from the GSKCEC_MATLAB environment variable (path to
+# matlab.exe), else from matlab.exe on PATH. Gxx is g++ on PATH, else the first
+# g++.exe under %LOCALAPPDATA%\Microsoft\WinGet\Packages.
+# Output: build\mex\gskcec_eval.mexw64, fully statically linked (it needs no
+# MinGW runtime DLL at load time). A failed build leaves an existing bridge
+# unchanged.
 
 param(
     [string]$MatlabRoot = "",
@@ -55,16 +58,16 @@ if (-not (Test-Path (Join-Path $externLib "libmx.lib"))) { throw "libmx.lib not 
 $outDir = Join-Path $projectRoot "build\mex"
 New-Item -ItemType Directory -Force $outDir | Out-Null
 $outFile = Join-Path $outDir "gskcec_eval.mexw64"
-# Link into a temporary file and swap it in only on success: GNU ld deletes
-# its output on a failed link, which would otherwise destroy a previously
-# working bridge and block every MATLAB CEC experiment until a rebuild works.
+# Link to a temporary file and swap it in only on success: GNU ld deletes its
+# output when a link fails, which would destroy a working bridge and block
+# every MATLAB CEC experiment until a rebuild succeeds.
 $tmpFile = "$outFile.new"
 
-# The bridge compiles the benchmark library sources directly so it never
-# depends on a prior CMake build. F1..F15 are listed explicitly (as in
-# CMakeLists.txt) rather than globbed: a directory listing that silently
-# returns nothing (e.g. a tree copied with the Hidden attribute) would
-# otherwise surface only as a confusing undefined-reference link error.
+# Compiles the benchmark sources directly, so no CMake build is needed first.
+# F1..F15 are named explicitly (as in CMakeLists.txt), not globbed: a
+# directory listing that silently returns nothing (e.g. a tree copied with the
+# Hidden attribute) would show up only as a confusing undefined-reference
+# link error.
 $sources = @(
     "benchmarks\cec_suite_cpp\cec_tools\src\mex_bridge\gskcec_eval_mex.cpp",
     "benchmarks\cec_suite_cpp\cec_tools\src\benchmark\data_loading.cpp",
@@ -83,22 +86,21 @@ $sources = @(
 $srcPaths = $sources | ForEach-Object { Join-Path $projectRoot $_ }
 foreach ($s in $srcPaths) { if (-not (Test-Path $s)) { throw "Missing source: $s" } }
 
-# Optimization: -O3 -march=native -funroll-loops -ffp-contract=off (the CMake
-# GSKCEC_NATIVE flag set) -- ~1.15-1.36x faster than -O2, ctest-validated
-# (12/12 suites at the time; the later 13th only checks CLI exit codes) and
-# within the project's 1e-12 faithful-port tolerance.
-# Reproducibility note: ANY rebuild with a current toolchain differs from the
-# original committed-results binary by <=~4.3e-15 -- a libm/compiler-version
-# artifact, NOT these flags (a plain -O2 rebuild shows the identical delta).
-# -ffp-contract=off keeps -march's FMA hardware from adding any further drift.
-# For a strict -O2 build instead, replace the "-O3", "-march=native",
-# "-funroll-loops", "-ffp-contract=off" entries below with a single "-O2"
-# (the rest of the argument list is unchanged).
-# Linking: "-static" links the whole MinGW runtime (libgcc, libstdc++ AND
-# libwinpthread, which a posix-thread-model toolchain otherwise imports as
-# libwinpthread-1.dll) into the bridge, like the CMake targets, so it needs no
-# MinGW runtime DLL on PATH at load time; MATLAB does not ship those DLLs.
-# The MATLAB import libraries are passed by full path because under -static
+# Optimization: the CMake GSKCEC_NATIVE flags (-O3 -march=native
+# -funroll-loops -ffp-contract=off). About 1.15-1.36x faster than -O2,
+# validated with ctest (12 of 12 suites; the 13th test only checks CLI exit
+# codes) and within the project's 1e-12 port tolerance.
+# Reproducibility: ANY rebuild with a current toolchain differs from the
+# binary behind the committed results by up to ~4.3e-15. This comes from the
+# libm/compiler version, NOT these flags (a plain -O2 rebuild shows the same
+# difference). -ffp-contract=off stops -march's FMA from adding more drift.
+# For a strict -O2 build, replace "-O3", "-march=native", "-funroll-loops"
+# and "-ffp-contract=off" below with a single "-O2"; keep the other arguments.
+# Linking: "-static" links the whole MinGW runtime (libgcc, libstdc++ and
+# libwinpthread, which a posix-thread toolchain would otherwise import as
+# libwinpthread-1.dll) into the bridge, like the CMake targets. MATLAB does
+# not ship those DLLs, so the bridge must not need them on PATH.
+# The MATLAB import libraries are passed by full path because with -static,
 # ld no longer resolves -lmx/-lmex/-lmat to the libmx.lib-style .lib files.
 $gxxArgs = @(
     "-std=c++20", "-O3", "-march=native", "-funroll-loops", "-ffp-contract=off", "-shared",

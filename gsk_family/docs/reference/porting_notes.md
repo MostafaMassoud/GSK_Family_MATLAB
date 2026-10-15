@@ -20,16 +20,17 @@ behavioral constants for the CEC2011 P3/P4 port, because the reference
 project code is an original implementation of the published Dormand-Prince /
 Shampine mathematics, validated against MATLAB ground truth (see CEC2011
 below); no MathWorks source was copied. The DT-GSK optimizer was ported from
-its Python reference implementation (MIT license), which was read as the
-porting source and run only outside this project for the parity checks; no
-Python code is part of the project (see DT-GSK below).
+its reference implementation (MIT license), which was read as the porting
+source and run only outside this project for the parity checks; none of its
+code is part of the project (see DT-GSK below).
 
 Language contract:
 
 - CEC benchmark implementations inside this project are C++20 (no MATLAB,
-  R, MEX or Python at benchmark runtime).
+  R, MEX or other languages at benchmark runtime).
 - GSK-family optimizer implementations are MATLAB under `src/`.
-- Python code and Python-generated binding code are not allowed anywhere.
+- Implementation code is MATLAB and C++ only (no other languages or generated
+  bindings).
 - Tooling languages: C++, MATLAB, PowerShell, CMake.
 
 ## Toolchain Record
@@ -112,7 +113,7 @@ on a removed local reference folder are intentionally absent.
 
 - Port: `benchmarks/cec_suite_cpp/cec2013/src/cec2013_problem.cpp` (named
   deliberately - a repo check forbids any path ending `cec2013.cpp`, the
-  Cython artifact name). All R dependencies removed; ids 1..28; dims
+  name a generated binding file would have). All R dependencies removed; ids 1..28; dims
   {2,5,10,20,...,100}; bounds [-100,100]; `optimum()` = reference biases.
 - Validation layers (no R installed): (1) analytic f1 sphere check;
   (2) optimum-at-shift `|f(o)-bias| <= 1e-6` for ALL 28 functions x 12
@@ -132,8 +133,9 @@ on a removed local reference folder are intentionally absent.
 ## CEC2013LSGO (adapted in place)
 
 - The copied suite sources under `benchmarks/cec_suite_cpp/cec2013lsgo/src/`
-  were adapted: `eval_func.cpp/.h` DELETED (verified Python/Cython binding
-  glue of the PyPI package); the `demo.cpp`/`demo2.cpp` reference programs
+  (the C++ test suite of the cec2013lsgo package) were adapted:
+  `eval_func.cpp/.h` DELETED (verified binding glue of that package); the
+  `demo.cpp`/`demo2.cpp` reference programs
   (never compiled; `demo2` referenced the deleted `eval_func.h`) were removed,
   leaving only the compiled `Benchmarks.cpp`, `F1`-`F15` and the problem
   adapter; classes moved into `namespace gskcec::cec2013lsgo`;
@@ -159,8 +161,7 @@ on a removed local reference folder are intentionally absent.
   Lennard-Jones mid probe yields `Inf - Inf = NaN -> 0` (not bare +Inf).
 - Committed text assets: `c_bifunc_data.txt`, `messengerfull_problem.txt`,
   `cassini2_problem.txt` under `benchmarks/cec_suite_cpp/cec2011/input_data/`;
-  `matlab.mat` was an orphan in the historical material (loaded by nothing)
-  and is not present. The committed test data also includes bounds for all 22
+  `matlab.mat` is kept for provenance only: nothing in the project loads it. The committed test data also includes bounds for all 22
   problems and 3 probes per problem in
   `benchmarks/cec_suite_cpp/cec_tools/tests/data/cec2011_bounds.txt`,
   `cec2011_points_F<id>.txt`, `cec2011_expected.csv`.
@@ -202,8 +203,7 @@ on a removed local reference folder are intentionally absent.
   0.0*POZ making P18 == P20; B-loss matrices stored as raw source values
   scaled by 1e-5 at build to match MATLAB's op sequence. Data tables were
   extracted mechanically from the .m sources during development (the
-  transient extraction scripting was removed from the tree; no Python
-  remains in the project) and verified float-by-float by re-parsing the
+  transient extraction scripting was removed from the tree) and verified float-by-float by re-parsing the
   .cpp against the .m matrices, then bit-identical probe agreement.
 - WP-C (P21-22, Messenger/Cassini MGA-DSM) results: 42/42 checks; f21
   worst probe relative error 1.9e-13, f22 1.7e-13 vs MATLAB ground truth
@@ -316,7 +316,7 @@ substreams from `options.seed`).
   fields.
 - DT-GSK (`dt_gsk_optimize.m` + `dt_gsk_config.m`, `dt_gsk_graph.m`), the
   seventh optimizer and the only one ported from a non-MATLAB source.
-  - Source: the DT-GSK reference implementation (Python, MIT license) v2.46,
+  - Source: the DT-GSK reference implementation v2.46 (MIT license),
     <https://github.com/MostafaMassoud/DT-GSK> (tag `v2.46`, commit
     `64c70bb54125c9361b821939802ee4810fb7af50`); paper Masoud, Roshdy,
     Mohamed, "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and
@@ -342,26 +342,26 @@ substreams from `options.seed`).
     'max_evaluations'`, evaluation batches clipped to the remaining budget,
     so `nfes == max_nfes`); `error = best - optimum`, zeroed below
     `target_error`, `NaN` without an optimum. Draw order and the order of the
-    floating-point operations (sequential and NumPy pairwise sums, stable
-    sorts, NumPy `argmin` NaN rule) follow the reference; dimension indices
+    floating-point operations (sequential and pairwise sums, stable sorts,
+    the `argmin` NaN rule) follow the reference; dimension indices
     are 1-based. Seeding is unified-only with named Threefry substreams and
     the optimizer samples its own population, ignoring a runner `X0` (the
     documented fair-start exception; `docs/reference/seed_policy.md`).
   - Sanctioned differences (the only intended ones): (1) the error is the
     IEEE subtraction `best_fitness - optimum`, the project-wide rule, where
-    the reference computes `float(Decimal(str(best)) - Decimal(str(optimum)))`
-    (its `compute_error`); the two can differ by about one ulp of
-    `best_fitness` (identical when the optimum is 0, as on CEC2013LSGO);
+    the reference subtracts the two values in decimal arithmetic on their
+    shortest printed forms and rounds back to double (its `compute_error`);
+    the two can differ by about one ulp of `best_fitness` (identical when the optimum is 0, as on CEC2013LSGO);
     (2) MATLAB's `RandStream('threefry')` and the reference's Threefry replica
     give the same 64-bit words but round them to doubles slightly
     differently (MATLAB keeps up to one more bit below 0.5), so live runs
     differ by at most `2^-53` per uniform draw; integer, permutation and mask
     draws coincide.
   - Validation: a line-by-line port was verified against the unmodified
-    Python code on identical random numbers in all four tiers and reproduces
-    the reference's golden values to `1e-13`; the committed three-file version
-    reproduces that port bit for bit on 25 full-budget runs plus 42
-    rare-branch problems. The full record, and the results of the CEC2017
+    reference implementation on identical random numbers in all four tiers
+    and reproduces the reference's golden values to `1e-13`; the committed
+    three-file version reproduces that port bit for bit on 25 full-budget runs
+    plus 42 rare-branch problems. The full record, and the results of the CEC2017
     campaign against the imported reference
     (`benchmarks/cec_reference_results/cec2017/dt-gsk/`), are in
     `src/optimizers/dt-gsk/README.md`.
@@ -443,9 +443,9 @@ All phases complete and verified on 2026-06-13:
   six optimizers, the runner, and the bridge cross-check. DT-GSK
   (`test_dt_gsk_smoke.m`) and the runner resume and fair-start tests were
   added later; the suite now has 13 tests.
-- Language-contract checks (no `.py`/`.pyx`, no `cec2013.cpp`, no
-  `.m`/`.R`/`.c` under `cec_suite_cpp`, no top-level include/tests/matlab)
-  return nothing.
+- Language-contract checks (no source files in other languages, no
+  `cec2013.cpp`, no `.m`/`.R`/`.c` under `cec_suite_cpp`, no top-level
+  include/tests/matlab) return nothing.
 
 No open blockers.
 
@@ -464,7 +464,7 @@ The three cross-cutting mandates from the prompts' Section 1.1/3.1 were applied:
 - **(b) Simple, clear folders.** The tree was reviewed and kept intentionally
   shallow: imported reference tables live in `benchmarks/cec_reference_results`,
   while CEC ports, input data, and nested C++ tools live in
-  `benchmarks/cec_suite_cpp`. The stale ISM-GSK/Python content in the imported
+  `benchmarks/cec_suite_cpp`. The stale ISM-GSK content in the imported
   `cec_reference_results/README.md` was corrected; `configs/` and `scripts/` gained
   READMEs; `docs/reference/project_structure.md` gained a CEC folder-distinction table and a
   "where does a new file go?" decision guide; a `.gitignore` keeps the tracked

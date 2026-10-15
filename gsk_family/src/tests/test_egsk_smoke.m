@@ -1,10 +1,10 @@
 function test_egsk_smoke()
 %TEST_EGSK_SMOKE Smoke test for egsk_optimize on a pure-MATLAB sphere problem.
 %
-% Reference-mode eGSK requires Optimization Toolbox/fmincon for the IP stage.
-% Without fmincon, the default call must fail explicitly; the non-reference
-% no-IP path is available only with options.use_fmincon=false. Raises error()
-% on any failure.
+% Reference-mode eGSK needs fmincon (Optimization Toolbox) for its IP stage.
+% Without fmincon the default call must fail with egsk:fminconUnavailable;
+% the non-reference path without IP runs only with options.use_fmincon=false.
+% Raises an error when a check fails.
 
 here = fileparts(mfilename('fullpath'));
 src_root = fileparts(here);
@@ -46,16 +46,16 @@ local_assert(isempty(r1.notes), ...
     sprintf('egsk: notes must be empty in reference mode (got "%s")', r1.notes));
 local_assert(r1.params.use_fmincon, 'egsk: params.use_fmincon must be true');
 
-% reference budget-crossing semantics: per-individual counter caps at
-% max_nfes(+1); IP refinement adds fmincon funcCount on top (IP.m).
+% Budget, as in the reference: the per-individual counter caps at
+% max_nfes (+1), and the IP refinement adds fmincon's funcCount on top (IP.m).
 local_assert(r1.nfes >= problem.max_nfes, 'egsk: budget must be fully consumed');
 local_assert(r1.nfes <= problem.max_nfes + 500, ...
     sprintf('egsk: nfes overshoot too large (%d)', r1.nfes));
 local_assert(strcmp(r1.termination, 'max_evaluations'), ...
     'egsk: termination must be max_evaluations (reference never stops early)');
 
-% optimization progress: well below the median fitness of the optimizer's
-% own initial population (its first RNG draw, replicated here)
+% Progress: best_fitness must be far below the median fitness of the
+% optimizer's own initial population (its first RNG draw, rebuilt here).
 np = r1.params.np;
 rng(opts.seed, 'twister');
 pop0 = repmat(problem.lb, np, 1) + rand(np, d) .* repmat(problem.ub - problem.lb, np, 1);
@@ -63,7 +63,7 @@ med0 = median(problem.evaluate(pop0));
 local_assert(isfinite(r1.best_fitness) && r1.best_fitness < 1e-2 * med0, ...
     sprintf('egsk: insufficient progress: best=%g vs initial median=%g', r1.best_fitness, med0));
 
-% determinism: same seed reproduces everything (fmincon SQP is deterministic)
+% Determinism: the same seed reproduces the run (fmincon SQP is deterministic).
 r1b = egsk_optimize(problem, opts);
 local_assert(r1b.best_fitness == r1.best_fitness, 'egsk same seed: best_fitness differs');
 local_assert(isequal(r1b.best_x, r1.best_x), 'egsk same seed: best_x differs');
@@ -72,12 +72,12 @@ local_assert(isequal(r1b.convergence.nfes, r1.convergence.nfes) && ...
     isequal(r1b.convergence.best_fitness, r1.convergence.best_fitness), ...
     'egsk same seed: convergence differs');
 
-% different seed changes the trajectory
+% A different seed changes the trajectory.
 r1c = egsk_optimize(problem, struct('seed', 778));
 local_assert(~isequal(r1c.convergence.best_fitness, r1.convergence.best_fitness), ...
     'egsk different seed: trajectory should differ');
 
-% explicit opt-out path works, but it is marked as non-reference diagnostics
+% The use_fmincon=false opt-out runs, but is marked as non-reference.
 r2 = egsk_optimize(problem, struct('seed', 777, 'use_fmincon', false));
 local_check_contract(r2, problem, 'egsk', 777);
 local_assert(contains(r2.notes, 'non-reference diagnostic'), ...
@@ -91,7 +91,7 @@ end
 
 
 function problem = local_sphere_problem(d, max_nfes, optimum, target_error)
-%LOCAL_SPHERE_PROBLEM Interface-conformant sphere problem struct.
+%LOCAL_SPHERE_PROBLEM Sphere problem struct that follows the interface.
 problem = struct();
 problem.suite = 'sphere';
 problem.func_id = 1;
@@ -106,7 +106,7 @@ end
 
 
 function local_check_contract(r, problem, name, expected_seed)
-%LOCAL_CHECK_CONTRACT Assert the docs/reference/matlab_interface.md result contract.
+%LOCAL_CHECK_CONTRACT Check a result against docs/reference/matlab_interface.md.
 expected = {'optimizer'; 'suite'; 'func_id'; 'dim'; 'seed'; 'best_x'; ...
     'best_fitness'; 'error'; 'nfes'; 'termination'; 'convergence'; ...
     'runtime_seconds'; 'params'; 'notes'};
@@ -126,7 +126,7 @@ local_assert(isstruct(r.params), sprintf('%s: params must be struct', name));
 local_assert(isscalar(r.runtime_seconds) && r.runtime_seconds >= 0, ...
     sprintf('%s: bad runtime_seconds', name));
 
-% convergence sanity (per-generation records)
+% Convergence trace (one record per generation).
 c = r.convergence;
 local_assert(isstruct(c) && isfield(c, 'nfes') && isfield(c, 'best_fitness'), ...
     sprintf('%s: convergence struct malformed', name));
@@ -141,12 +141,13 @@ local_assert(c.nfes(end) == r.nfes, ...
 local_assert(c.best_fitness(end) == r.best_fitness, ...
     sprintf('%s: last convergence best must equal best_fitness', name));
 
-% best_x must reproduce best_fitness on this deterministic problem
+% best_x must reproduce best_fitness (the problem is deterministic).
 bf = problem.evaluate(r.best_x);
 local_assert(abs(bf - r.best_fitness) <= 1e-12 * max(1, abs(bf)), ...
     sprintf('%s: best_x does not reproduce best_fitness', name));
 
-% error semantics
+% Error = best_fitness - optimum (NaN if the optimum is unknown), zeroed
+% when strictly below the target.
 if isnan(problem.optimum)
     local_assert(isnan(r.error), sprintf('%s: error must be NaN for unknown optimum', name));
 else

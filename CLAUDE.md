@@ -82,9 +82,9 @@ session scratchpad, never in the repository.
 - `main` = `ca66fa0`, pushed to origin. The local branch
   `docs/share-ready-runbook` also points at `ca66fa0` and can be deleted with
   the owner's OK.
-- Not committed yet: this `CLAUDE.md`, `.claude/skills/gsk-family/`, the
-  updates to `gsk_family/SKILL.md`, and a comment fix in
-  `run_all_cec2013lsgo.m`. Offer to commit them on a branch.
+- This `CLAUDE.md`, `.claude/skills/gsk-family/` and the matching
+  `gsk_family/SKILL.md` updates were added in commit `8a1f3eb` (branch
+  `docs/claude-handoff`; it reaches `main` when the owner fast-forwards it).
 - All 13 MATLAB and 13 C++ tests pass. The docs build gives 47 pages with no
   broken links. After the comment rewrite and helper renames, DT-GSK was
   re-checked with the owner's local oracle: bit-identical on 23 of 25 fixed

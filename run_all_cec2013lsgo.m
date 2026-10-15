@@ -14,9 +14,8 @@
 %   - Keep dimensions = 0 (0 = each problem's own dimension).
 %   - Reference tables: the published DECC-G and MOS results (not GSK
 %     members) and the imported DT-GSK tables (one per native dimension,
-%     D1000/D905). The in-run comparison table expects a single
-%     native-dimension table, so it is skipped here; results are still
-%     written.
+%     D1000/D905). For DT-GSK the in-run comparison table merges those
+%     per-dimension tables.
 %   - DT-GSK uses the unified seed and threefry under every seed_policy, and
 %     samples its own NP = 5*D initial population (it ignores the runner X0).
 

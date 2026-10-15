@@ -2,14 +2,19 @@
 
 Use this skill when working inside the `gsk_family` project root - the folder that
 contains `src/`, `benchmarks/`, `docs/`, `scripts/`, `CMakeLists.txt`, and this
-`SKILL.md`.
+`SKILL.md`. For the current state, open decisions and next steps read
+`../CLAUDE.md`; for step-by-step task playbooks (campaigns, validation,
+comment-only edits, numerics-preserving changes) use the `gsk-family` skill in
+`../.claude/skills/gsk-family/SKILL.md`.
 
 This is a hybrid **MATLAB + C++20** research toolkit for the Gaining-Sharing
 Knowledge (GSK) optimizer family on five CEC benchmark suites. The seven optimizers
 are MATLAB (`src/`); the CEC benchmark problems and all tooling are standalone
 C++20 (`benchmarks/`); the two halves meet at exactly one seam, the
-`gskcec_eval` MEX bridge. Every experiment run is automatically checked against
-the same optimizer's published reference table. The guiding rule everywhere is
+`gskcec_eval` MEX bridge. `gsk_run` checks every run against the same
+optimizer's published reference table (`verification.json`); launcher and
+direct `run_experiment` runs print a comparison table, and
+`gsk_validate --verify` gives the verdict. The guiding rule everywhere is
 *fidelity over cleverness*: reference numerics, including documented bugs, are
 preserved verbatim; the only sanctioned modernization is deterministic seeding.
 **MATLAB and C++ only** (no other languages or generated bindings; helper
@@ -157,7 +162,11 @@ Outputs land under `results/<optimizer>/<suite>/` (launchers write under
 `gen_logs/`. Reruns are append/resume: completed run ids are skipped only when
 their stored seed, budget (`max_nfes`) and effective generator still match the
 active run (other rows are re-run and appended; stale rows stay as history);
-refreshed fixed-name files are archived under `_archive/<timestamp>/`; imported
+refreshed fixed-name files are archived under `_archive/<timestamp>/`. Each
+dimension's summary tables are written as soon as that dimension finishes, so a
+crash later in the call keeps them; `environment.json` and `run_config.json`
+describe the dimensions and functions of the latest call, so after chunked runs
+finish with one pass over everything (all runs are reused). Imported
 reference tables under `benchmarks/cec_reference_results` are never written to
 (`run_experiment` refuses any `output_dir` inside that tree with
 `run_experiment:outputUnsafe`).
@@ -179,7 +188,13 @@ here.
 - **Preserve reference behavior, including documented quirks/bugs** - read
   `docs/reference/porting_notes.md` before "fixing" anything that looks wrong.
 - **MATLAB and C++ only** (no other languages or generated bindings; helper
-  scripts, including the docs build, are PowerShell or MATLAB).
+  scripts, including the docs build, are PowerShell or MATLAB). Comments and
+  docs never name the reference implementation's language or its libraries;
+  say "the reference implementation".
+- The launchers' CONFIG values (`../run_all_cec*.m`) belong to the owner: edit
+  their comments only.
+- When a campaign disagrees with a reference, report the difference with a
+  likely explanation; never tune an optimizer to force agreement.
 - **No external GSK/CEC imports** - treat the committed MATLAB/C++ ports,
   imported reference-result tables, and provenance notes as the self-contained
   source of truth.
@@ -226,7 +241,9 @@ under `src` or GSK code under `benchmarks`.
 - Run-level comparison of two `per_run.csv` sets (e.g. a MATLAB DT-GSK campaign
   vs `benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv`):
   `scripts/compare_reference_runs.m` (needs the Statistics and Machine Learning
-  Toolbox).
+  Toolbox). A function MATCHes when the two-sided rank-sum p >= 0.05 and Best,
+  Median and Mean agree within one decade; both sides are first rounded to 11
+  significant digits (`sig_digits`, the reference file's precision).
 - Seeding: `src/runners/get_cec_seed.m` (unified),
   `src/runners/derive_run_seed.m` (native/derived),
   `src/common/gsk_set_rng.m` (generator); fair-start helpers
@@ -272,8 +289,10 @@ docs/
 ```
 
 Newcomers start at `RUNBOOK.md` in the repository root (`../RUNBOOK.md`, one
-level above gsk_family; prerequisites, first run
-step by step, parallel runs in MATLAB);
+level above gsk_family; prerequisites, first run from the MATLAB desktop and
+from a terminal, parallel runs in MATLAB). `build_docs.ps1` also writes
+`../RUNBOOK.html`, a single-page copy (never hand-edit it); the root
+`../README.md` is the short landing page;
 `docs/getting-started/command_reference.md` holds the detailed run commands for
 every algorithm.
 
@@ -289,12 +308,13 @@ separate root `LICENSE` file.
 
 ## Before editing
 
-1. Read `docs/reference/project_structure.md` and
-   `docs/reference/architecture.md`.
-2. Read `docs/research/researcher_handbook.md` for the high-level system model,
-   worked examples, reproducibility rules, and safe extension boundaries.
-3. Check `docs/reference/reference_inventory.md` and
-   `docs/reference/porting_notes.md` for provenance and preserved quirks.
+1. Read `../CLAUDE.md` (current state, open decisions, next steps). With this
+   file and the `gsk-family` skill it is enough for campaign, validation and
+   docs work; read the documents below only when the task touches their area.
+2. Before touching optimizer or port numerics: `docs/reference/porting_notes.md`
+   (preserved quirks) and `docs/reference/reference_inventory.md` (provenance).
+3. For a system-level change: `docs/reference/architecture.md`,
+   `docs/reference/project_structure.md`, `docs/research/researcher_handbook.md`.
 4. Check `LICENSES.md` before changing provenance, redistribution, or
    attribution text.
 5. Confirm the target file belongs to the correct language area (MATLAB under
@@ -303,6 +323,9 @@ separate root `LICENSE` file.
    document the gap in `docs/reference/porting_notes.md` instead of inventing it.
 
 ## Build and verification
+
+`rg` is ripgrep; if it is not installed, run the same patterns with Claude
+Code's Grep tool.
 
 ```powershell
 # Language-contract checks (must return nothing):
@@ -320,9 +343,13 @@ powershell -File scripts\build_mex_bridge.ps1
 # MATLAB smoke tests (13 tests, incl. test_dt_gsk_smoke; no MEX bridge needed):
 matlab -batch "cd('src/tests'); run_matlab_smoke_tests"
 
-# Documentation site:
+# Documentation site (also regenerates ../RUNBOOK.html):
 powershell -File scripts\build_docs.ps1 -Clean
 ```
+
+For parallel experiments open the pool before calling the runner (8 process
+workers on a 32 GB machine; about 2 to 3 GB per worker); otherwise
+`run_experiment` starts one worker per physical core.
 
 Rebuild the C++ tree after changes to C++ sources/headers, CMake files,
 CLI/config parser code, comparison logic, benchmark ports, or C++ tests. Rebuild

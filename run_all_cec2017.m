@@ -21,6 +21,8 @@
 %   - DT-GSK uses the unified seed and threefry under every seed_policy (its
 %     reference protocol), and samples its own NP = 5*D initial population
 %     (it ignores the runner X0).
+%   - np_init (CONFIG) sets the initial population size of every optimizer,
+%     DT-GSK included; [] keeps each default.
 %   - Edit the CONFIG block to change optimizers, functions, dimensions and
 %     runs.
 
@@ -33,6 +35,8 @@ functions   = [1:30];             % F2 is excluded automatically, so 29 function
 dimensions  = [10];   % CEC2017 standard dims are [10 30 50 100]; this runs D10 only
 runs        = 51;               % independent runs per function
 max_nfes    = 0;                % 0 = suite default (10000 * D)
+np_init     = [];             % initial population size for every optimizer: [] = each one's
+                               % default (100; DT-GSK 5*D); e.g. 100 for the same NP everywhere
 % The base seed is set in gsk_family/src/runners/run_experiment.m.
 % seed_policy:
 %   'unified'   -> for each (D, function, run), every optimizer gets the same
@@ -63,8 +67,8 @@ clear run_experiment gskcec_make_problem;       % pick up runner edits in long M
 gskcec_require_mex(root, 'run_all_cec2017');
 
 fprintf('\n==================== run_all (CEC2017) ====================\n');
-fprintf('suite=%s  functions=%s  dims=%s  runs=%d  seed_policy=%s  rng=%s  parallel=%d  graphs=%d  overwrite=%d\n', ...
-        suite, mat2str(functions), mat2str(dimensions), runs, seed_policy, rand_generator, use_parallel, write_graphs, overwrite);
+fprintf('suite=%s  functions=%s  dims=%s  runs=%d  seed_policy=%s  rng=%s  parallel=%d  graphs=%d  overwrite=%d  np_init=%s\n', ...
+        suite, mat2str(functions), mat2str(dimensions), runs, seed_policy, rand_generator, use_parallel, write_graphs, overwrite, mat2str(np_init));
 
 %% ------------------------------ RUN -------------------------------------
 passed_optimizers = {};
@@ -75,7 +79,7 @@ for i = 1:numel(optimizers)
     try
         run_experiment('optimizer', opt, 'suite', suite, ...
             'functions', functions, 'dimensions', dimensions, 'runs', runs, ...
-            'max_nfes', max_nfes, ...
+            'max_nfes', max_nfes, 'np_init', np_init, ...
             'project_root', root, 'output_dir', out, 'overwrite', overwrite, ...
             'verbose', false, 'seed_policy', seed_policy, ...
             'rand_generator', rand_generator, ...

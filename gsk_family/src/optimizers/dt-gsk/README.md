@@ -42,7 +42,8 @@ NP = 5*D unless `options.np_init` sets it (see below).
   `seed_policy`.
 - Optional `options.np_init` (integer >= 5) replaces the initial population
   size 5*D; NLPSR then shrinks from that size. `run_experiment(...,
-  'np_init', 100)` passes it to every run. This is a variant, not the `pub`
+  'np_init', 100)`, or `np_init = 100` in a `run_all_cec*.m` CONFIG block,
+  gives every optimizer, DT-GSK included, that NP. This is a variant, not the `pub`
   profile: the validation below covers only NP = 5*D, the runner skips its
   reference comparison table, and an output tree written with another NP is
   refused. With `np_init = 100` and the unified seed, DT-GSK's first

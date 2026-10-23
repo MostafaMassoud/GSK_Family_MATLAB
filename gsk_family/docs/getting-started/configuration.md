@@ -115,7 +115,10 @@ and `np_init = 100` for `agsk`/`apgsk`/`fdb-agsk`. `dt-gsk` reads only
 `seed`, `rand_generator` (which must be `threefry`) and the optional `np_init`
 (replaces its `NP = 5*D` start; a variant, not the published setting). Every
 other setting comes from the `pub` profile in
-`src/optimizers/dt-gsk/dt_gsk_config.m`. A few
+`src/optimizers/dt-gsk/dt_gsk_config.m`. To give every optimizer the same
+initial population (for example 100, so DT-GSK matches the others), set
+`np_init` in a launcher's CONFIG block or pass `'np_init', 100` to
+`run_experiment`; see the command reference, "Population size". A few
 reference-reproduction quirks (AGSK `40*D` for CEC2020 `D>5`; APGSK `200*D`
 opt-in; ATMALS-GSK `protocol` selection; eGSK `use_fmincon`; FDB-AGSK
 `fdb_case` 1..5) are described per optimizer in

@@ -6,13 +6,19 @@ Keep a Changelog; this project uses semantic versioning.
 ## [Unreleased]
 
 ### Added
-- DT-GSK initial population size option: `options.np_init` (integer >= 5) in
-  `dt_gsk_optimize.m` and `run_experiment(..., 'np_init', n)` (DT-GSK only)
-  replace NP = 5*D, for example NP = 100 to match the other optimizers. The
-  default stays 5*D and default runs are bit-identical. An override is a
-  variant: it is recorded in `result.params`/`notes` and the run metadata, the
-  reference comparison table is skipped, and a tree written with another NP is
-  not resumed.
+- Initial population size option for the whole family:
+  `run_experiment(..., 'np_init', n)` (integer >= 12) and a new `np_init`
+  CONFIG entry in every `run_all_cec*.m` launcher (default `[]`, no change)
+  give every optimizer the same initial NP (`options.np` for gsk/egsk/
+  atmals-gsk, `options.np_init` for the others; under unified seeding the
+  shared X0 has n rows). DT-GSK gains `options.np_init` (integer >= 5) in
+  `dt_gsk_optimize.m`, replacing NP = 5*D; with n = 100 all seven optimizers
+  start from the same population. Defaults are unchanged and default runs are
+  bit-identical; n = 100 gives the six NP-100 optimizers identical results. A
+  value other than an optimizer's default is a variant: it is recorded in
+  `run_config.json` and `initial_population_policy` (and DT-GSK's
+  `result.params`/`notes`), the reference comparison table is skipped, and a
+  tree written with another NP is not resumed.
 - DT-GSK (`dt-gsk`), the seventh optimizer: a MATLAB port of the DT-GSK
   reference implementation v2.46 (MIT license) in three files under
   `src/optimizers/dt-gsk/` (`dt_gsk_optimize.m`, `dt_gsk_config.m` with the

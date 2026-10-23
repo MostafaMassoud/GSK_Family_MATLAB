@@ -313,6 +313,7 @@ CLI flags, or the MATLAB runner.
 | Base seed | `seed: 20240620` | `--seed S` | `'base_seed',S` | integer in `[0, 2^53]` (negative or non-integer values are rejected); per-run seeds also depend on seed policy |
 | Seed policy | `seed_policy: reference` | `--seed-policy reference` | `'seed_policy','reference'` | `gsk_run` default is `reference`; direct `run_experiment` default is `unified`; DT-GSK always gets the unified schedule ([3.7](#37-dt-gsk)) |
 | RNG family | `rand_generator: threefry` | `--rand-generator threefry` | `'rand_generator','threefry'` | overridden under `reference`: AGSK/APGSK/FDB-AGSK/eGSK/ATMALS-GSK use legacy `seed`; GSK uses `twister`. Under `unified`, MATLAB uses `threefry` when supported and falls back to `twister`. DT-GSK always uses `threefry` |
+| Initial population | — | — | `'np_init',N` (`[]`=default) | MATLAB runner and `run_all_cec*.m` CONFIG only; integer `>= 12`, same NP for every optimizer ([population size](#population-size)) |
 
 `gsk_run` and shipped `configs/*.yml` use `seed_policy='reference'` for
 published-table reproduction. The root `run_all_cec*.m` launchers use
@@ -352,14 +353,26 @@ reproduction.
 Pass `'use_parallel',false|true` as needed; `gsk_run` and `scripts/run_all.ps1`
 use serial execution by default.
 
-**Population size** is **not** a config key, a `gsk_run` flag, or a
-`run_experiment` argument. `run_experiment` calls the optimizer with the run seed
-and RNG-generator family, so each optimizer uses its **interface-default**
-population. To change the population (or any other variant
-parameter — `kf`, `kr`, `k`, `p`, `np_init`, `fdb_case`, `protocol`,
-`use_fmincon`, pools, ...) **or to set a custom single seed**, use the
-**lower-level MATLAB path** shown in each algorithm's "(A) … lower-level
-snippet". Interface-default populations:
+<a id="population-size"></a>
+**Population size.** By default each optimizer uses its **interface-default**
+population (table below). `run_experiment(..., 'np_init', N)`, and the
+`np_init` entry in the CONFIG block of each `run_all_cec*.m` launcher, set the
+initial population of **every** optimizer to `N` (an integer `>= 12`, the
+population floor of AGSK/APGSK/FDB-AGSK): the runner passes it as `options.np`
+(`gsk`, `egsk`, `atmals-gsk`) or `options.np_init` (the others), and under
+`unified` seeding the shared `X0` then has `N` rows. DT-GSK draws its own
+population, and with the same `N` that draw equals the shared `X0`. So
+`np_init = 100` runs all seven optimizers from the same start; for the six
+optimizers whose default is 100 it changes nothing (results are identical).
+A value other than an optimizer's default is a variant: the runner skips the
+reference comparison table for it, records `np_init` in `run_config.json` and
+`initial_population_policy`, and refuses to resume an output tree written with
+another NP (use a new `output_dir` or `'overwrite',true`). Population size is
+not a config key or `gsk_run` flag. To change any other variant parameter —
+`kf`, `kr`, `k`, `p`, `min_pop_size`, `fdb_case`, `protocol`, `use_fmincon`,
+pools, ... — **or to set a custom single seed**, use the **lower-level MATLAB
+path** shown in each algorithm's "(A) … lower-level snippet".
+Interface-default populations:
 
 | Optimizer | Default population | Set a custom one via |
 |---|---|---|
@@ -369,7 +382,9 @@ snippet". Interface-default populations:
 | `atmals-gsk` | `np = 100` | `options.np` |
 | `egsk` | `np = 100` | `options.np` |
 | `fdb-agsk` | `np_init = 100` (`40*D` reference sphere harness opt-in) | `options.np_init` |
-| `dt-gsk` | `NP = 5*D` initial, reduced nonlinearly to 12 (25 for `D >= 50`) | `options.np_init`, or `run_experiment(..., 'np_init', n)` (a variant, not the `pub` profile) |
+| `dt-gsk` | `NP = 5*D` initial, reduced nonlinearly to 12 (25 for `D >= 50`) | `options.np_init` (a variant, not the `pub` profile) |
+
+All seven: `run_experiment(..., 'np_init', N)` or `np_init = N` in a launcher's CONFIG.
 
 **"Iterations".** GSK-family optimizers are population algorithms; the run
 length is an **evaluation budget** `max_nfes`, not an iteration count. The

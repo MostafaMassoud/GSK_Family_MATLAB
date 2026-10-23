@@ -348,7 +348,8 @@ flowchart TD
   `X0`; the runner draws none and records this as `initial_population_policy` in
   the run metadata. See [Seed Policy](../reference/seed_policy.md).
 - **Initial population size option.** `options.np_init` (integer >= 5), or
-  `run_experiment(..., 'np_init', 100)`, replaces `5*D`. It is a variant, not
+  `run_experiment(..., 'np_init', 100)` / `np_init = 100` in a launcher's
+  CONFIG (which sets the same NP for every optimizer), replaces `5*D`. It is a variant, not
   the `pub` profile: the published results and the validation use `5*D`, so the
   runner skips its reference comparison table for it and refuses to resume an
   output tree written with another NP. With `np_init = 100` and the unified

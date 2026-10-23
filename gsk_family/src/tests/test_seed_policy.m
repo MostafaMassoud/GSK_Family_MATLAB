@@ -4,7 +4,8 @@ function test_seed_policy()
 % Runs on the sphere suite (no MEX) and checks: the get_cec_seed formula;
 % that choose_cec_rng_generator restores the RNG state; that unified seeds
 % are the same for every optimizer; seed_policy / rand_generator validation;
-% reference-mode seed metadata; DT-GSK's fixed unified seeding;
+% reference-mode seed metadata; DT-GSK's fixed unified seeding; the np_init
+% option (metadata, resume guard, every optimizer with NP = 150);
 % verify_unified_seed_schedule; a policy round trip; and, with the Parallel
 % Computing Toolbox, that parfor gives the same results as a serial run.
 
@@ -133,7 +134,35 @@ assert_rejected(@() run_experiment(np_args{:}, 'output_dir', out_np), 'np_init',
 out_dt = fullfile(out_root, 'dt_reference', 'dt-gsk', 'sphere');    % 5*D tree from above
 assert_rejected(@() run_experiment(np_args{:}, 'output_dir', out_dt, 'np_init', 100), 'np_init', '');
 assert_rejected(@() run_experiment('optimizer', 'gsk', small{:}, 'output_dir', bad_out, ...
-                                   'np_init', 100), 'np_init', bad_out);
+                                   'np_init', 11), 'np_init', bad_out);
+
+% ---- np_init for the whole family -----------------------------------------
+% np_init = 100 is every non-DT-GSK default: same results, and a default tree
+% resumes with it.
+gsk_args = {'optimizer', 'gsk', 'suite', 'sphere', 'functions', func_id, 'dimensions', D, ...
+            'runs', 1, 'max_nfes', 1200, 'project_root', project_root, ...
+            'seed_policy', 'unified', 'rand_generator', 'threefry', 'verbose', false};
+out_100 = fullfile(out_root, 'np100', 'gsk', 'sphere');
+run_experiment(gsk_args{:}, 'output_dir', out_100, 'np_init', 100);
+assert(isequal(read_best(out_100), read_best(out_gsk)), 'gsk np_init = 100 must equal the default run');
+run_experiment(gsk_args{:}, 'output_dir', out_gsk, 'np_init', 100);
+assert(numel(read_best(out_gsk)) == 1, 'np_init = 100 must reuse the default gsk run');
+assert_rejected(@() run_experiment(gsk_args{:}, 'output_dir', out_gsk, 'np_init', 150), 'np_init', '');
+% np_init = 150 reaches every optimizer, which runs from a 150-row shared X0.
+for opt = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk', 'dt-gsk'}
+    if strcmp(opt{1}, 'egsk') && ~exist('fmincon', 'file')
+        continue;   % eGSK needs the Optimization Toolbox
+    end
+    out_150 = fullfile(out_root, 'np150', opt{1}, 'sphere');
+    run_experiment('optimizer', opt{1}, 'suite', 'sphere', 'functions', func_id, ...
+                   'dimensions', D, 'runs', 1, 'max_nfes', 3000, 'project_root', project_root, ...
+                   'output_dir', out_150, 'np_init', 150, 'verbose', false);
+    env = jsondecode(fileread(fullfile(out_150, 'summary', 'environment.json')));
+    cfg = jsondecode(fileread(fullfile(out_150, 'summary', 'run_config.json')));
+    assert(isempty(env.skipped_cells) && numel(read_best(out_150)) == 1, '%s np_init = 150 run failed', opt{1});
+    assert(cfg.np_init == 150 && contains(env.initial_population_policy, 'NP = 150'), ...
+           '%s np_init = 150 metadata', opt{1});
+end
 
 % ---- verify_unified_seed_schedule: compare common keys, warn on missing ones ----
 syn = fullfile(out_root, 'synthetic');
@@ -232,6 +261,17 @@ seeds = zeros(numel(rows) - 1, 1);
 for i = 2:numel(rows)
     fields = strsplit(char(rows(i)), ',');
     seeds(i - 1) = str2double(fields{4});
+end
+end
+
+function best = read_best(out_dir)
+% best_fitness column of every per_run.csv row, in file order.
+rows = readlines(fullfile(out_dir, 'summary', 'per_run.csv'));
+rows = rows(strlength(strtrim(rows)) > 0);
+best = zeros(numel(rows) - 1, 1);
+for i = 2:numel(rows)
+    fields = strsplit(char(rows(i)), ',');
+    best(i - 1) = str2double(fields{7});
 end
 end
 

@@ -9,10 +9,13 @@ function run_experiment(varargin)
 %                  'seed_policy','unified', 'rand_generator','threefry', ...
 %                  'use_parallel',false, 'write_graphs',false)
 %
-% 'np_init',100 (DT-GSK only) replaces DT-GSK's initial population size
-% NP = 5*D. That is a variant, not the published setting: the reference
-% comparison table is skipped, and an output_dir written with another NP is
-% refused (use a new output_dir or 'overwrite',true).
+% 'np_init',n (integer >= 12) sets the initial population size of every
+% optimizer (options.np for gsk/egsk/atmals-gsk, options.np_init for the
+% others); under unified seeding the runner's shared X0 then has n rows. Empty
+% (default) keeps each optimizer's own default: 100, or 5*D for DT-GSK. A
+% value other than that default is a variant: the reference comparison table
+% is skipped. An output_dir written with another NP is refused (use a new
+% output_dir or 'overwrite',true).
 %
 % 'verbose',false hides the per-run lines and prints one summary row per
 % (function, dimension); useful for long multi-run sweeps.
@@ -81,10 +84,10 @@ p.parse(varargin{:});
 a = p.Results;
 a.optimizer = canonical_optimizer_id(a.optimizer);
 if ~isempty(a.np_init)
-    assert(strcmp(a.optimizer, 'dt-gsk'), 'run_experiment:args', ...
-           'np_init is supported for dt-gsk only');
+    % 12 is the population floor of AGSK, APGSK and FDB-AGSK (min_pop_size),
+    % so one value is valid for the whole family.
     assert(isscalar(a.np_init) && isfinite(a.np_init) && a.np_init == fix(a.np_init) && ...
-           a.np_init >= 5, 'run_experiment:args', 'np_init must be an integer >= 5');
+           a.np_init >= 12, 'run_experiment:args', 'np_init must be an integer >= 12');
     a.np_init = double(a.np_init);
 end
 
@@ -381,7 +384,7 @@ for dim = a.dimensions(:)'
                 scheduled_seed = run_seeds(rr);
                 run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, np_init);
                 if use_unified_x0
-                    [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen);
+                    [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen, np_init);
                     run_opts.initial_population = x0;
                     run_opts.rng_state_after_initialization = rng_after_x0;
                 end
@@ -428,7 +431,7 @@ for dim = a.dimensions(:)'
                 scheduled_seed = run_seeds(rr);
                 run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, np_init);
                 if use_unified_x0
-                    [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen);
+                    [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen, np_init);
                     run_opts.initial_population = x0;
                     run_opts.rng_state_after_initialization = rng_after_x0;
                 end
@@ -677,12 +680,14 @@ fprintf(['run_experiment: per_run.csv upgraded with max_nfes,rand_generator colu
 end
 
 function assert_same_np_init(summary_dir, a)
-%ASSERT_SAME_NP_INIT Refuse to resume a DT-GSK tree written with another NP.
+%ASSERT_SAME_NP_INIT Refuse to resume a tree written with another NP.
 % per_run.csv rows do not record NP, so resume would reuse runs made with a
 % different initial population size. The tree's run_config.json (latest
 % session) gives the NP it was written with; a missing np_init field or file
-% means the default 5*D. A tree without per_run.csv has nothing to reuse.
-if ~strcmp(a.optimizer, 'dt-gsk') || ~isfile(fullfile(summary_dir, 'per_run.csv'))
+% means the optimizer's default. np_init = 100 equals the default of every
+% optimizer except DT-GSK, so it matches a default tree. A tree without
+% per_run.csv has nothing to reuse.
+if ~isfile(fullfile(summary_dir, 'per_run.csv'))
     return;
 end
 path = fullfile(summary_dir, 'run_config.json');
@@ -696,16 +701,29 @@ if isfile(path)
     catch
     end
 end
-if ~isequal(previous, a.np_init)
+if ~strcmp(np_init_text(a.optimizer, previous), np_init_text(a.optimizer, a.np_init))
     error('run_experiment:args', ...
           ['%s was written with np_init = %s; this call uses np_init = %s. ' ...
-           'Use a new output_dir or ''overwrite'',true.'], ...
-          summary_dir, np_init_text(previous), np_init_text(a.np_init));
+           'Use a new output_dir or ''overwrite'',true.'], summary_dir, ...
+          np_init_text(a.optimizer, previous), np_init_text(a.optimizer, a.np_init));
 end
 end
 
-function s = np_init_text(np_init)
-if isempty(np_init); s = '5*D (default)'; else; s = sprintf('%d', np_init); end
+function s = np_init_text(optimizer, np_init)
+%NP_INIT_TEXT Initial population size label; equal labels mean equal runs.
+if isempty(np_init) || (np_init == 100 && ~strcmp(optimizer, 'dt-gsk'))
+    if strcmp(optimizer, 'dt-gsk'); s = '5*D (default)'; else; s = '100 (default)'; end
+else
+    s = sprintf('%d', np_init);
+end
+end
+
+function tf = np_init_is_default(a, dim)
+%NP_INIT_IS_DEFAULT True when the run uses the optimizer's published NP:
+% 100, or 5*D for DT-GSK (dim = 0, native dimensions, counts as not default).
+tf = isempty(a.np_init) || ...
+     (~strcmp(a.optimizer, 'dt-gsk') && a.np_init == 100) || ...
+     (strcmp(a.optimizer, 'dt-gsk') && dim > 0 && a.np_init == 5 * dim);
 end
 
 function [override, generator] = previous_tree_config(summary_dir)
@@ -1323,11 +1341,15 @@ function opts = optimizer_run_options(optimizer, suite, seed, rand_gen, np_init)
 %OPTIMIZER_RUN_OPTIONS Build the per-run optimizer options (seed, generator).
 % Does not touch the seed schedule. ATMALS-GSK has two historical drivers;
 % pick the matching protocol for its two published suites (CEC2011, CEC2017).
-% eGSK runs with use_fmincon = true. A non-empty np_init (DT-GSK only, checked
-% at argument parsing) is passed on as options.np_init.
+% eGSK runs with use_fmincon = true. A non-empty np_init (checked at argument
+% parsing) is passed under each optimizer's own option name.
 opts = struct('seed', seed, 'rand_generator', rand_gen);
 if ~isempty(np_init)
-    opts.np_init = np_init;
+    if any(strcmp(optimizer, {'gsk', 'egsk', 'atmals-gsk'}))
+        opts.np = np_init;
+    else
+        opts.np_init = np_init;
+    end
 end
 if strcmp(optimizer, 'atmals-gsk')
     if strcmp(suite, 'cec2011')
@@ -1349,7 +1371,7 @@ function tf = unified_initialization_enabled(a)
 tf = strcmpi(char(a.seed_policy), 'unified') && ~is_unified_only(a.optimizer);
 end
 
-function [x0, rng_after_x0] = make_unified_initial_population(problem, seed, rng_generator)
+function [x0, rng_after_x0] = make_unified_initial_population(problem, seed, rng_generator, np_init)
 %MAKE_UNIFIED_INITIAL_POPULATION Draw the fair shared X0 for one CEC run.
 %
 % Seeds the global RNG with (seed, rng_generator), draws X0 (NP x D) within
@@ -1359,11 +1381,15 @@ function [x0, rng_after_x0] = make_unified_initial_population(problem, seed, rng
 % point.
 %
 % NP = 100 is the runner/interface default of every GSK-family optimizer that
-% takes a runner X0. DT-GSK is the exception: it samples its own NP = 5*D
-% initial population and ignores X0, so this helper is not called for it. An
-% optimizer with another default needs an explicit runner-level
-% population-size contract; the seed formula must stay independent of NP.
+% takes a runner X0; a non-empty np_init (the runner's 'np_init') replaces it,
+% and the optimizers are given the same NP. DT-GSK is the exception: it samples
+% its own initial population and ignores X0, so this helper is not called for
+% it (with the same NP, its own draw equals this X0). The seed formula must
+% stay independent of NP.
 np = 100;
+if ~isempty(np_init)
+    np = np_init;
+end
 rng(seed, rng_generator);
 x0 = gsk_init_population(np, problem.lb, problem.ub);
 rng_after_x0 = rng;
@@ -1947,7 +1973,7 @@ function print_comparison_table(a, dim, func_ids, run_means)
 % Compare this run's per-function Mean with the published reference for the
 % same optimizer, suite and dimension, and print a verdict per function
 % (^ improved, = same, v worse).
-if ~isempty(a.np_init)
+if ~np_init_is_default(a, dim)
     fprintf(['\n(np_init = %d is not the published %s setting -- ' ...
              'reference comparison skipped)\n'], a.np_init, a.optimizer);
     return;
@@ -2168,14 +2194,15 @@ cfg.verbose = logical(a.verbose);
 cfg.use_parallel = logical(a.use_parallel);
 cfg.write_graphs = logical(a.write_graphs);
 cfg.optimizer_options = optimizer_options_metadata(a.optimizer, a.suite);
+cfg.np_init = a.np_init;   % initial NP override (empty = optimizer default)
 if strcmp(a.optimizer, 'gsk')
     % reference GSK defaults -- the values this run actually used
-    cfg.pop_size = 100; cfg.KF = 0.5; cfg.KR = 0.9; cfg.K = 10; cfg.P = 0.1;
+    cfg.pop_size = ternary(isempty(a.np_init), 100, a.np_init);
+    cfg.KF = 0.5; cfg.KR = 0.9; cfg.K = 10; cfg.P = 0.1;
 elseif strcmp(a.optimizer, 'dt-gsk')
     % dimension-tiered 'pub' profile (dt_gsk_config); NP_init = 5*D unless
-    % np_init replaces it (empty = 5*D)
+    % np_init replaces it
     cfg.profile = 'pub';
-    cfg.np_init = a.np_init;
 end
 write_json(fullfile(summary_dir, 'run_config.json'), cfg, session_tag);
 
@@ -2257,6 +2284,9 @@ elseif unified_initialization_enabled(a)
          'post-initialization rng state restored inside optimizer'];
 else
     s = 'optimizer draws its own reference/native initial population';
+end
+if ~isempty(a.np_init) && ~is_unified_only(a.optimizer)
+    s = sprintf('%s; NP = %d (np_init)', s, a.np_init);
 end
 end
 

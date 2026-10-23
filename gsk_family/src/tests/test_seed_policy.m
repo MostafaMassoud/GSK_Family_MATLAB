@@ -116,7 +116,24 @@ for pol = {'reference', 'native'}
     assert(contains(env.initial_population_policy, 'self-initializes'), 'dt-gsk X0 metadata');
     assert(strcmp(cfg.profile, 'pub') && strcmp(cfg.seed_formula, 'get_cec_seed(base_seed, dim, func, run)'), ...
            'dt-gsk run_config profile/seed_formula');
+    assert(isempty(cfg.np_init), 'dt-gsk default run_config np_init must be empty (5*D)');
 end
+
+% ---- dt-gsk np_init: recorded, refused on a tree written with another NP ----
+out_np = fullfile(out_root, 'dt_np', 'dt-gsk', 'sphere');
+np_args = {'optimizer', 'dt-gsk', 'suite', 'sphere', 'functions', 3, 'dimensions', D, ...
+           'runs', 1, 'max_nfes', 300, 'project_root', project_root, 'verbose', false};
+run_experiment(np_args{:}, 'output_dir', out_np, 'np_init', 100);
+cfg = jsondecode(fileread(fullfile(out_np, 'summary', 'run_config.json')));
+env = jsondecode(fileread(fullfile(out_np, 'summary', 'environment.json')));
+assert(cfg.np_init == 100 && contains(env.initial_population_policy, 'NP = 100'), ...
+       'dt-gsk np_init metadata');
+run_experiment(np_args{:}, 'output_dir', out_np, 'np_init', 100);   % same NP resumes
+assert_rejected(@() run_experiment(np_args{:}, 'output_dir', out_np), 'np_init', '');
+out_dt = fullfile(out_root, 'dt_reference', 'dt-gsk', 'sphere');    % 5*D tree from above
+assert_rejected(@() run_experiment(np_args{:}, 'output_dir', out_dt, 'np_init', 100), 'np_init', '');
+assert_rejected(@() run_experiment('optimizer', 'gsk', small{:}, 'output_dir', bad_out, ...
+                                   'np_init', 100), 'np_init', bad_out);
 
 % ---- verify_unified_seed_schedule: compare common keys, warn on missing ones ----
 syn = fullfile(out_root, 'synthetic');

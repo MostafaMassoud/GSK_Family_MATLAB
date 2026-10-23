@@ -15,7 +15,9 @@ function test_dt_gsk_smoke()
 %      (seed 12345, 3000 evaluations, pub profile) are matched to 1e-9
 %      relative. MATLAB's Threefry doubles differ from the reference by
 %      <= 1 ulp per draw, so runs agree to ~1e-13, not bit for bit;
-%   6. every dimension tier (D < 20, 20 <= D < 50, D >= 50, D >= 100) runs.
+%   6. every dimension tier (D < 20, 20 <= D < 50, D >= 50, D >= 100) runs;
+%   7. options.np_init replaces NP = 5*D (the first population is the first
+%      np_init rows of the init stream), and a bad np_init is rejected.
 
 here = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(here));
@@ -86,6 +88,26 @@ for D = [5 20 50 100]
     rt = dt_gsk_optimize(pt, struct('seed', 3));
     assert(rt.nfes == 2000 && isfinite(rt.best_fitness), 'tier D=%d failed', D);
 end
+
+% ---- 7. np_init override ----------------------------------------------------------
+assert(r.params.np_init == 50 && isempty(strfind(r.notes, 'np_init')), 'default NP must be 5*D');
+pn = gskcec_make_problem('sphere', 1, 10, project_root, 100);   % budget = one generation
+rn = dt_gsk_optimize(pn, struct('seed', 12345, 'np_init', 100));
+assert(rn.params.np_init == 100 && contains(rn.notes, 'np_init = 100'), 'np_init metadata');
+x_init = -100 + rand(RandStream('threefry', 'Seed', 12345), 100, 10) * 200;
+assert(rn.best_fitness == min(sum(x_init .^ 2, 2)), ...
+       'np_init = 100 must evaluate exactly the first 100 rows of the init stream');
+for bad = {0, 4, 7.5, [100 100], NaN}
+    threw = false;
+    try
+        dt_gsk_optimize(pn, struct('seed', 1, 'np_init', bad{1}));
+    catch err
+        threw = strcmp(err.identifier, 'dt_gsk_optimize:options');
+    end
+    assert(threw, 'np_init = %s must be rejected', mat2str(bad{1}));
+end
+r5 = dt_gsk_optimize(p, struct('seed', 12345, 'np_init', 5));
+assert(r5.nfes == 3000, 'the smallest np_init must still run to budget');
 
 fprintf('test_dt_gsk_smoke: PASS\n');
 end

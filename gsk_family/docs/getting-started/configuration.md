@@ -111,10 +111,11 @@ gskcec_eval('free', problem.mex_handle);      % release the C++ benchmark handle
 ```
 
 The interface-default populations are `np = 100` for `gsk`/`atmals-gsk`/`egsk`
-and `np_init = 100` for `agsk`/`apgsk`/`fdb-agsk`. `dt-gsk` has no tunable
-options at all: it reads only `seed` and `rand_generator` (which must be
-`threefry`), and its `NP = 5*D` start and every other setting come from the
-`pub` profile in `src/optimizers/dt-gsk/dt_gsk_config.m`. A few
+and `np_init = 100` for `agsk`/`apgsk`/`fdb-agsk`. `dt-gsk` reads only
+`seed`, `rand_generator` (which must be `threefry`) and the optional `np_init`
+(replaces its `NP = 5*D` start; a variant, not the published setting). Every
+other setting comes from the `pub` profile in
+`src/optimizers/dt-gsk/dt_gsk_config.m`. A few
 reference-reproduction quirks (AGSK `40*D` for CEC2020 `D>5`; APGSK `200*D`
 opt-in; ATMALS-GSK `protocol` selection; eGSK `use_fmincon`; FDB-AGSK
 `fdb_case` 1..5) are described per optimizer in

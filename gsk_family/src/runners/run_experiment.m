@@ -9,6 +9,11 @@ function run_experiment(varargin)
 %                  'seed_policy','unified', 'rand_generator','threefry', ...
 %                  'use_parallel',false, 'write_graphs',false)
 %
+% 'np_init',100 (DT-GSK only) replaces DT-GSK's initial population size
+% NP = 5*D. That is a variant, not the published setting: the reference
+% comparison table is skipped, and an output_dir written with another NP is
+% refused (use a new output_dir or 'overwrite',true).
+%
 % 'verbose',false hides the per-run lines and prints one summary row per
 % (function, dimension); useful for long multi-run sweeps.
 %
@@ -71,9 +76,17 @@ p.addParameter('seed_policy', 'unified', @check_seed_policy);
 p.addParameter('rand_generator', 'threefry', @(x) any(strcmpi(char(x), {'threefry', 'twister', 'seed', 'state', 'auto', 'default'})));
 p.addParameter('use_parallel', false, @(x) islogical(x) || isnumeric(x));
 p.addParameter('write_graphs', false, @(x) islogical(x) || isnumeric(x));
+p.addParameter('np_init', [], @isnumeric);
 p.parse(varargin{:});
 a = p.Results;
 a.optimizer = canonical_optimizer_id(a.optimizer);
+if ~isempty(a.np_init)
+    assert(strcmp(a.optimizer, 'dt-gsk'), 'run_experiment:args', ...
+           'np_init is supported for dt-gsk only');
+    assert(isscalar(a.np_init) && isfinite(a.np_init) && a.np_init == fix(a.np_init) && ...
+           a.np_init >= 5, 'run_experiment:args', 'np_init must be an integer >= 5');
+    a.np_init = double(a.np_init);
+end
 
 assert(~isempty(a.optimizer), 'run_experiment:args', 'optimizer is required');
 assert(~isempty(a.suite), 'run_experiment:args', 'suite is required');
@@ -142,6 +155,7 @@ diary_backstop = onCleanup(@() diary('off')); %#ok<NASGU>
 
 checkpoint_fracs = [0.01 0.02 0.03 0.05 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0];
 known_optimum = ~any(strcmp(a.suite, {'cec2011', 'cec2013lsgo'}));
+assert_same_np_init(summary_dir, a);
 
 % Existing result records make reruns resumable: completed runs are skipped,
 % new cells are added, and summary tables are rebuilt from old + new data.
@@ -346,7 +360,7 @@ for dim = a.dimensions(:)'
         notes_c   = cell(nr_todo, 1);
         % Broadcast only plain data to the workers (not the options struct or
         % the client problem, whose MEX handle is invalid on a worker).
-        opt_name = a.optimizer; suite_name = a.suite; proot = a.project_root;
+        opt_name = a.optimizer; suite_name = a.suite; proot = a.project_root; np_init = a.np_init;
         mnf = a.max_nfes; nruns = a.runs; verbose = logical(a.verbose);
         optimum_local = problem.optimum;
         rand_gen = effective_rand_generator(a);   % reference/unified may differ from a.rand_generator
@@ -365,7 +379,7 @@ for dim = a.dimensions(:)'
                 handle_guard = onCleanup(@() free_problem(wp)); %#ok<NASGU>  free on exit/error
                 run_id = runs_to_do(rr);
                 scheduled_seed = run_seeds(rr);
-                run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen);
+                run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, np_init);
                 if use_unified_x0
                     [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen);
                     run_opts.initial_population = x0;
@@ -412,7 +426,7 @@ for dim = a.dimensions(:)'
                 wp = problem;   % serial mode can reuse the cell-level MEX handle safely
                 run_id = runs_to_do(rr);
                 scheduled_seed = run_seeds(rr);
-                run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen);
+                run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, np_init);
                 if use_unified_x0
                     [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen);
                     run_opts.initial_population = x0;
@@ -660,6 +674,38 @@ fprintf(fid, '%s', strjoin(lines, newline));
 fclose(fid);
 fprintf(['run_experiment: per_run.csv upgraded with max_nfes,rand_generator columns ' ...
          '(previous file archived under summary/_archive/%s/).\n'], session_tag);
+end
+
+function assert_same_np_init(summary_dir, a)
+%ASSERT_SAME_NP_INIT Refuse to resume a DT-GSK tree written with another NP.
+% per_run.csv rows do not record NP, so resume would reuse runs made with a
+% different initial population size. The tree's run_config.json (latest
+% session) gives the NP it was written with; a missing np_init field or file
+% means the default 5*D. A tree without per_run.csv has nothing to reuse.
+if ~strcmp(a.optimizer, 'dt-gsk') || ~isfile(fullfile(summary_dir, 'per_run.csv'))
+    return;
+end
+path = fullfile(summary_dir, 'run_config.json');
+previous = [];
+if isfile(path)
+    try
+        cfg = jsondecode(fileread(path));
+        if isfield(cfg, 'np_init') && isnumeric(cfg.np_init)
+            previous = double(cfg.np_init);
+        end
+    catch
+    end
+end
+if ~isequal(previous, a.np_init)
+    error('run_experiment:args', ...
+          ['%s was written with np_init = %s; this call uses np_init = %s. ' ...
+           'Use a new output_dir or ''overwrite'',true.'], ...
+          summary_dir, np_init_text(previous), np_init_text(a.np_init));
+end
+end
+
+function s = np_init_text(np_init)
+if isempty(np_init); s = '5*D (default)'; else; s = sprintf('%d', np_init); end
 end
 
 function [override, generator] = previous_tree_config(summary_dir)
@@ -1273,12 +1319,16 @@ else
 end
 end
 
-function opts = optimizer_run_options(optimizer, suite, seed, rand_gen)
+function opts = optimizer_run_options(optimizer, suite, seed, rand_gen, np_init)
 %OPTIMIZER_RUN_OPTIONS Build the per-run optimizer options (seed, generator).
 % Does not touch the seed schedule. ATMALS-GSK has two historical drivers;
 % pick the matching protocol for its two published suites (CEC2011, CEC2017).
-% eGSK runs with use_fmincon = true.
+% eGSK runs with use_fmincon = true. A non-empty np_init (DT-GSK only, checked
+% at argument parsing) is passed on as options.np_init.
 opts = struct('seed', seed, 'rand_generator', rand_gen);
+if ~isempty(np_init)
+    opts.np_init = np_init;
+end
 if strcmp(optimizer, 'atmals-gsk')
     if strcmp(suite, 'cec2011')
         opts.protocol = 'cec2011';
@@ -1897,6 +1947,11 @@ function print_comparison_table(a, dim, func_ids, run_means)
 % Compare this run's per-function Mean with the published reference for the
 % same optimizer, suite and dimension, and print a verdict per function
 % (^ improved, = same, v worse).
+if ~isempty(a.np_init)
+    fprintf(['\n(np_init = %d is not the published %s setting -- ' ...
+             'reference comparison skipped)\n'], a.np_init, a.optimizer);
+    return;
+end
 ref = load_reference_means(a.project_root, a.optimizer, a.suite, dim);
 if ref.Count == 0
     fprintf('\n(no reference table for %s %s D%d -- comparison skipped)\n', a.optimizer, a.suite, dim);
@@ -2117,8 +2172,10 @@ if strcmp(a.optimizer, 'gsk')
     % reference GSK defaults -- the values this run actually used
     cfg.pop_size = 100; cfg.KF = 0.5; cfg.KR = 0.9; cfg.K = 10; cfg.P = 0.1;
 elseif strcmp(a.optimizer, 'dt-gsk')
-    % dimension-tiered 'pub' profile (dt_gsk_config); NP_init = 5*D
+    % dimension-tiered 'pub' profile (dt_gsk_config); NP_init = 5*D unless
+    % np_init replaces it (empty = 5*D)
     cfg.profile = 'pub';
+    cfg.np_init = a.np_init;
 end
 write_json(fullfile(summary_dir, 'run_config.json'), cfg, session_tag);
 
@@ -2188,7 +2245,12 @@ end
 function s = initial_population_policy_string(a)
 %INITIAL_POPULATION_POLICY_STRING Metadata for reference vs unified starts.
 if is_unified_only(a.optimizer)
-    s = ['optimizer self-initializes NP = 5*D from its own init substream; ' ...
+    if isempty(a.np_init)
+        np_text = 'NP = 5*D';
+    else
+        np_text = sprintf('NP = %d (np_init override, not the pub profile)', a.np_init);
+    end
+    s = ['optimizer self-initializes ' np_text ' from its own init substream; ' ...
          'runner X0 not used (documented DT-GSK fair-start exception)'];
 elseif unified_initialization_enabled(a)
     s = ['runner-generated shared X0 from get_cec_seed(base_seed,dim,func,run); ' ...

@@ -29,7 +29,7 @@ contract in `docs/reference/matlab_interface.md`).
 | D >= 100 | + TERRA budget policy, SP-NLPSR floor, basin-novelty restarts, late controllers (A1, A2, FC4); no DE entry |
 
 A deep-stall full restart is active in every tier. The initial population is
-always NP = 5*D.
+NP = 5*D unless `options.np_init` sets it (see below).
 
 ## Behavior notes
 
@@ -40,6 +40,13 @@ always NP = 5*D.
   a runner-supplied X0. `run_experiment` schedules it with the unified seed
   `get_cec_seed(base_seed, dim, func, run)` and `threefry` under every
   `seed_policy`.
+- Optional `options.np_init` (integer >= 5) replaces the initial population
+  size 5*D; NLPSR then shrinks from that size. `run_experiment(...,
+  'np_init', 100)` passes it to every run. This is a variant, not the `pub`
+  profile: the validation below covers only NP = 5*D, the runner skips its
+  reference comparison table, and an output tree written with another NP is
+  refused. With `np_init = 100` and the unified seed, DT-GSK's first
+  population equals the shared X0 the runner draws for the other optimizers.
 - Always runs the full budget (`termination = 'max_evaluations'`); the
   convergence trace is the best-so-far value after each generation.
 - `error = best_fitness - optimum`, zeroed below `target_error`, NaN without a

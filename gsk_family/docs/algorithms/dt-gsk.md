@@ -269,7 +269,7 @@ Settings that change by tier (`dt_gsk_config.m:96-209`; shared values at
 
 TERRA (`D >= 100`) lets the local search run only once the pre-escape budget
 fraction reaches 0.70 (`:543`). `result.params` records `profile = 'pub'`,
-`np_init_mult`, `n_min`, the base `KF`/`KR`/`Kexp` (reported only), `restarts_done`
+`np_init_mult`, `np_init` (the initial NP actually used), `n_min`, the base `KF`/`KR`/`Kexp` (reported only), `restarts_done`
 (BSE partial restarts), and `max_nfes` (`:682-683`).
 
 ## Worked example
@@ -347,6 +347,12 @@ flowchart TD
   samples its own `5*D` population from the `init` stream and ignores a runner
   `X0`; the runner draws none and records this as `initial_population_policy` in
   the run metadata. See [Seed Policy](../reference/seed_policy.md).
+- **Initial population size option.** `options.np_init` (integer >= 5), or
+  `run_experiment(..., 'np_init', 100)`, replaces `5*D`. It is a variant, not
+  the `pub` profile: the published results and the validation use `5*D`, so the
+  runner skips its reference comparison table for it and refuses to resume an
+  output tree written with another NP. With `np_init = 100` and the unified
+  seed, DT-GSK's first population equals the runner's shared `X0`.
 
 ## Complexity
 

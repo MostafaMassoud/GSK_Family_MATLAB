@@ -369,7 +369,7 @@ snippet". Interface-default populations:
 | `atmals-gsk` | `np = 100` | `options.np` |
 | `egsk` | `np = 100` | `options.np` |
 | `fdb-agsk` | `np_init = 100` (`40*D` reference sphere harness opt-in) | `options.np_init` |
-| `dt-gsk` | `NP = 5*D` initial, reduced nonlinearly to 12 (25 for `D >= 50`) | not settable: fixed by the `pub` profile in `dt_gsk_config.m` |
+| `dt-gsk` | `NP = 5*D` initial, reduced nonlinearly to 12 (25 for `D >= 50`) | `options.np_init`, or `run_experiment(..., 'np_init', n)` (a variant, not the `pub` profile) |
 
 **"Iterations".** GSK-family optimizers are population algorithms; the run
 length is an **evaluation budget** `max_nfes`, not an iteration count. The
@@ -981,10 +981,13 @@ algorithm page.
 
 Options: `seed` (required) and `rand_generator`, which must be `threefry`
 (empty/`auto`/`default` are accepted; anything else raises
-`dt_gsk_optimize:options`). Nothing else is configurable: every setting comes
+`dt_gsk_optimize:options`). Every other setting comes
 from the `pub` profile for the problem's tier (`D < 20`, `20 <= D < 50`,
 `D >= 50`, `D >= 100`; the tier table is in the README). The initial population
-is `NP = 5*D`. `termination` is always `'max_evaluations'` and `nfes` ends
+is `NP = 5*D`; the optional `options.np_init` (integer >= 5), or
+`run_experiment(..., 'np_init', 100)`, replaces it. That is a variant, not the
+published setting: the runner skips its reference comparison table and refuses
+to resume an output tree written with another NP. `termination` is always `'max_evaluations'` and `nfes` ends
 exactly at `max_nfes`; `error = best_fitness - optimum`, zeroed below the
 target, `NaN` without a known optimum.
 

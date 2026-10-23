@@ -65,7 +65,7 @@ Reference, native, and derived runs omit these fields, so optimizers draw their
 initial population in their normal reference location.
 
 **DT-GSK fair-start exception.** `dt_gsk_optimize` samples its own `NP = 5*D`
-initial population from its `init` Threefry substream and ignores
+(or `options.np_init`) initial population from its `init` Threefry substream and ignores
 `initial_population` and `rng_state_after_initialization` if they are
 supplied. Every random draw comes from named `RandStream('threefry')`
 substreams derived from `options.seed`; the global RNG is never touched and
@@ -108,7 +108,7 @@ Every optimizer returns a struct with exactly these fields:
 | `termination` | char | `'max_evaluations'` or `'target_error_reached'` (DT-GSK: always `'max_evaluations'`) |
 | `convergence` | struct | `.nfes` (Gx1) and `.best_fitness` (Gx1), recorded once per generation (DT-GSK: the best-so-far value after each generation) |
 | `runtime_seconds` | double | wall time of the optimization loop |
-| `params` | struct | the variant parameters actually used. DT-GSK: `profile` (`'pub'`), `np_init_mult` (5), `n_min` (tier value), the base `KF`/`KR`/`Kexp` (reported only; ACE picks the per-individual values), `restarts_done` (partial BSE restarts), `max_nfes` |
+| `params` | struct | the variant parameters actually used. DT-GSK: `profile` (`'pub'`), `np_init_mult` (5), `np_init` (initial NP used), `n_min` (tier value), the base `KF`/`KR`/`Kexp` (reported only; ACE picks the per-individual values), `restarts_done` (partial BSE restarts), `max_nfes` |
 | `notes` | char | optional free text (e.g. eGSK non-reference `use_fmincon=false` diagnostics; DT-GSK always `'self-init (fair-start exception)'`), `''` otherwise |
 
 ## Entry points

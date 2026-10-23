@@ -6,11 +6,14 @@ function result = dt_gsk_optimize(problem, options)
 % Inputs and output follow docs/reference/matlab_interface.md. problem needs
 % dim (D), lb and ub (scalar or D-vector), max_nfes, evaluate (n x D rows in,
 % n values out), optimum and target_error (NaN = unused), suite and func_id.
-% options.seed (non-negative integer) is required. The run always uses the
+% options.seed (non-negative integer) is required. Optional options.np_init
+% (integer >= 5) replaces the initial population size NP = 5*D; this is a
+% variant, not the published profile, so its results are not comparable with
+% the DT-GSK reference tables. The run always uses the
 % full budget (nfes ends at max_nfes, termination 'max_evaluations'); the
 % convergence trace is the best-so-far value after each generation.
-% Errors: dt_gsk_optimize:options (no seed, unsupported rand_generator),
-% dt_gsk_optimize:problem (dim or max_nfes <= 0), dt_gsk:valueError
+% Errors: dt_gsk_optimize:options (no seed, unsupported rand_generator, bad
+% np_init), dt_gsk_optimize:problem (dim or max_nfes <= 0), dt_gsk:valueError
 % (negative seed).
 %
 % DT-GSK keeps the GSK junior/senior knowledge-sharing operators and adds:
@@ -39,8 +42,9 @@ function result = dt_gsk_optimize(problem, options)
 % options.seed (init, core, ace, div, bse, arch, link, de, basin), so one
 % subsystem never shifts another's draws. The global RNG is never touched.
 % DT-GSK samples its own initial population (fair-start exception: a runner
-% X0 is ignored). options.rand_generator must be 'threefry', empty, 'auto'
-% or 'default'.
+% X0 is ignored). With np_init = 100 under the unified seed, that draw equals
+% the runner's shared X0 for the other optimizers. options.rand_generator must
+% be 'threefry', empty, 'auto' or 'default'.
 %
 % Reference: DT-GSK v2.46 (MIT license),
 % https://github.com/MostafaMassoud/DT-GSK; Masoud, Roshdy, Mohamed, "DT-GSK:
@@ -67,6 +71,16 @@ if isfield(options, 'rand_generator') && ~isempty(options.rand_generator) && ...
         ~any(strcmpi(char(options.rand_generator), {'threefry', 'auto', 'default'}))
     error('dt_gsk_optimize:options', ...
         'DT-GSK draws from Threefry substreams only; got rand_generator ''%s''.', char(options.rand_generator));
+end
+np_override = isfield(options, 'np_init') && ~isempty(options.np_init);
+if np_override
+    np_init = options.np_init;
+    % The senior best/middle/worst groups need NP >= 5.
+    if ~(isscalar(np_init) && isnumeric(np_init) && isfinite(np_init) && ...
+            np_init == fix(np_init) && np_init >= 5)
+        error('dt_gsk_optimize:options', ...
+            'options.np_init must be an integer >= 5; got %s.', mat2str(np_init));
+    end
 end
 if problem.dim <= 0 || problem.max_nfes <= 0
     error('dt_gsk_optimize:problem', 'problem.dim and problem.max_nfes must be positive.');
@@ -102,7 +116,10 @@ rs_basin = substream(11);  % basin-novelty restart candidates
 
 %% Initial population
 NP_init = cfg.np_init_mult * D;
-pop = lb + rand(rs_init, NP_init, D) .* span;
+if np_override
+    NP_init = double(np_init);
+end
+pop =lb + rand(rs_init, NP_init, D) .* span;
 [fit, nfes] = evaluate(fobj, pop, 0, max_nfes);
 NP = numel(fit);
 pop = pop(1:NP, :);
@@ -695,9 +712,13 @@ result.nfes = nfes;
 result.termination = 'max_evaluations';
 result.convergence = struct('nfes', conv_nfes(1:gen), 'best_fitness', cummin(conv_fit(1:gen)));
 result.runtime_seconds = toc(start_time);
-result.params = struct('profile', 'pub', 'np_init_mult', cfg.np_init_mult, 'n_min', cfg.n_min, ...
-    'KF', cfg.KF, 'KR', cfg.KR, 'Kexp', cfg.Kexp, 'restarts_done', restarts, 'max_nfes', max_nfes);
+result.params = struct('profile', 'pub', 'np_init_mult', cfg.np_init_mult, 'np_init', NP_init, ...
+    'n_min', cfg.n_min, 'KF', cfg.KF, 'KR', cfg.KR, 'Kexp', cfg.Kexp, 'restarts_done', restarts, ...
+    'max_nfes', max_nfes);
 result.notes = 'self-init (fair-start exception)';
+if np_override
+    result.notes = sprintf('%s; np_init = %d override (not the pub profile)', result.notes, NP_init);
+end
 end
 
 %% ------------------------------------------------------------------------

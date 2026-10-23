@@ -17,6 +17,14 @@ function run_experiment(varargin)
 % is skipped. An output_dir written with another NP is refused (use a new
 % output_dir or 'overwrite',true).
 %
+% 'min_pop_size',m (integer >= 11) sets the final population size of the
+% population reduction in agsk, apgsk and fdb-agsk (default 12; m must not
+% exceed their initial NP) and dt-gsk (default 12, or 25 for D >= 50). gsk,
+% egsk and atmals-gsk keep a fixed population and ignore it, so one launcher
+% value can serve the whole family. A value other than the default is a
+% variant, treated like np_init (comparison table skipped, different-value
+% trees refused).
+%
 % 'verbose',false hides the per-run lines and prints one summary row per
 % (function, dimension); useful for long multi-run sweeps.
 %
@@ -80,6 +88,7 @@ p.addParameter('rand_generator', 'threefry', @(x) any(strcmpi(char(x), {'threefr
 p.addParameter('use_parallel', false, @(x) islogical(x) || isnumeric(x));
 p.addParameter('write_graphs', false, @(x) islogical(x) || isnumeric(x));
 p.addParameter('np_init', [], @isnumeric);
+p.addParameter('min_pop_size', [], @isnumeric);
 p.parse(varargin{:});
 a = p.Results;
 a.optimizer = canonical_optimizer_id(a.optimizer);
@@ -89,6 +98,18 @@ if ~isempty(a.np_init)
     assert(isscalar(a.np_init) && isfinite(a.np_init) && a.np_init == fix(a.np_init) && ...
            a.np_init >= 12, 'run_experiment:args', 'np_init must be an integer >= 12');
     a.np_init = double(a.np_init);
+end
+if ~isempty(a.min_pop_size)
+    % The P = 0.05 senior partition of AGSK, APGSK and FDB-AGSK needs NP >= 11.
+    assert(isscalar(a.min_pop_size) && isfinite(a.min_pop_size) && ...
+           a.min_pop_size == fix(a.min_pop_size) && a.min_pop_size >= 11, ...
+           'run_experiment:args', 'min_pop_size must be an integer >= 11');
+    a.min_pop_size = double(a.min_pop_size);
+    % AGSK, APGSK and FDB-AGSK reject min_pop_size > NP; DT-GSK caps it.
+    np_start = ternary(isempty(a.np_init), 100, a.np_init);
+    assert(~any(strcmp(a.optimizer, {'agsk', 'apgsk', 'fdb-agsk'})) || a.min_pop_size <= np_start, ...
+           'run_experiment:args', 'min_pop_size (%d) must not exceed the initial population size (%d)', ...
+           a.min_pop_size, np_start);
 end
 
 assert(~isempty(a.optimizer), 'run_experiment:args', 'optimizer is required');
@@ -158,7 +179,7 @@ diary_backstop = onCleanup(@() diary('off')); %#ok<NASGU>
 
 checkpoint_fracs = [0.01 0.02 0.03 0.05 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0];
 known_optimum = ~any(strcmp(a.suite, {'cec2011', 'cec2013lsgo'}));
-assert_same_np_init(summary_dir, a);
+assert_same_population(summary_dir, a);
 
 % Existing result records make reruns resumable: completed runs are skipped,
 % new cells are added, and summary tables are rebuilt from old + new data.
@@ -364,6 +385,7 @@ for dim = a.dimensions(:)'
         % Broadcast only plain data to the workers (not the options struct or
         % the client problem, whose MEX handle is invalid on a worker).
         opt_name = a.optimizer; suite_name = a.suite; proot = a.project_root; np_init = a.np_init;
+        min_pop_size = a.min_pop_size;
         mnf = a.max_nfes; nruns = a.runs; verbose = logical(a.verbose);
         optimum_local = problem.optimum;
         rand_gen = effective_rand_generator(a);   % reference/unified may differ from a.rand_generator
@@ -382,7 +404,8 @@ for dim = a.dimensions(:)'
                 handle_guard = onCleanup(@() free_problem(wp)); %#ok<NASGU>  free on exit/error
                 run_id = runs_to_do(rr);
                 scheduled_seed = run_seeds(rr);
-                run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, np_init);
+                run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, ...
+                                                 np_init, min_pop_size);
                 if use_unified_x0
                     [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen, np_init);
                     run_opts.initial_population = x0;
@@ -429,7 +452,8 @@ for dim = a.dimensions(:)'
                 wp = problem;   % serial mode can reuse the cell-level MEX handle safely
                 run_id = runs_to_do(rr);
                 scheduled_seed = run_seeds(rr);
-                run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, np_init);
+                run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, ...
+                                                 np_init, min_pop_size);
                 if use_unified_x0
                     [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen, np_init);
                     run_opts.initial_population = x0;
@@ -679,34 +703,60 @@ fprintf(['run_experiment: per_run.csv upgraded with max_nfes,rand_generator colu
          '(previous file archived under summary/_archive/%s/).\n'], session_tag);
 end
 
-function assert_same_np_init(summary_dir, a)
-%ASSERT_SAME_NP_INIT Refuse to resume a tree written with another NP.
-% per_run.csv rows do not record NP, so resume would reuse runs made with a
-% different initial population size. The tree's run_config.json (latest
-% session) gives the NP it was written with; a missing np_init field or file
-% means the optimizer's default. np_init = 100 equals the default of every
-% optimizer except DT-GSK, so it matches a default tree. A tree without
-% per_run.csv has nothing to reuse.
+function assert_same_population(summary_dir, a)
+%ASSERT_SAME_POPULATION Refuse to resume a tree written with another population size.
+% per_run.csv rows do not record np_init or min_pop_size, so resume would
+% reuse runs made with different population sizes. The tree's run_config.json
+% (latest session) gives the values it was written with; a missing field or
+% file means the optimizer's default. A value equal to the default (np_init =
+% 100 except for DT-GSK, min_pop_size = 12 except for DT-GSK) matches a
+% default tree. A tree without per_run.csv has nothing to reuse.
 if ~isfile(fullfile(summary_dir, 'per_run.csv'))
     return;
 end
 path = fullfile(summary_dir, 'run_config.json');
-previous = [];
+prev_np = [];
+prev_min = [];
 if isfile(path)
     try
         cfg = jsondecode(fileread(path));
         if isfield(cfg, 'np_init') && isnumeric(cfg.np_init)
-            previous = double(cfg.np_init);
+            prev_np = double(cfg.np_init);
+        end
+        if isfield(cfg, 'min_pop_size') && isnumeric(cfg.min_pop_size)
+            prev_min = double(cfg.min_pop_size);
         end
     catch
     end
 end
-if ~strcmp(np_init_text(a.optimizer, previous), np_init_text(a.optimizer, a.np_init))
+if ~strcmp(np_init_text(a.optimizer, prev_np), np_init_text(a.optimizer, a.np_init))
     error('run_experiment:args', ...
           ['%s was written with np_init = %s; this call uses np_init = %s. ' ...
            'Use a new output_dir or ''overwrite'',true.'], summary_dir, ...
-          np_init_text(a.optimizer, previous), np_init_text(a.optimizer, a.np_init));
+          np_init_text(a.optimizer, prev_np), np_init_text(a.optimizer, a.np_init));
 end
+if ~strcmp(min_pop_text(a.optimizer, prev_min), min_pop_text(a.optimizer, a.min_pop_size))
+    error('run_experiment:args', ...
+          ['%s was written with min_pop_size = %s; this call uses min_pop_size = %s. ' ...
+           'Use a new output_dir or ''overwrite'',true.'], summary_dir, ...
+          min_pop_text(a.optimizer, prev_min), min_pop_text(a.optimizer, a.min_pop_size));
+end
+end
+
+function s = min_pop_text(optimizer, min_pop_size)
+%MIN_POP_TEXT Final population size label; equal labels mean equal runs.
+if ~uses_min_pop_size(optimizer)
+    s = 'not used';
+elseif isempty(min_pop_size) || (min_pop_size == 12 && ~strcmp(optimizer, 'dt-gsk'))
+    if strcmp(optimizer, 'dt-gsk'); s = '12, or 25 for D >= 50 (default)'; else; s = '12 (default)'; end
+else
+    s = sprintf('%d', min_pop_size);
+end
+end
+
+function tf = uses_min_pop_size(optimizer)
+%USES_MIN_POP_SIZE Optimizers whose population reduction reads min_pop_size.
+tf = any(strcmp(optimizer, {'agsk', 'apgsk', 'fdb-agsk', 'dt-gsk'}));
 end
 
 function s = np_init_text(optimizer, np_init)
@@ -718,12 +768,18 @@ else
 end
 end
 
-function tf = np_init_is_default(a, dim)
-%NP_INIT_IS_DEFAULT True when the run uses the optimizer's published NP:
-% 100, or 5*D for DT-GSK (dim = 0, native dimensions, counts as not default).
-tf = isempty(a.np_init) || ...
-     (~strcmp(a.optimizer, 'dt-gsk') && a.np_init == 100) || ...
-     (strcmp(a.optimizer, 'dt-gsk') && dim > 0 && a.np_init == 5 * dim);
+function tf = population_is_default(a, dim)
+%POPULATION_IS_DEFAULT True when the run uses the optimizer's published
+% population sizes: initial NP 100 (5*D for DT-GSK) and final NP 12 (DT-GSK:
+% 12, or 25 for D >= 50). For DT-GSK, dim = 0 (native dimensions) with an
+% override counts as not default.
+is_dt = strcmp(a.optimizer, 'dt-gsk');
+np_ok = isempty(a.np_init) || (~is_dt && a.np_init == 100) || ...
+        (is_dt && dim > 0 && a.np_init == 5 * dim);
+min_ok = isempty(a.min_pop_size) || ~uses_min_pop_size(a.optimizer) || ...
+         (~is_dt && a.min_pop_size == 12) || ...
+         (is_dt && dim > 0 && a.min_pop_size == ternary(dim >= 50, 25, 12));
+tf = np_ok && min_ok;
 end
 
 function [override, generator] = previous_tree_config(summary_dir)
@@ -1337,12 +1393,13 @@ else
 end
 end
 
-function opts = optimizer_run_options(optimizer, suite, seed, rand_gen, np_init)
+function opts = optimizer_run_options(optimizer, suite, seed, rand_gen, np_init, min_pop_size)
 %OPTIMIZER_RUN_OPTIONS Build the per-run optimizer options (seed, generator).
 % Does not touch the seed schedule. ATMALS-GSK has two historical drivers;
 % pick the matching protocol for its two published suites (CEC2011, CEC2017).
 % eGSK runs with use_fmincon = true. A non-empty np_init (checked at argument
-% parsing) is passed under each optimizer's own option name.
+% parsing) is passed under each optimizer's own option name; a non-empty
+% min_pop_size only to the optimizers that read it.
 opts = struct('seed', seed, 'rand_generator', rand_gen);
 if ~isempty(np_init)
     if any(strcmp(optimizer, {'gsk', 'egsk', 'atmals-gsk'}))
@@ -1350,6 +1407,9 @@ if ~isempty(np_init)
     else
         opts.np_init = np_init;
     end
+end
+if ~isempty(min_pop_size) && uses_min_pop_size(optimizer)
+    opts.min_pop_size = min_pop_size;
 end
 if strcmp(optimizer, 'atmals-gsk')
     if strcmp(suite, 'cec2011')
@@ -1973,9 +2033,10 @@ function print_comparison_table(a, dim, func_ids, run_means)
 % Compare this run's per-function Mean with the published reference for the
 % same optimizer, suite and dimension, and print a verdict per function
 % (^ improved, = same, v worse).
-if ~np_init_is_default(a, dim)
-    fprintf(['\n(np_init = %d is not the published %s setting -- ' ...
-             'reference comparison skipped)\n'], a.np_init, a.optimizer);
+if ~population_is_default(a, dim)
+    fprintf(['\n(np_init = %s, min_pop_size = %s is not the published %s setting -- ' ...
+             'reference comparison skipped)\n'], np_init_text(a.optimizer, a.np_init), ...
+            min_pop_text(a.optimizer, a.min_pop_size), a.optimizer);
     return;
 end
 ref = load_reference_means(a.project_root, a.optimizer, a.suite, dim);
@@ -2195,6 +2256,8 @@ cfg.use_parallel = logical(a.use_parallel);
 cfg.write_graphs = logical(a.write_graphs);
 cfg.optimizer_options = optimizer_options_metadata(a.optimizer, a.suite);
 cfg.np_init = a.np_init;   % initial NP override (empty = optimizer default)
+% final NP override; empty = default, and empty for optimizers that ignore it
+cfg.min_pop_size = ternary(uses_min_pop_size(a.optimizer), a.min_pop_size, []);
 if strcmp(a.optimizer, 'gsk')
     % reference GSK defaults -- the values this run actually used
     cfg.pop_size = ternary(isempty(a.np_init), 100, a.np_init);

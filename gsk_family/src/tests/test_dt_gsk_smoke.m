@@ -17,7 +17,8 @@ function test_dt_gsk_smoke()
 %      <= 1 ulp per draw, so runs agree to ~1e-13, not bit for bit;
 %   6. every dimension tier (D < 20, 20 <= D < 50, D >= 50, D >= 100) runs;
 %   7. options.np_init replaces NP = 5*D (the first population is the first
-%      np_init rows of the init stream), and a bad np_init is rejected.
+%      np_init rows of the init stream), options.min_pop_size replaces n_min,
+%      and bad values of either are rejected.
 
 here = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(here));
@@ -108,6 +109,20 @@ for bad = {0, 4, 7.5, [100 100], NaN}
 end
 r5 = dt_gsk_optimize(p, struct('seed', 12345, 'np_init', 5));
 assert(r5.nfes == 3000, 'the smallest np_init must still run to budget');
+assert(r.params.n_min == 12, 'default n_min must be 12 below D = 50');
+r6 = dt_gsk_optimize(p, struct('seed', 12345, 'min_pop_size', 30));
+assert(r6.params.n_min == 30 && contains(r6.notes, 'min_pop_size = 30') && r6.nfes == 3000, ...
+       'min_pop_size override');
+assert(r6.best_fitness ~= r.best_fitness, 'a different n_min should change the run');
+for bad = {4, 12.5, [20 20]}
+    threw = false;
+    try
+        dt_gsk_optimize(pn, struct('seed', 1, 'min_pop_size', bad{1}));
+    catch err
+        threw = strcmp(err.identifier, 'dt_gsk_optimize:options');
+    end
+    assert(threw, 'min_pop_size = %s must be rejected', mat2str(bad{1}));
+end
 
 fprintf('test_dt_gsk_smoke: PASS\n');
 end

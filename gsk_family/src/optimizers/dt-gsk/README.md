@@ -48,6 +48,10 @@ NP = 5*D unless `options.np_init` sets it (see below).
   reference comparison table, and an output tree written with another NP is
   refused. With `np_init = 100` and the unified seed, DT-GSK's first
   population equals the shared X0 the runner draws for the other optimizers.
+- Optional `options.min_pop_size` (integer >= 5) replaces the final NLPSR size
+  `n_min` (12, or 25 for D >= 50; the D >= 100 SP-NLPSR floor still applies).
+  `run_experiment(..., 'min_pop_size', m)` and the launchers' `min_pop_size`
+  CONFIG entry pass it. Like `np_init`, it is a variant, not the `pub` profile.
 - Always runs the full budget (`termination = 'max_evaluations'`); the
   convergence trace is the best-so-far value after each generation.
 - `error = best_fitness - optimum`, zeroed below `target_error`, NaN without a

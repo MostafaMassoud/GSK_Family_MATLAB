@@ -314,6 +314,7 @@ CLI flags, or the MATLAB runner.
 | Seed policy | `seed_policy: reference` | `--seed-policy reference` | `'seed_policy','reference'` | `gsk_run` default is `reference`; direct `run_experiment` default is `unified`; DT-GSK always gets the unified schedule ([3.7](#37-dt-gsk)) |
 | RNG family | `rand_generator: threefry` | `--rand-generator threefry` | `'rand_generator','threefry'` | overridden under `reference`: AGSK/APGSK/FDB-AGSK/eGSK/ATMALS-GSK use legacy `seed`; GSK uses `twister`. Under `unified`, MATLAB uses `threefry` when supported and falls back to `twister`. DT-GSK always uses `threefry` |
 | Initial population | — | — | `'np_init',N` (`[]`=default) | MATLAB runner and `run_all_cec*.m` CONFIG only; integer `>= 12`, same NP for every optimizer ([population size](#population-size)) |
+| Final population | — | — | `'min_pop_size',M` (`[]`=default) | MATLAB runner and `run_all_cec*.m` CONFIG only; integer `>= 11`; AGSK/APGSK/FDB-AGSK/DT-GSK (GSK/eGSK/ATMALS-GSK ignore it) ([population size](#population-size)) |
 
 `gsk_run` and shipped `configs/*.yml` use `seed_policy='reference'` for
 published-table reproduction. The root `run_all_cec*.m` launchers use
@@ -367,9 +368,17 @@ optimizers whose default is 100 it changes nothing (results are identical).
 A value other than an optimizer's default is a variant: the runner skips the
 reference comparison table for it, records `np_init` in `run_config.json` and
 `initial_population_policy`, and refuses to resume an output tree written with
-another NP (use a new `output_dir` or `'overwrite',true`). Population size is
-not a config key or `gsk_run` flag. To change any other variant parameter —
-`kf`, `kr`, `k`, `p`, `min_pop_size`, `fdb_case`, `protocol`, `use_fmincon`,
+another NP (use a new `output_dir` or `'overwrite',true`).
+`run_experiment(..., 'min_pop_size', M)`, and the `min_pop_size` CONFIG entry,
+set the **final** population size of the four optimizers that shrink their
+population during the run: AGSK, APGSK and FDB-AGSK (default 12; `M` must not
+exceed their initial NP) and DT-GSK (its `n_min`: 12, or 25 for `D >= 50`; its
+`D >= 100` SP-NLPSR floor still applies). GSK, eGSK and ATMALS-GSK keep a fixed
+population and ignore it, so one launcher value serves the whole family. `M`
+is an integer `>= 11` (the AGSK/APGSK/FDB-AGSK senior partition needs it), and a
+value other than an optimizer's default is a variant, handled like `np_init`.
+Population sizes are not config keys or `gsk_run` flags. To change any other variant parameter —
+`kf`, `kr`, `k`, `p`, `fdb_case`, `protocol`, `use_fmincon`,
 pools, ... — **or to set a custom single seed**, use the **lower-level MATLAB
 path** shown in each algorithm's "(A) … lower-level snippet".
 Interface-default populations:
@@ -385,6 +394,7 @@ Interface-default populations:
 | `dt-gsk` | `NP = 5*D` initial, reduced nonlinearly to 12 (25 for `D >= 50`) | `options.np_init` (a variant, not the `pub` profile) |
 
 All seven: `run_experiment(..., 'np_init', N)` or `np_init = N` in a launcher's CONFIG.
+Final size (AGSK, APGSK, FDB-AGSK, DT-GSK): `'min_pop_size', M` or `min_pop_size = M`.
 
 **"Iterations".** GSK-family optimizers are population algorithms; the run
 length is an **evaluation budget** `max_nfes`, not an iteration count. The

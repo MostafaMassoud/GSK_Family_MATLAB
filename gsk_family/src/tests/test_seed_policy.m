@@ -5,7 +5,8 @@ function test_seed_policy()
 % that choose_cec_rng_generator restores the RNG state; that unified seeds
 % are the same for every optimizer; seed_policy / rand_generator validation;
 % reference-mode seed metadata; DT-GSK's fixed unified seeding; the np_init
-% option (metadata, resume guard, every optimizer with NP = 150);
+% option (metadata, resume guard, every optimizer with NP = 150); the
+% min_pop_size option (metadata, resume guard, ignored where unused);
 % verify_unified_seed_schedule; a policy round trip; and, with the Parallel
 % Computing Toolbox, that parfor gives the same results as a serial run.
 
@@ -148,6 +149,29 @@ assert(isequal(read_best(out_100), read_best(out_gsk)), 'gsk np_init = 100 must 
 run_experiment(gsk_args{:}, 'output_dir', out_gsk, 'np_init', 100);
 assert(numel(read_best(out_gsk)) == 1, 'np_init = 100 must reuse the default gsk run');
 assert_rejected(@() run_experiment(gsk_args{:}, 'output_dir', out_gsk, 'np_init', 150), 'np_init', '');
+% min_pop_size: 12 is the AGSK default (a default tree resumes), another value
+% is recorded and refused on a default tree; optimizers without population
+% reduction ignore it.
+agsk_args = gsk_args;
+agsk_args{2} = 'agsk';
+run_experiment(agsk_args{:}, 'output_dir', out_agsk, 'min_pop_size', 12);
+assert(numel(read_best(out_agsk)) == 1, 'min_pop_size = 12 must reuse the default agsk run');
+assert_rejected(@() run_experiment(agsk_args{:}, 'output_dir', out_agsk, 'min_pop_size', 20), ...
+                'min_pop_size', '');
+out_m20 = fullfile(out_root, 'min20', 'agsk', 'sphere');
+run_experiment(agsk_args{:}, 'output_dir', out_m20, 'min_pop_size', 20);
+cfg = jsondecode(fileread(fullfile(out_m20, 'summary', 'run_config.json')));
+assert(cfg.min_pop_size == 20, 'agsk min_pop_size metadata');
+assert(~isequal(read_best(out_m20), read_best(out_agsk)), 'min_pop_size = 20 should change the agsk run');
+out_m20g = fullfile(out_root, 'min20', 'gsk', 'sphere');
+run_experiment(gsk_args{:}, 'output_dir', out_m20g, 'min_pop_size', 20);
+cfg = jsondecode(fileread(fullfile(out_m20g, 'summary', 'run_config.json')));
+assert(isempty(cfg.min_pop_size) && isequal(read_best(out_m20g), read_best(out_gsk)), ...
+       'gsk must ignore min_pop_size');
+assert_rejected(@() run_experiment('optimizer', 'gsk', small{:}, 'output_dir', bad_out, ...
+                                   'min_pop_size', 10), 'min_pop_size', bad_out);
+assert_rejected(@() run_experiment('optimizer', 'agsk', small{:}, 'output_dir', bad_out, ...
+                                   'min_pop_size', 150), 'min_pop_size', bad_out);
 % np_init = 150 reaches every optimizer, which runs from a 150-row shared X0.
 for opt = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk', 'dt-gsk'}
     if strcmp(opt{1}, 'egsk') && ~exist('fmincon', 'file')

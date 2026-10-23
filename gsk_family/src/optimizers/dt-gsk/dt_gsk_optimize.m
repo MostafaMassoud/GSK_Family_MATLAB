@@ -7,13 +7,15 @@ function result = dt_gsk_optimize(problem, options)
 % dim (D), lb and ub (scalar or D-vector), max_nfes, evaluate (n x D rows in,
 % n values out), optimum and target_error (NaN = unused), suite and func_id.
 % options.seed (non-negative integer) is required. Optional options.np_init
-% (integer >= 5) replaces the initial population size NP = 5*D; this is a
+% (integer >= 5) replaces the initial population size NP = 5*D, and optional
+% options.min_pop_size (integer >= 5) replaces the final NLPSR size n_min (12,
+% or 25 for D >= 50; the D >= 100 SP-NLPSR floor still applies). Either is a
 % variant, not the published profile, so its results are not comparable with
 % the DT-GSK reference tables. The run always uses the
 % full budget (nfes ends at max_nfes, termination 'max_evaluations'); the
 % convergence trace is the best-so-far value after each generation.
 % Errors: dt_gsk_optimize:options (no seed, unsupported rand_generator, bad
-% np_init), dt_gsk_optimize:problem (dim or max_nfes <= 0), dt_gsk:valueError
+% np_init or min_pop_size), dt_gsk_optimize:problem (dim or max_nfes <= 0), dt_gsk:valueError
 % (negative seed).
 %
 % DT-GSK keeps the GSK junior/senior knowledge-sharing operators and adds:
@@ -82,6 +84,15 @@ if np_override
             'options.np_init must be an integer >= 5; got %s.', mat2str(np_init));
     end
 end
+nmin_override = isfield(options, 'min_pop_size') && ~isempty(options.min_pop_size);
+if nmin_override
+    min_pop_size = options.min_pop_size;
+    if ~(isscalar(min_pop_size) && isnumeric(min_pop_size) && isfinite(min_pop_size) && ...
+            min_pop_size == fix(min_pop_size) && min_pop_size >= 5)
+        error('dt_gsk_optimize:options', ...
+            'options.min_pop_size must be an integer >= 5; got %s.', mat2str(min_pop_size));
+    end
+end
 if problem.dim <= 0 || problem.max_nfes <= 0
     error('dt_gsk_optimize:problem', 'problem.dim and problem.max_nfes must be positive.');
 end
@@ -93,6 +104,9 @@ span = ub - lb;
 inv_sqrt_d = 1 / sqrt(D);
 fobj = problem.evaluate;
 cfg = dt_gsk_config(D);
+if nmin_override
+    cfg.n_min = double(min_pop_size);   % NLPSR still caps it at NP_init
+end
 
 %% Random substreams
 % init uses the seed itself; every other stream gets a child seed fixed by
@@ -718,6 +732,9 @@ result.params = struct('profile', 'pub', 'np_init_mult', cfg.np_init_mult, 'np_i
 result.notes = 'self-init (fair-start exception)';
 if np_override
     result.notes = sprintf('%s; np_init = %d override (not the pub profile)', result.notes, NP_init);
+end
+if nmin_override
+    result.notes = sprintf('%s; min_pop_size = %d override (not the pub profile)', result.notes, cfg.n_min);
 end
 end
 

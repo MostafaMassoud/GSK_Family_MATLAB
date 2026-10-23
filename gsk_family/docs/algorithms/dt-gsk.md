@@ -347,6 +347,11 @@ flowchart TD
   samples its own `5*D` population from the `init` stream and ignores a runner
   `X0`; the runner draws none and records this as `initial_population_policy` in
   the run metadata. See [Seed Policy](../reference/seed_policy.md).
+- **Final population size option.** `options.min_pop_size` (integer >= 5), or
+  `run_experiment(..., 'min_pop_size', m)` / `min_pop_size = m` in a launcher's
+  CONFIG, replaces the NLPSR target `n_min` (12, or 25 for `D >= 50`; the
+  `D >= 100` SP-NLPSR floor still applies). It is a variant, handled by the
+  runner like `np_init`.
 - **Initial population size option.** `options.np_init` (integer >= 5), or
   `run_experiment(..., 'np_init', 100)` / `np_init = 100` in a launcher's
   CONFIG (which sets the same NP for every optimizer), replaces `5*D`. It is a variant, not

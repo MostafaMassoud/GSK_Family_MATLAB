@@ -6,6 +6,15 @@ Keep a Changelog; this project uses semantic versioning.
 ## [Unreleased]
 
 ### Added
+- Final population size option: `run_experiment(..., 'min_pop_size', m)`
+  (integer >= 11) and a `min_pop_size` CONFIG entry in every `run_all_cec*.m`
+  launcher (default `[]`, no change) set the population-reduction target of
+  AGSK, APGSK and FDB-AGSK (`options.min_pop_size`, default 12) and DT-GSK
+  (new `options.min_pop_size` in `dt_gsk_optimize.m`, replacing `n_min`: 12,
+  or 25 for D >= 50). GSK, eGSK and ATMALS-GSK have no population reduction
+  and ignore it. A non-default value is a variant, recorded in
+  `run_config.json`, with the reference comparison table skipped and
+  different-value trees not resumed. Default runs are unchanged.
 - Initial population size option for the whole family:
   `run_experiment(..., 'np_init', n)` (integer >= 12) and a new `np_init`
   CONFIG entry in every `run_all_cec*.m` launcher (default `[]`, no change)

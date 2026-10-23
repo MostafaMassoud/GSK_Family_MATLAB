@@ -88,9 +88,14 @@ Variant parameter fields (all optional, reference defaults apply):
 - `egsk`: reference `KF1/KF2/KR/K`, `use_fmincon` (`true` reference default;
   `false` only for explicit non-reference diagnostics)
 - `fdb-agsk`: `fdb_case` (1..5, default 1), `np_init` (100; `40*D` reference harness opt-in)
-- `dt-gsk`: none. Only `seed` and `rand_generator` are read; every other
-  setting comes from the published `pub` profile, `dt_gsk_config(D)`, by
-  dimension tier (`D < 20`, `20 <= D < 50`, `D >= 50`, `D >= 100`)
+- `dt-gsk`: `np_init` (`5*D`) and `min_pop_size` (the final NLPSR size
+  `n_min`: 12, or 25 for `D >= 50`), each an integer `>= 5` and a non-`pub`
+  variant when set; every other setting comes from the published `pub`
+  profile, `dt_gsk_config(D)`, by dimension tier (`D < 20`, `20 <= D < 50`,
+  `D >= 50`, `D >= 100`)
+
+The runner's `'np_init'` and `'min_pop_size'` arguments set these for the
+whole family; see the command reference, "Population size".
 
 ## Result struct
 
@@ -108,7 +113,7 @@ Every optimizer returns a struct with exactly these fields:
 | `termination` | char | `'max_evaluations'` or `'target_error_reached'` (DT-GSK: always `'max_evaluations'`) |
 | `convergence` | struct | `.nfes` (Gx1) and `.best_fitness` (Gx1), recorded once per generation (DT-GSK: the best-so-far value after each generation) |
 | `runtime_seconds` | double | wall time of the optimization loop |
-| `params` | struct | the variant parameters actually used. DT-GSK: `profile` (`'pub'`), `np_init_mult` (5), `np_init` (initial NP used), `n_min` (tier value), the base `KF`/`KR`/`Kexp` (reported only; ACE picks the per-individual values), `restarts_done` (partial BSE restarts), `max_nfes` |
+| `params` | struct | the variant parameters actually used. DT-GSK: `profile` (`'pub'`), `np_init_mult` (5), `np_init` (initial NP used), `n_min` (final NLPSR size used: tier value or `min_pop_size`), the base `KF`/`KR`/`Kexp` (reported only; ACE picks the per-individual values), `restarts_done` (partial BSE restarts), `max_nfes` |
 | `notes` | char | optional free text (e.g. eGSK non-reference `use_fmincon=false` diagnostics; DT-GSK always `'self-init (fair-start exception)'`), `''` otherwise |
 
 ## Entry points

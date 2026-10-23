@@ -1353,6 +1353,10 @@ env.seed_policy = [char(a.seed_policy) ': ' ...
                    regexprep(seed_scheme_string(a), '^[^:]+:\s*', '', 'once')];
 env.initial_population_policy = initial_population_policy_string(a);
 env.max_nfes_override = a.max_nfes;
+% Population overrides ([] = default; min_pop_size [] where the optimizer
+% ignores it). gsk_validate --verify treats a set value as a reduced protocol.
+env.np_init = a.np_init;
+env.min_pop_size = ternary(uses_min_pop_size(a.optimizer), a.min_pop_size, []);
 env.statistics_basis = ternary(known_optimum, 'error_vs_optimum', 'raw_objective');
 env.report_zero_tol = report_zero_tol(a);
 env.optimizer_options = optimizer_options_metadata(a.optimizer, a.suite);

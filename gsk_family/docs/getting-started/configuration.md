@@ -149,6 +149,8 @@ The flag-to-config mapping:
 | `seed` | `--seed S` | the `base_seed`; an integer in `[0, 2^53]` |
 | `seed_policy` | `--seed-policy <policy>` | `reference` (default) / `unified` / `native` / `derived` |
 | `rand_generator` | `--rand-generator <family>` | `threefry` (default) / `twister` |
+| `np_init` | `--np-init N` | initial population for every optimizer; `0` (default) = each optimizer's own, else an integer `>= 12` |
+| `min_pop_size` | `--min-pop-size M` | final population of AGSK/APGSK/FDB-AGSK/DT-GSK; `0` (default) = each one's own, else `>= 11`; GSK/eGSK/ATMALS-GSK ignore it |
 | `output_root` | `--output <dir>` | the per-(opt,suite) tree is created under it; the flag resolves against the working directory |
 | `reference_root` | `--reference <dir>` | used for auto-verification; the flag resolves against the working directory |
 

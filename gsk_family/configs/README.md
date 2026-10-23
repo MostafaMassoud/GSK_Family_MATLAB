@@ -18,7 +18,12 @@ comparison protocol.
 
 Keys: `optimizers` (required), `suite` (required), `functions`, `dimensions`,
 `runs`, `seed` (integer in `[0, 2^53]`), `seed_policy`, `rand_generator`,
-`max_evaluations` (0 = suite default budget), `overwrite`, `parallel` (must be
+`max_evaluations` (0 = suite default budget), `np_init` (initial population size
+for every optimizer; 0 = each optimizer's default, 100 or `5*D` for DT-GSK; else
+`>= 12`), `min_pop_size` (final population size of AGSK, APGSK, FDB-AGSK and
+DT-GSK; 0 = default; else `>= 11`; GSK, eGSK and ATMALS-GSK ignore it; a
+nonzero `np_init` or `min_pop_size` makes the run's verification a reduced
+protocol), `overwrite`, `parallel` (must be
 `false`), `reference_root`, `output_root` (relative roots resolve under
 `--root`). An empty list `[]` for `functions`/`dimensions` is rejected (use
 `all`), and a `data_root` key is rejected with a clear error: benchmark data

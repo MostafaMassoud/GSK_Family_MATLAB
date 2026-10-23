@@ -84,6 +84,30 @@ int main(int argc, char** argv) {
         check(cfg.dimensions.empty(), "absent dimensions -> empty list");
         check(cfg.seed_policy == "reference", "default seed_policy is reference");
         check(cfg.rand_generator == "threefry", "default rand_generator is threefry");
+        check(cfg.np_init == 0 && cfg.min_pop_size == 0, "default np_init/min_pop_size are 0 (optimizer defaults)");
+    }
+    // --- Population size keys ---------------------------------------------
+    {
+        const fs::path pop = tmp / "pop.yml";
+        write_file(pop, "optimizers: [gsk]\nsuite: cec2017\nnp_init: 100\nmin_pop_size: 20\n");
+        const auto cfg = gskcec::load_experiment_config(pop);
+        check(cfg.np_init == 100 && cfg.min_pop_size == 20, "np_init/min_pop_size parsed");
+        const fs::path pop0 = tmp / "pop0.yml";
+        write_file(pop0, "optimizers: [gsk]\nsuite: cec2017\nnp_init: 0\nmin_pop_size: 0\n");
+        const auto cfg0 = gskcec::load_experiment_config(pop0);
+        check(cfg0.np_init == 0 && cfg0.min_pop_size == 0, "np_init/min_pop_size 0 = default accepted");
+        for (const char* bad : {"np_init: 11", "np_init: -1", "np_init: 1.5", "np_init: all",
+                                "min_pop_size: 10", "min_pop_size: -3", "min_pop_size: 12x"}) {
+            const fs::path bad_pop = tmp / "bad_pop.yml";
+            write_file(bad_pop, std::string("optimizers: [gsk]\nsuite: cec2017\n") + bad + "\n");
+            check(throws([&] { gskcec::load_experiment_config(bad_pop); }),
+                  std::string("config '") + bad + "' rejected");
+        }
+        check(gskcec::is_valid_np_init(0) && gskcec::is_valid_np_init(12) && !gskcec::is_valid_np_init(11),
+              "is_valid_np_init floor 12");
+        check(gskcec::is_valid_min_pop_size(0) && gskcec::is_valid_min_pop_size(11) &&
+                  !gskcec::is_valid_min_pop_size(10),
+              "is_valid_min_pop_size floor 11");
     }
     {
         check(throws([&] { gskcec::load_experiment_config(tmp / "missing.yml"); }),
@@ -171,6 +195,22 @@ int main(int argc, char** argv) {
         check(!gskcec::is_reduced_protocol(51, 0), "51 runs, default budget -> full protocol");
         check(gskcec::is_reduced_protocol(24, 0), "24 runs -> reduced");
         check(gskcec::is_reduced_protocol(51, 150000), "budget override -> reduced");
+        check(gskcec::is_reduced_protocol(51, 0, true), "population override -> reduced");
+        check(!gskcec::is_reduced_protocol(51, 0, false), "no population override -> full protocol");
+
+        // run_experiment writes np_init/min_pop_size as [] when unset.
+        const fs::path env_pop_unset = tmp / "env_pop_unset.json";
+        write_file(env_pop_unset, "{\"runs\":51,\"max_nfes_override\":0,\"np_init\":[],\"min_pop_size\":[]}");
+        const auto r_unset = gskcec::reduced_protocol_from_environment(env_pop_unset);
+        check(r_unset.has_value() && !*r_unset, "environment.json with unset np_init/min_pop_size -> full");
+        const fs::path env_np = tmp / "env_np.json";
+        write_file(env_np, "{\"runs\":51,\"max_nfes_override\":0,\"np_init\":100,\"min_pop_size\":[]}");
+        const auto r_np = gskcec::reduced_protocol_from_environment(env_np);
+        check(r_np.has_value() && *r_np, "environment.json with np_init = 100 -> reduced");
+        const fs::path env_min = tmp / "env_min.json";
+        write_file(env_min, "{\"runs\":51,\"max_nfes_override\":0,\"np_init\":[],\"min_pop_size\":20}");
+        const auto r_min = gskcec::reduced_protocol_from_environment(env_min);
+        check(r_min.has_value() && *r_min, "environment.json with min_pop_size = 20 -> reduced");
 
         const fs::path env_pretty = tmp / "env_pretty.json";
         write_file(env_pretty, "{\n  \"optimizer\": \"gsk\",\n  \"dimensions_run\": [\n    10\n  ],\n"
@@ -202,7 +242,8 @@ int main(int argc, char** argv) {
         // deviation is then a hard failure); only smoke.yml is reduced.
         for (const char* name : {"all_cec2017.yml", "all_cec2011.yml", "agsk_cec2020.yml"}) {
             const auto cfg = gskcec::load_experiment_config(configs / name);
-            check(!gskcec::is_reduced_protocol(cfg.runs, cfg.max_evaluations),
+            check(!gskcec::is_reduced_protocol(cfg.runs, cfg.max_evaluations,
+                                               cfg.np_init != 0 || cfg.min_pop_size != 0),
                   std::string("full-protocol config is not classified reduced: ") + name);
         }
         const auto smoke = gskcec::load_experiment_config(configs / "smoke.yml");

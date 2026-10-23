@@ -127,6 +127,16 @@ bool is_valid_rand_generator(const std::string& value) {
            value == "state";
 }
 
+// The floors match run_experiment.m: 12 and 11 are the smallest values
+// AGSK, APGSK and FDB-AGSK accept, so one value suits every optimizer.
+bool is_valid_np_init(long long value) {
+    return value == 0 || (value >= 12 && value <= 1000000);
+}
+
+bool is_valid_min_pop_size(long long value) {
+    return value == 0 || (value >= 11 && value <= 1000000);
+}
+
 // Reads a flat "key: value" config file; '#' starts a comment. An unknown
 // key, a bad value, or a missing optimizers/suite entry throws
 // std::runtime_error naming the file (and the line, when there is one).
@@ -201,6 +211,18 @@ ExperimentConfig load_experiment_config(const std::filesystem::path& path) {
             if (cfg.max_evaluations < 0) {
                 fail(path, line_no, "max_evaluations must be >= 0");
             }
+        } else if (key == "np_init") {
+            const long long v = parse_ll(path, line_no, value);
+            if (!is_valid_np_init(v)) {
+                fail(path, line_no, "np_init must be 0 (optimizer default) or an integer >= 12");
+            }
+            cfg.np_init = static_cast<int>(v);
+        } else if (key == "min_pop_size") {
+            const long long v = parse_ll(path, line_no, value);
+            if (!is_valid_min_pop_size(v)) {
+                fail(path, line_no, "min_pop_size must be 0 (optimizer default) or an integer >= 11");
+            }
+            cfg.min_pop_size = static_cast<int>(v);
         } else if (key == "output_root") {
             cfg.output_root = value;
         } else if (key == "data_root") {

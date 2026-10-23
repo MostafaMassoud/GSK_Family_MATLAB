@@ -45,6 +45,11 @@ void print_usage() {
         << "  --matlab <exe>    MATLAB executable (default: GSKCEC_MATLAB env var, then 'matlab' on PATH)\n"
         << "  --seed-policy <p> MATLAB seed policy: reference, native, unified, derived (default reference)\n"
         << "  --rand-generator <g> MATLAB RNG family: threefry, twister, seed, state (default threefry)\n"
+        << "  --np-init <n>     initial population size for every optimizer (>= 12; 0 = each\n"
+        << "                    optimizer's default: 100, or 5*D for dt-gsk)\n"
+        << "  --min-pop-size <m> final population size of agsk, apgsk, fdb-agsk and dt-gsk\n"
+        << "                    (>= 11; 0 = each one's default); gsk, egsk, atmals-gsk ignore it.\n"
+        << "                    Either override makes verification informational (reduced protocol)\n"
         << "  --overwrite       archive the previous output tree and start a clean run\n"
         << "  --reference <dir> imported reference tables (default <root>/benchmarks/cec_reference_results;\n"
         << "                    relative to the working directory)\n"
@@ -151,13 +156,14 @@ struct CliOptions {
     bool verify = true; // verify each run by default; --no-verify turns it off
 };
 
-// A run uses a reduced (non-reference) protocol when its budget is overridden
-// or it has fewer than 25 runs (a full study). Reduced runs are expected to
-// score worse than the published tables, so the gross-deviation check and
-// win/tie/loss are informational, not hard failures. The rule is shared with
-// gsk_validate --verify (comparison.hpp).
+// A run uses a reduced (non-reference) protocol when its budget is overridden,
+// it has fewer than 25 runs (a full study), or a population size is
+// overridden. Reduced runs can differ from the published tables, so the
+// gross-deviation check and win/tie/loss are informational, not hard
+// failures. The rule is shared with gsk_validate --verify (comparison.hpp).
 bool is_reduced_protocol(const gskcec::ExperimentConfig& cfg) {
-    return gskcec::is_reduced_protocol(cfg.runs, cfg.max_evaluations);
+    return gskcec::is_reduced_protocol(cfg.runs, cfg.max_evaluations,
+                                       cfg.np_init != 0 || cfg.min_pop_size != 0);
 }
 
 std::string locate_matlab(const CliOptions& opts) {
@@ -241,8 +247,15 @@ int run_one(const gskcec::ExperimentConfig& cfg,
           << "'output_dir','" << matlab_quote(forward_slashes(fs::absolute(out_dir))) << "',"
           << "'overwrite'," << ((opts.overwrite || cfg.overwrite) ? "true" : "false")
           << ",'seed_policy','" << matlab_quote(cfg.seed_policy) << "'"
-          << ",'rand_generator','" << matlab_quote(cfg.rand_generator) << "'"
-          << ",'use_parallel',false"
+          << ",'rand_generator','" << matlab_quote(cfg.rand_generator) << "'";
+    // Passed only when set, so a default call is unchanged.
+    if (cfg.np_init != 0) {
+        batch << ",'np_init'," << cfg.np_init;
+    }
+    if (cfg.min_pop_size != 0) {
+        batch << ",'min_pop_size'," << cfg.min_pop_size;
+    }
+    batch << ",'use_parallel',false"
           << ");";
 
     const std::string matlab = locate_matlab(opts);
@@ -366,6 +379,18 @@ int main(int argc, char** argv) {
                 if (cfg.max_evaluations < 0) {
                     throw std::runtime_error("--max-evaluations must be >= 0 (0 = suite default budget)");
                 }
+            } else if (a == "--np-init") {
+                const long long v = cli_ll("--np-init", next("--np-init"));
+                if (!gskcec::is_valid_np_init(v)) {
+                    throw std::runtime_error("--np-init must be 0 (optimizer default) or an integer >= 12");
+                }
+                cfg.np_init = static_cast<int>(v);
+            } else if (a == "--min-pop-size") {
+                const long long v = cli_ll("--min-pop-size", next("--min-pop-size"));
+                if (!gskcec::is_valid_min_pop_size(v)) {
+                    throw std::runtime_error("--min-pop-size must be 0 (optimizer default) or an integer >= 11");
+                }
+                cfg.min_pop_size = static_cast<int>(v);
             } else if (a == "--root") {
                 opts.project_root = next("--root");
             } else if (a == "--output") {

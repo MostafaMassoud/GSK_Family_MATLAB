@@ -8,7 +8,7 @@ Helper tooling in PowerShell and MATLAB only.
 | `analyze_results.m` | MATLAB | Toolbox-free statistics + figures over `results/`: per-function generated-vs-reference comparison, Friedman ranks, Wilcoxon signed-rank vs the references, and boxplot/convergence PDFs. |
 | `compare_reference_runs.m` | MATLAB | Per-(dimension, function) comparison of two `per_run.csv` sets (e.g. a MATLAB DT-GSK campaign vs the imported reference runs): Best/Median/Mean, order-of-magnitude agreement, two-sided Wilcoxon rank-sum at `alpha`, paired signed-rank when the seeds match, Holm-adjusted p-values. Needs the Statistics and Machine Learning Toolbox. |
 | `build_docs.ps1` | PowerShell | Generate the HTML documentation site, including the runbook and the Command Reference (Pandoc/Doxygen), into `docs/html/`. |
-| `run_all.ps1` | PowerShell | Build/test wrapper plus batch driver for one or more `configs/*.yml` experiments through `gsk_run` (defaults to `configs/smoke.yml`; seed policy and generator come from each config, falling back to `gsk_run`'s reference + threefry; pass `-SeedPolicy`/`-RandGenerator` only to override every config; use `-Full` for the full standard set). |
+| `run_all.ps1` | PowerShell | Build/test wrapper plus batch driver for one or more `configs/*.yml` experiments through `gsk_run` (defaults to `configs/smoke.yml`; seed policy and generator come from each config, falling back to `gsk_run`'s reference + threefry; pass `-SeedPolicy`/`-RandGenerator`, or `-NpInit`/`-MinPopSize` for the population sizes, only to override every config; use `-Full` for the full standard set). |
 
 Rebuild the C++ CLIs with `cmake --build build -j` after editing C++ sources,
 headers, CLI/config parser code, tests, or `CMakeLists.txt`, then run

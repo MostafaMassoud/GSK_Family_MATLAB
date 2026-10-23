@@ -6,6 +6,13 @@ Keep a Changelog; this project uses semantic versioning.
 ## [Unreleased]
 
 ### Added
+- `np_init` and `min_pop_size` in every CEC runner: config keys (`0` =
+  default; every shipped config now lists both at `0`), `gsk_run --np-init` /
+  `--min-pop-size`, and `scripts/run_all.ps1 -NpInit` / `-MinPopSize`. The
+  values are passed to `run_experiment` only when set, so default runs are
+  unchanged. `run_experiment` records both in `environment.json`, and a set
+  value makes `gsk_run` verification and `gsk_validate --verify` a reduced
+  protocol (`is_reduced_protocol` gains a population-override argument).
 - Final population size option: `run_experiment(..., 'min_pop_size', m)`
   (integer >= 11) and a `min_pop_size` CONFIG entry in every `run_all_cec*.m`
   launcher (default `[]`, no change) set the population-reduction target of

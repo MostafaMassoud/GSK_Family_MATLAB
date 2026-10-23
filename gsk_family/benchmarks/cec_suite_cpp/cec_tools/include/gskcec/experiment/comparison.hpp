@@ -126,13 +126,17 @@ struct RunVerification {
 bool suite_has_known_optimum(const std::string& suite);
 
 /// Reduced-protocol rule shared by gsk_run and gsk_validate --verify: a run
-/// is reduced when its budget was overridden (@p max_nfes_override != 0) or
-/// it has fewer than 25 runs.
-bool is_reduced_protocol(long long runs, long long max_nfes_override);
+/// is reduced when its budget was overridden (@p max_nfes_override != 0),
+/// it has fewer than 25 runs, or its population size was overridden
+/// (@p population_override: np_init or min_pop_size set). The published
+/// tables were made with the default population sizes.
+bool is_reduced_protocol(long long runs, long long max_nfes_override, bool population_override = false);
 
 /// Reads `runs` and `max_nfes_override` from a run's environment.json
-/// (written by run_experiment.m) and applies is_reduced_protocol. Returns
-/// std::nullopt when the file cannot be read or lacks either field.
+/// (written by run_experiment.m) and applies is_reduced_protocol; a numeric
+/// `np_init` or `min_pop_size` field counts as a population override.
+/// Returns std::nullopt when the file cannot be read or lacks runs or
+/// max_nfes_override.
 std::optional<bool> reduced_protocol_from_environment(const std::filesystem::path& environment_json);
 
 /// Checks one run's summaries against the imported references.

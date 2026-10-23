@@ -6,3 +6,5 @@ runs: 51
 seed: 20240620
 seed_policy: reference  # dt-gsk always uses the unified seed + threefry (its reference protocol)
 rand_generator: threefry
+np_init: 0  # 0 = each optimizer's default (100; dt-gsk 5*D); e.g. 100 = same initial NP for all
+min_pop_size: 0  # 0 = default final NP (12; dt-gsk 25 for D >= 50); agsk, apgsk, fdb-agsk, dt-gsk only

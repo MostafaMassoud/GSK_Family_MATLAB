@@ -318,10 +318,10 @@ bool suite_has_known_optimum(const std::string& suite) {
     return suite == "cec2017" || suite == "cec2020" || suite == "cec2013";
 }
 
-// Reduced protocol: the budget is overridden (max_nfes_override != 0) or
-// there are fewer than 25 runs.
-bool is_reduced_protocol(long long runs, long long max_nfes_override) {
-    return max_nfes_override != 0 || runs < 25;
+// Reduced protocol: the budget is overridden (max_nfes_override != 0), there
+// are fewer than 25 runs, or a population size is overridden.
+bool is_reduced_protocol(long long runs, long long max_nfes_override, bool population_override) {
+    return max_nfes_override != 0 || runs < 25 || population_override;
 }
 
 std::optional<bool> reduced_protocol_from_environment(const std::filesystem::path& environment_json) {
@@ -356,7 +356,10 @@ std::optional<bool> reduced_protocol_from_environment(const std::filesystem::pat
     if (!runs || !max_nfes_override) {
         return std::nullopt;
     }
-    return is_reduced_protocol(*runs, *max_nfes_override);
+    // An unset override is written as [] (no number), so only a set one matches.
+    const bool population_override =
+        number_field("np_init").has_value() || number_field("min_pop_size").has_value();
+    return is_reduced_protocol(*runs, *max_nfes_override, population_override);
 }
 
 RunVerification classify_run(const std::vector<SummaryRow>& generated,

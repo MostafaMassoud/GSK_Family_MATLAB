@@ -93,6 +93,11 @@ expect_rc("gsk_run --max-evaluations -7 rejected" 2 "${W}"
           "${GSK_RUN}" ${cli} --max-evaluations -7 --dry-run)
 expect_rc("gsk_run --config + --runs 0 rejected" 1 "${W}"
           "${GSK_RUN}" --config "${PROJECT_ROOT}/configs/smoke.yml" --root "${PROJECT_ROOT}" --runs 0 --dry-run)
+expect_rc("gsk_run --np-init 11 rejected" 2 "${W}" "${GSK_RUN}" ${cli} --np-init 11 --dry-run)
+expect_output("--np-init message names the flag" "--np-init must be 0")
+expect_rc("gsk_run --np-init abc rejected" 2 "${W}" "${GSK_RUN}" ${cli} --np-init abc --dry-run)
+expect_rc("gsk_run --min-pop-size 10 rejected" 2 "${W}" "${GSK_RUN}" ${cli} --min-pop-size 10 --dry-run)
+expect_output("--min-pop-size message names the flag" "--min-pop-size must be 0")
 
 # --- gsk_run: dry-run command construction ---------------------------------
 expect_rc("gsk_run dry-run with an apostrophe in the output path" 0 "${W}"
@@ -102,6 +107,10 @@ expect_rc("gsk_run multi-optimizer dry-run from another directory" 0 "${W}/elsew
           "${GSK_RUN}" --config "${W}/multi.yml" --root "${W}" --dry-run)
 expect_output("relative output_root resolves under --root" "${W}/multi/gsk/cec2017")
 expect_output("dry-run lists every optimizer" "${W}/multi/agsk/cec2017")
+expect_rc("gsk_run dry-run with population overrides" 0 "${W}"
+          "${GSK_RUN}" ${cli} --np-init 100 --min-pop-size 20 --dry-run)
+expect_output("--np-init reaches run_experiment" ",'np_init',100")
+expect_output("--min-pop-size reaches run_experiment" ",'min_pop_size',20")
 
 # --- gsk_run: verdict -> exit code (needs std::system -> cmd.exe) -----------
 if(CMAKE_HOST_WIN32)

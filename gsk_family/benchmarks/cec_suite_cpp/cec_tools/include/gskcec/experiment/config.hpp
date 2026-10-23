@@ -26,6 +26,12 @@ struct ExperimentConfig {
     std::string seed_policy = "reference";   ///< seed_policy passed to MATLAB run_experiment.
     std::string rand_generator = "threefry"; ///< rand_generator passed to MATLAB run_experiment.
     long long max_evaluations = 0; ///< 0 = suite default budget.
+    /// Initial population size for every optimizer (run_experiment 'np_init');
+    /// 0 = each optimizer's default (100; 5*D for dt-gsk), else >= 12.
+    int np_init = 0;
+    /// Final population size of agsk, apgsk, fdb-agsk and dt-gsk
+    /// (run_experiment 'min_pop_size'); 0 = each one's default, else >= 11.
+    int min_pop_size = 0;
     std::string output_root;       ///< Empty = chosen by the caller; relative = under --root.
     std::string reference_root;    ///< Empty = benchmarks/cec_reference_results; relative = under --root.
     bool overwrite = false;
@@ -46,6 +52,10 @@ ExperimentConfig load_experiment_config(const std::filesystem::path& path);
 bool is_valid_seed_policy(const std::string& value);
 /// True for threefry, twister, seed or state.
 bool is_valid_rand_generator(const std::string& value);
+/// True for 0 (default) or an np_init the whole family accepts (>= 12).
+bool is_valid_np_init(long long value);
+/// True for 0 (default) or a min_pop_size the whole family accepts (>= 11).
+bool is_valid_min_pop_size(long long value);
 
 /// Strict base-seed parser for the config file and `gsk_run --seed`. The
 /// whole token must be a decimal integer in [0, 2^53] with no sign or

@@ -8,7 +8,7 @@
 # configs\smoke.yml. -Full runs smoke, all_cec2017, all_cec2011 and
 # agsk_cec2020 unless -Configs is given. -SkipBuild and -SkipTests skip those
 # steps. -DryRun, -Overwrite, -NoVerify, -Matlab, -Output, -Reference,
-# -SeedPolicy and -RandGenerator are passed to gsk_run.
+# -SeedPolicy, -RandGenerator, -NpInit and -MinPopSize are passed to gsk_run.
 # Stops with an error if gsk_run.exe or a config is missing, or at the first
 # config whose gsk_run fails. The cmake and ctest exit codes are not checked.
 param(
@@ -29,7 +29,11 @@ param(
     # reference + threefry when a config omits them). Set a value only to
     # override every config.
     [string]$SeedPolicy = "",
-    [string]$RandGenerator = ""
+    [string]$RandGenerator = "",
+    # Empty = use each config's np_init / min_pop_size (0 = optimizer defaults).
+    # Set a value (for example -NpInit 100) only to override every config.
+    [string]$NpInit = "",
+    [string]$MinPopSize = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -74,6 +78,8 @@ try {
         if ($Reference -ne "") { $args += @("--reference", $Reference) }
         if ($SeedPolicy -ne "") { $args += @("--seed-policy", $SeedPolicy) }
         if ($RandGenerator -ne "") { $args += @("--rand-generator", $RandGenerator) }
+        if ($NpInit -ne "") { $args += @("--np-init", $NpInit) }
+        if ($MinPopSize -ne "") { $args += @("--min-pop-size", $MinPopSize) }
 
         Write-Host "run_all: $runner $($args -join ' ')"
         & $runner @args

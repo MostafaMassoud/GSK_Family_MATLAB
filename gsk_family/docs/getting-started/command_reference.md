@@ -313,8 +313,8 @@ CLI flags, or the MATLAB runner.
 | Base seed | `seed: 20240620` | `--seed S` | `'base_seed',S` | integer in `[0, 2^53]` (negative or non-integer values are rejected); per-run seeds also depend on seed policy |
 | Seed policy | `seed_policy: reference` | `--seed-policy reference` | `'seed_policy','reference'` | `gsk_run` default is `reference`; direct `run_experiment` default is `unified`; DT-GSK always gets the unified schedule ([3.7](#37-dt-gsk)) |
 | RNG family | `rand_generator: threefry` | `--rand-generator threefry` | `'rand_generator','threefry'` | overridden under `reference`: AGSK/APGSK/FDB-AGSK/eGSK/ATMALS-GSK use legacy `seed`; GSK uses `twister`. Under `unified`, MATLAB uses `threefry` when supported and falls back to `twister`. DT-GSK always uses `threefry` |
-| Initial population | — | — | `'np_init',N` (`[]`=default) | MATLAB runner and `run_all_cec*.m` CONFIG only; integer `>= 12`, same NP for every optimizer ([population size](#population-size)) |
-| Final population | — | — | `'min_pop_size',M` (`[]`=default) | MATLAB runner and `run_all_cec*.m` CONFIG only; integer `>= 11`; AGSK/APGSK/FDB-AGSK/DT-GSK (GSK/eGSK/ATMALS-GSK ignore it) ([population size](#population-size)) |
+| Initial population | `np_init: N` (`0`=default) | `--np-init N` | `'np_init',N` (`[]`=default) | also `np_init` in `run_all_cec*.m` CONFIG and `run_all.ps1 -NpInit N`; integer `>= 12`, same NP for every optimizer ([population size](#population-size)) |
+| Final population | `min_pop_size: M` (`0`=default) | `--min-pop-size M` | `'min_pop_size',M` (`[]`=default) | also `min_pop_size` in `run_all_cec*.m` CONFIG and `run_all.ps1 -MinPopSize M`; integer `>= 11`; AGSK/APGSK/FDB-AGSK/DT-GSK (GSK/eGSK/ATMALS-GSK ignore it) ([population size](#population-size)) |
 
 `gsk_run` and shipped `configs/*.yml` use `seed_policy='reference'` for
 published-table reproduction. The root `run_all_cec*.m` launchers use
@@ -377,7 +377,13 @@ exceed their initial NP) and DT-GSK (its `n_min`: 12, or 25 for `D >= 50`; its
 population and ignore it, so one launcher value serves the whole family. `M`
 is an integer `>= 11` (the AGSK/APGSK/FDB-AGSK senior partition needs it), and a
 value other than an optimizer's default is a variant, handled like `np_init`.
-Population sizes are not config keys or `gsk_run` flags. To change any other variant parameter —
+Every CEC runner takes both: the config keys `np_init` / `min_pop_size`
+(`0` = default), the `gsk_run` flags `--np-init` / `--min-pop-size`, and
+`scripts/run_all.ps1 -NpInit` / `-MinPopSize` (override every config). A
+nonzero value makes `gsk_run`'s automatic verification, and
+`gsk_validate --verify` (which reads `np_init`/`min_pop_size` from
+`environment.json`), a reduced protocol: the comparison with the published
+tables is informational. To change any other variant parameter —
 `kf`, `kr`, `k`, `p`, `fdb_case`, `protocol`, `use_fmincon`,
 pools, ... — **or to set a custom single seed**, use the **lower-level MATLAB
 path** shown in each algorithm's "(A) … lower-level snippet".

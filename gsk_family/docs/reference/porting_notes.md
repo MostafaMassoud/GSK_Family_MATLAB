@@ -442,7 +442,7 @@ All phases complete and verified on 2026-06-13:
 - MATLAB smoke suite (`run_matlab_smoke_tests`) green: common helpers, all
   six optimizers, the runner, and the bridge cross-check. DT-GSK
   (`test_dt_gsk_smoke.m`) and the runner resume and fair-start tests were
-  added later, then the alias test (`test_algorithm_aliases.m`); the suite now has 14 tests.
+  added later, then the alias test (`test_algorithm_aliases.m`) and the comparison-tools test (`test_comparison_tools.m`); the suite now has 15 tests.
 - Language-contract checks (no source files in other languages, no
   `cec2013.cpp`, no `.m`/`.R`/`.c` under `cec_suite_cpp`, no top-level
   include/tests/matlab) return nothing.

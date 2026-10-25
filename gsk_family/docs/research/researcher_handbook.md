@@ -559,6 +559,13 @@ Before reporting results:
     (population sizes, parameters, `algorithms.ini` aliases): the
     `settings_<suite>.tex` table of `compare_algorithms` lists them, and each
     tree's `environment.json` records `base_optimizer` and `alias_settings`.
+12. Report the statistics a reviewer expects for a multi-algorithm claim:
+    Friedman (with Iman-Davenport), the post-hoc test against the proposed
+    algorithm with a multiple-test correction (Holm or Finner,
+    `posthoc_<suite>.csv`), the CD diagram, and effect sizes next to the
+    per-function signs. Say whether the signs use raw or Holm-adjusted
+    p-values, and include the CEC complexity table (`cec_complexity`) for
+    CEC2017.
 
 ## 19. Literature and provenance
 

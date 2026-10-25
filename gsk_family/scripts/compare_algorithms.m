@@ -23,6 +23,10 @@ function report = compare_algorithms(varargin)
 %   functions, dimensions   restrict the comparison. Default: all found.
 %   alpha         significance level. Default 0.05.
 %   tex_digits    digits after the decimal point in the LaTeX tables. Default 2.
+%   correction    'none' (default): the +/=/- signs in the tables and the
+%                 counts use the raw rank-sum p-values; 'holm': they use the
+%                 Holm-adjusted ones (over the functions of a group, per
+%                 competitor). ranksum_<suite>.csv always has both.
 %   results_root  Default <project_root>/results/_run_all.
 %   output_dir    Default <project_root>/results/analysis/compare/<suite>.
 %   project_root  Default pwd.
@@ -38,11 +42,24 @@ function report = compare_algorithms(varargin)
 %                              best mean in bold in the LaTeX table
 %   ranksum_<suite>.csv        per function: two-sided Wilcoxon rank-sum test
 %                              of the proposed optimizer's runs against each
-%                              competitor's runs, p-value and sign
+%                              competitor's runs: p-value, Holm-adjusted
+%                              p-value (over the group's functions), both
+%                              signs, and the effect size: Vargha-Delaney
+%                              A12 (> 0.5 favours the proposed optimizer),
+%                              Cliff's delta = 2*A12 - 1 and its magnitude
+%                              (negligible / small / medium / large)
 %   wilcoxon_<suite>.csv       per group: Wilcoxon signed-rank test over the
 %                              function means (R+, R-, p), and the +/=/- counts
 %   friedman_<suite>.csv       per group and overall: Friedman mean ranks,
-%                              chi-square and p-value
+%                              chi-square and p-value, and the Iman-Davenport
+%                              F statistic, its degrees of freedom and p-value
+%   posthoc_<suite>.csv        per group and overall: Friedman post-hoc test
+%                              of each competitor against the proposed
+%                              optimizer (z, unadjusted p, and Bonferroni-Dunn,
+%                              Holm, Hochberg and Finner adjusted p-values)
+%   nemenyi_<suite>.csv        per group and overall: the Nemenyi critical
+%                              difference CD at alpha (used by the CD diagram
+%                              of plot_statistics)
 %   settings_<suite>.csv/.tex  per optimizer: the code it ran (the base of
 %                              an algorithms.ini alias), its initial and
 %                              final population sizes and any other changed
@@ -61,7 +78,10 @@ function report = compare_algorithms(varargin)
 % tie-corrected normal approximations (with continuity correction for the
 % rank-sum test only, as ranksum does), and exact p-values for small samples
 % (rank-sum when the smaller sample has < 10 runs and both have < 20
-% together; signed-rank for <= 15 nonzero differences).
+% together; signed-rank for <= 15 nonzero differences). Post-hoc and
+% adjusted p-values follow Derrac et al. (2011) and Garcia et al. (2010,
+% Inf. Sci. 180:2044-2064); the Nemenyi q_alpha is computed from the
+% studentized range distribution, as tabulated by Demsar (2006, JMLR 7:1-30).
 
 p = inputParser;
 p.addParameter('suite', '', @(x) ischar(x) || isstring(x));
@@ -72,6 +92,7 @@ p.addParameter('functions', [], @isnumeric);
 p.addParameter('dimensions', [], @isnumeric);
 p.addParameter('alpha', 0.05, @(x) isnumeric(x) && isscalar(x) && x > 0 && x < 1);
 p.addParameter('tex_digits', 2, @(x) isnumeric(x) && isscalar(x) && x >= 0);
+p.addParameter('correction', 'none', @(x) any(strcmpi(char(x), {'none', 'holm'})));
 p.addParameter('results_root', '', @(x) ischar(x) || isstring(x));
 p.addParameter('output_dir', '', @(x) ischar(x) || isstring(x));
 p.addParameter('project_root', pwd, @(x) ischar(x) || isstring(x));
@@ -84,6 +105,7 @@ if isempty(a.results_root); a.results_root = fullfile(a.project_root, 'results',
 a.results_root = char(a.results_root);
 if isempty(a.output_dir); a.output_dir = fullfile(a.project_root, 'results', 'analysis', 'compare', a.suite); end
 a.output_dir = char(a.output_dir);
+a.correction = lower(char(a.correction));
 
 opts = resolve_optimizers(a.results_root, a.suite, a.optimizers);
 assert(numel(opts) >= 2, 'compare_algorithms:args', 'need at least two optimizers (found %d)', numel(opts));
@@ -124,12 +146,19 @@ fst = fopen(fullfile(a.output_dir, sprintf('statistics_%s.csv', a.suite)), 'w');
 frs = fopen(fullfile(a.output_dir, sprintf('ranksum_%s.csv', a.suite)), 'w');
 fwx = fopen(fullfile(a.output_dir, sprintf('wilcoxon_%s.csv', a.suite)), 'w');
 ffr = fopen(fullfile(a.output_dir, sprintf('friedman_%s.csv', a.suite)), 'w');
-closer = onCleanup(@() close_open([fst frs fwx ffr]));
+fph = fopen(fullfile(a.output_dir, sprintf('posthoc_%s.csv', a.suite)), 'w');
+fcd = fopen(fullfile(a.output_dir, sprintf('nemenyi_%s.csv', a.suite)), 'w');
+closer = onCleanup(@() close_open([fst frs fwx ffr fph fcd]));
 fprintf(fst, 'dimension,function,optimizer,runs,best,median,mean,worst,sd\n');
-fprintf(frs, 'dimension,function,proposed,competitor,p_value,sign\n');
+fprintf(frs, ['dimension,function,proposed,competitor,p_value,p_holm,sign,sign_holm,' ...
+              'a12,cliffs_delta,effect\n']);
 fprintf(fwx, ['dimension,proposed,competitor,n_functions,r_plus,r_minus,p_value,decision,' ...
               'wins,ties,losses\n']);
-fprintf(ffr, 'dimension,optimizer,mean_rank,position,n_functions,chi2,df,p_value\n');
+fprintf(ffr, ['dimension,optimizer,mean_rank,position,n_functions,chi2,df,p_value,' ...
+              'iman_davenport_f,id_df1,id_df2,id_p_value\n']);
+fprintf(fph, ['dimension,control,competitor,mean_rank_control,mean_rank_competitor,z,' ...
+              'p_unadjusted,p_bonferroni_dunn,p_holm,p_hochberg,p_finner,significant_holm\n']);
+fprintf(fcd, 'dimension,k,n_functions,alpha,q_alpha,critical_difference\n');
 
 settings_rows = report.settings;
 report = struct('optimizers', {opts}, 'proposed', prop, 'groups', struct([]), 'skipped', {{}});
@@ -153,8 +182,9 @@ for g = gdims
     if native; tag = 'all'; dtext = 'native'; else; tag = sprintf('D%d', g); dtext = sprintf('%d', g); end
 
     S = repmat(struct('best', 0, 'median', 0, 'mean', 0, 'worst', 0, 'sd', 0, 'n', 0), nf, numel(opts));
-    sgn = repmat('=', nf, numel(opts));
     pval = nan(nf, numel(opts));
+    is_lower = false(nf, numel(opts));
+    a12 = nan(nf, numel(opts));
     for c = 1:nf
         key = sprintf('%d|%d', gc(c, 1), gc(c, 2));
         for i = 1:numel(opts)
@@ -164,14 +194,24 @@ for g = gdims
         end
         x = runs{ip}(key);
         for i = comp
-            [pv, lower_x] = ranksum_test(x, runs{i}(key));
-            pval(c, i) = pv;
-            if pv < a.alpha
-                if lower_x; sgn(c, i) = '+'; else; sgn(c, i) = '-'; end
-            end
-            fprintf(frs, '%s,%d,%s,%s,%.6g,%s\n', dtext, gc(c, 1), prop, opts{i}, pv, sgn(c, i));
+            [pval(c, i), is_lower(c, i)] = ranksum_test(x, runs{i}(key));
+            a12(c, i) = vargha_delaney_a12(x, runs{i}(key));
         end
     end
+    % Holm correction over the functions of this group, per competitor. The
+    % table signs use the raw or the Holm-adjusted p-value ('correction').
+    p_holm = nan(nf, numel(opts));
+    for i = comp; p_holm(:, i) = holm_adjust(pval(:, i)); end
+    sgn = sign_matrix(pval, is_lower, a.alpha);
+    sgn_holm = sign_matrix(p_holm, is_lower, a.alpha);
+    for c = 1:nf
+        for i = comp
+            d = 2 * a12(c, i) - 1;
+            fprintf(frs, '%s,%d,%s,%s,%.6g,%.6g,%s,%s,%.4f,%.4f,%s\n', dtext, gc(c, 1), prop, opts{i}, ...
+                    pval(c, i), p_holm(c, i), sgn(c, i), sgn_holm(c, i), a12(c, i), d, effect_label(d));
+        end
+    end
+    if strcmp(a.correction, 'holm'); sgn = sgn_holm; end
     means = reshape([S.mean], nf, numel(opts));
     all_means = [all_means; means]; %#ok<AGROW>
 
@@ -198,6 +238,9 @@ for g = gdims
     [mr, chi2, df, pv] = friedman_test(means);
     write_friedman(ffr, dtext, opts, mr, nf, chi2, df, pv);
     print_friedman(labels, mr, chi2, df, pv);
+    ph = posthoc_vs_control(mr, ip, nf, a.alpha);
+    write_posthoc(fph, fcd, dtext, opts, ip, mr, nf, ph, a.alpha);
+    print_posthoc(labels, ip, comp, ph);
 
     write_wide_table(fullfile(a.output_dir, sprintf('table_%s_%s.csv', a.suite, tag)), ...
                      gc, opts, ip, S, sgn, pval);
@@ -207,14 +250,22 @@ for g = gdims
     report.groups(end).functions = gc(:, 1)';
     report.groups(end).wilcoxon = wx;
     report.groups(end).friedman = struct('mean_rank', mr, 'chi2', chi2, 'df', df, 'p', pv);
+    report.groups(end).posthoc = ph;
+    report.groups(end).a12 = a12;
+    report.groups(end).p_holm = p_holm;
 end
 
 if numel(report.groups) > 1
+    nall = size(all_means, 1);
     [mr, chi2, df, pv] = friedman_test(all_means);
-    write_friedman(ffr, 'overall', opts, mr, size(all_means, 1), chi2, df, pv);
-    fprintf('\n== %s overall: %d (function, dimension) cell(s) ==\n', suite_title(a.suite), size(all_means, 1));
+    write_friedman(ffr, 'overall', opts, mr, nall, chi2, df, pv);
+    fprintf('\n== %s overall: %d (function, dimension) cell(s) ==\n', suite_title(a.suite), nall);
     print_friedman(labels, mr, chi2, df, pv);
+    ph = posthoc_vs_control(mr, ip, nall, a.alpha);
+    write_posthoc(fph, fcd, 'overall', opts, ip, mr, nall, ph, a.alpha);
+    print_posthoc(labels, ip, comp, ph);
     report.overall_friedman = struct('mean_rank', mr, 'chi2', chi2, 'df', df, 'p', pv);
+    report.overall_posthoc = ph;
 end
 for k = 1:numel(report.skipped)
     fprintf('compare_algorithms: skipped %s\n', report.skipped{k});
@@ -355,11 +406,125 @@ end
 
 % ---- output -----------------------------------------------------------------
 
+function a = vargha_delaney_a12(x, y)
+% Vargha-Delaney A12 = P(X < Y) + 0.5 P(X = Y), X the proposed optimizer's
+% runs. Lower values are better, so A12 > 0.5 favours the proposed one.
+x = x(:); y = y(:)';
+a = (nnz(x < y) + 0.5 * nnz(x == y)) / (numel(x) * numel(y));
+end
+
+function s = effect_label(d)
+% Magnitude of Cliff's delta d = 2*A12 - 1 (Romano et al. 2006 thresholds,
+% the same as A12 0.56 / 0.64 / 0.71).
+ad = abs(d);
+if ad < 0.147;     s = 'negligible';
+elseif ad < 0.33;  s = 'small';
+elseif ad < 0.474; s = 'medium';
+else;              s = 'large';
+end
+end
+
+function q = holm_adjust(p)
+% Holm step-down adjusted p-values (NaN entries kept as NaN).
+q = nan(size(p));
+ok = find(~isnan(p));
+m = numel(ok);
+if m == 0; return; end
+[ps, o] = sort(p(ok));
+adj = min(1, cummax((m - (1:m)' + 1) .* ps(:)));
+q(ok(o)) = adj;
+end
+
+function sgn = sign_matrix(p, lower, alpha)
+% '+' significant and the proposed optimizer lower, '-' significant and
+% higher, '=' otherwise (NaN p, i.e. the proposed column, gives '=').
+sgn = repmat('=', size(p));
+sgn(p < alpha & lower) = '+';
+sgn(p < alpha & ~lower) = '-';
+end
+
+function ph = posthoc_vs_control(mr, ic, n, alpha)
+% Friedman post-hoc tests of every optimizer against the control (the
+% proposed one): z = (R_i - R_c) / sqrt(k(k+1)/(6n)), two-sided normal p,
+% adjusted by Bonferroni-Dunn, Holm, Hochberg and Finner (Derrac et al.
+% 2011; Garcia et al. 2010). Also the Nemenyi critical difference
+% CD = q_alpha * sqrt(k(k+1)/(6n)) for all pairs (Demsar 2006).
+k = numel(mr);
+se = sqrt(k * (k + 1) / (6 * n));
+others = setdiff(1:k, ic, 'stable');
+m = numel(others);
+z = (mr(others) - mr(ic)) / se;
+p = erfc(abs(z) / sqrt(2));
+[ps, o] = sort(p(:));
+j = (1:m)';
+holm = min(1, cummax((m - j + 1) .* ps));
+hoch = flipud(cummin(flipud(min(1, (m - j + 1) .* ps))));
+finner = min(1, cummax(1 - (1 - ps) .^ (m ./ j)));
+back = zeros(m, 1); back(o) = 1:m;
+ph = struct('competitor', num2cell(others(:)), 'z', num2cell(z(:)), 'p', num2cell(p(:)), ...
+            'p_bonferroni_dunn', num2cell(min(1, m * p(:))), 'p_holm', num2cell(holm(back)), ...
+            'p_hochberg', num2cell(hoch(back)), 'p_finner', num2cell(finner(back)));
+q = nemenyi_q(k, alpha);
+[ph.q_alpha] = deal(q);
+[ph.cd] = deal(q * se);
+end
+
+function q = nemenyi_q(k, alpha)
+% Critical value q_alpha of the Nemenyi test: the 1-alpha quantile of the
+% studentized range of k normal values with infinite degrees of freedom,
+% divided by sqrt(2) (Demsar 2006, Table 5; k = 2, alpha 0.05 -> 1.960).
+% P(range <= r) = k * integral phi(z) (Phi(z + r) - Phi(z))^(k - 1) dz.
+Phi = @(x) 0.5 * erfc(-x / sqrt(2));
+phi = @(x) exp(-x .^ 2 / 2) / sqrt(2 * pi);
+cdf = @(r) k * integral(@(z) phi(z) .* (Phi(z + r) - Phi(z)) .^ (k - 1), -Inf, Inf);
+if k < 2; q = NaN; return; end
+r = fzero(@(r) cdf(r) - (1 - alpha), [0.01 20]);
+q = r / sqrt(2);
+end
+
+function write_posthoc(fph, fcd, dtext, opts, ic, mr, n, ph, alpha)
+for t = 1:numel(ph)
+    i = ph(t).competitor;
+    fprintf(fph, '%s,%s,%s,%.4f,%.4f,%.4f,%.6g,%.6g,%.6g,%.6g,%.6g,%d\n', dtext, opts{ic}, opts{i}, ...
+            mr(ic), mr(i), ph(t).z, ph(t).p, ph(t).p_bonferroni_dunn, ph(t).p_holm, ...
+            ph(t).p_hochberg, ph(t).p_finner, ph(t).p_holm < alpha);
+end
+if ~isempty(ph)
+    fprintf(fcd, '%s,%d,%d,%g,%.4f,%.4f\n', dtext, numel(mr), n, alpha, ph(1).q_alpha, ph(1).cd);
+end
+end
+
+function print_posthoc(labels, ic, comp, ph)
+if isempty(ph); return; end
+fprintf('   Post-hoc vs %s (Holm-adjusted p):', labels{ic});
+for t = 1:numel(ph)
+    fprintf('  %s %.3g', labels{comp(t)}, ph(t).p_holm);
+end
+fprintf('\n   Nemenyi critical difference CD = %.3f\n', ph(1).cd);
+end
+
+function [F, df1, df2, p] = iman_davenport(chi2, k, n)
+% Iman-Davenport correction of the Friedman statistic, F-distributed with
+% (k-1, (k-1)(n-1)) degrees of freedom; upper tail through betainc.
+df1 = k - 1; df2 = (k - 1) * (n - 1);
+den = n * (k - 1) - chi2;
+if df2 <= 0
+    F = NaN; p = NaN;
+elseif den <= 0
+    F = Inf; p = 0;
+else
+    F = (n - 1) * chi2 / den;
+    p = betainc(df2 / (df2 + df1 * F), df2 / 2, df1 / 2);
+end
+end
+
 function write_friedman(fid, dtext, opts, mr, nf, chi2, df, pv)
 [~, order] = sort(mr);
 pos = zeros(size(mr)); pos(order) = 1:numel(mr);
+[F, d1, d2, pid] = iman_davenport(chi2, numel(mr), nf);
 for i = 1:numel(opts)
-    fprintf(fid, '%s,%s,%.4f,%d,%d,%.6g,%d,%.6g\n', dtext, opts{i}, mr(i), pos(i), nf, chi2, df, pv);
+    fprintf(fid, '%s,%s,%.4f,%d,%d,%.6g,%d,%.6g,%.6g,%d,%d,%.6g\n', dtext, opts{i}, mr(i), pos(i), ...
+            nf, chi2, df, pv, F, d1, d2, pid);
 end
 end
 

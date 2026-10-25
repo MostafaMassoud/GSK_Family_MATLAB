@@ -6,6 +6,23 @@ Keep a Changelog; this project uses semantic versioning.
 ## [Unreleased]
 
 ### Added
+- `compare_algorithms`: Friedman post-hoc tests against the proposed
+  optimizer (Bonferroni-Dunn, Holm, Hochberg, Finner; `posthoc_<suite>.csv`),
+  the Iman-Davenport test (in `friedman_<suite>.csv`), the Nemenyi critical
+  difference (`nemenyi_<suite>.csv`), Holm-adjusted rank-sum p-values and
+  effect sizes (Vargha-Delaney A12, Cliff's delta) in `ranksum_<suite>.csv`,
+  and `'correction','holm'` for the table signs. Checked against Demsar's
+  Nemenyi table (within 0.001), `fcdf`, loop implementations of the
+  adjustments, and the rank-sum identity for A12.
+- `scripts/plot_statistics.m`: CD diagrams, box plots with every run shown
+  (violins on request, at least 20 runs), Friedman rank bar and radar charts.
+- `plot_convergence`: `'band','iqr'` (25-75% band of all runs) and
+  `'curve','median'`.
+- `scripts/cec_complexity.m`: the CEC2017 complexity table (T0, T1, T2_hat,
+  (T2_hat - T1)/T0) as CSV and LaTeX.
+- `run_compare_algorithms.m`: `band`, `correction`, `statistics_figures` and
+  `complexity` CONFIG entries.
+- New test `test_comparison_tools.m` (15 MATLAB tests).
 - Algorithm aliases: `algorithms.ini` (repository root) defines names for an
   optimizer plus its own settings (`[gsk-np50]`, `base = gsk`,
   `np_init = 50`). The launchers, `run_experiment` and `run_compare_algorithms`

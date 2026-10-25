@@ -598,7 +598,9 @@ set its CONFIG block, and press <strong>Run</strong>:</p>
 <pre class="matlab"><code>suites     = {&#39;cec2017&#39;, &#39;cec2011&#39;};
 optimizers = {&#39;my-gsk&#39;, &#39;gsk&#39;};       % first = first in legends and tables
 labels     = {&#39;Proposed&#39;, &#39;GSK&#39;};     % names shown in the figures and tables
-proposed   = &#39;my-gsk&#39;;                % tested against every other algorithm</code></pre>
+proposed   = &#39;my-gsk&#39;;                % tested against every other algorithm
+band       = &#39;iqr&#39;;                   % optional: shaded 25-75% band of all runs under each curve
+complexity = false;                   % true = also time the CEC complexity table (extra runs)</code></pre>
 <p>It reads the finished runs and writes, for each suite:</p>
 <table>
 <thead>
@@ -645,6 +647,25 @@ overall</td>
 <td><code>settings_&lt;suite&gt;.tex</code> and <code>.csv</code></td>
 <td>each name's code, starting and final population size and changed
 settings ("original" = published value)</td>
+</tr>
+<tr>
+<td>Post-hoc and effect sizes</td>
+<td><code>posthoc_&lt;suite&gt;.csv</code>,
+<code>ranksum_&lt;suite&gt;.csv</code></td>
+<td>Holm/Hochberg/Finner-corrected Friedman post-hoc tests; A12 and
+Cliff's delta per function</td>
+</tr>
+<tr>
+<td>CD diagram, box plots, rank charts</td>
+<td><code>results\analysis\statistics\&lt;suite&gt;\</code></td>
+<td><code>cd_*</code>, <code>box_*</code> (every run as a dot),
+<code>ranks_*</code></td>
+</tr>
+<tr>
+<td>Complexity table (optional)</td>
+<td><code>results\analysis\complexity\cec2017\</code></td>
+<td>T0, T1, T̂2, (T̂2 − T1)/T0; set <code>complexity = true</code> (it
+times extra runs)</td>
 </tr>
 </tbody>
 </table>
@@ -695,6 +716,16 @@ variant's parameter values.</li>
 <code>\input{settings_cec2017.tex}</code> gives a ready table of every
 compared name, the code it ran, its population sizes and any changed
 setting.</li>
+<li><strong>Statistical evidence reviewers ask for:</strong> the
+Friedman ranks with the Iman–Davenport test, the post-hoc table with
+Holm-adjusted p-values (<code>posthoc_&lt;suite&gt;.csv</code>), the CD
+diagram (<code>cd_&lt;suite&gt;_overall.pdf</code>), and effect sizes
+next to the rank-sum signs (<code>ranksum_&lt;suite&gt;.csv</code>).
+With 29 functions, consider Holm-adjusted signs
+(<code>correction = 'holm'</code>).</li>
+<li><strong>Complexity:</strong> <code>complexity_cec2017.tex</code> is
+the CEC complexity table (T0, T1, T̂2, (T̂2 − T1)/T0); measure it on an
+otherwise idle computer.</li>
 <li><strong>Environment:</strong> <code>summary\environment.json</code>
 in each result folder records the MATLAB version, seeds and settings of
 the run.</li>

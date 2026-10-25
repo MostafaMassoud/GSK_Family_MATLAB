@@ -31,7 +31,7 @@ build\gsk_run.exe --config configs\smoke.yml --root .
 `--benchmarks` should list all five suites with their functions and dimensions;
 `--references` should load the imported tables (currently 165 files / 1411 rows)
 and confirm the reference data is reachable. `ctest` should report 13 suites and
-the MATLAB smoke runner 14 tests. Use the per-suite smoke validators to confirm each port still matches
+the MATLAB smoke runner 15 tests. Use the per-suite smoke validators to confirm each port still matches
 its ground truth:
 
 ```powershell

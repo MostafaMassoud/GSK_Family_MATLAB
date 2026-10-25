@@ -18,12 +18,14 @@
 | 1 | Add your variant as a new folder (skip if you only compare the seven) | `src/optimizers/<name>/` |
 | 2 | Run every algorithm on the same suite, functions, dimensions and runs | `results/_run_all/<name>/<suite>/` |
 | 3 | `plot_convergence` | one figure per function with every algorithm's curve |
-| 4 | `compare_algorithms` | Mean/SD tables (CSV and LaTeX), Wilcoxon and Friedman tests |
+| 4 | `compare_algorithms` | Mean/SD tables (CSV and LaTeX), Wilcoxon, Friedman, post-hoc tests and effect sizes |
+| 5 | `plot_statistics` | CD diagram, box plots and rank charts |
+| (6) | `cec_complexity` | the CEC algorithm complexity table (runs the algorithms) |
 
-Steps 3 and 4 together are one click: open `run_compare_algorithms.m` in the
+Steps 3 to 5 together are one click: open `run_compare_algorithms.m` in the
 repository root, set its CONFIG block (suites, algorithms, proposed
-algorithm) and press Run. The sections below show the two commands it calls,
-for use in your own scripts. The [New Variant Guide](../../../NEW_VARIANT_GUIDE.md)
+algorithm) and press Run; set `complexity = true` there for step 6. The
+sections below show the commands it calls, for use in your own scripts. The [New Variant Guide](../../../NEW_VARIANT_GUIDE.md)
 walks through the whole path for a new variant.
 
 All commands below are typed in MATLAB, with the current folder set to
@@ -164,7 +166,8 @@ Useful options (all optional; see `help plot_convergence`):
 | `'optimizers'` | which algorithms, in legend order; default: every algorithm with results for the suite |
 | `'labels'` | legend names; default GSK, AGSK, APGSK, FDB-AGSK, ATMALS-GSK, eGSK, DT-GSK, or the name in capitals |
 | `'functions'`, `'dimensions'` | plot only some, e.g. `'functions',[1 5 10]`, `'dimensions',50` |
-| `'curve'` | `'median_run'` (default): the full trace of each algorithm's median run. `'mean'`: the mean over all runs at the 14 CEC checkpoints |
+| `'curve'` | `'median_run'` (default): the full trace of each algorithm's median run. `'mean'` or `'median'`: the mean or median over all runs at the 14 CEC checkpoints |
+| `'band'` | `'iqr'`: a shaded band from the 25th to the 75th percentile of all runs at the checkpoints, under each curve (default `'none'`) |
 | `'yscale'` | `'auto'` (default), `'log'` or `'linear'` |
 | `'formats'` | default `{'png','pdf'}`; also `'eps'` and `'fig'` (editable MATLAB figure) |
 | `'overview'` | `false` to skip the panel figures |
@@ -201,9 +204,11 @@ the first in `optimizers`). Add more competitors to the list, for example
 | `table_<suite>_D<d>.tex` | LaTeX table: Mean (SD) of every algorithm per function, best mean in bold, each competitor marked +, = or −, and a +/=/− count row. Use it with `\input{table_cec2017_D10.tex}` |
 | `table_<suite>_D<d>.csv` | the same numbers for Excel, with every p-value |
 | `statistics_<suite>.csv` | Best, Median, Mean, Worst, SD and the run count of every algorithm on every function |
-| `ranksum_<suite>.csv` | per function: two-sided Wilcoxon rank-sum test over the 51 runs, proposed algorithm vs each competitor, p-value and sign |
+| `ranksum_<suite>.csv` | per function: two-sided Wilcoxon rank-sum test over the 51 runs, proposed algorithm vs each competitor: p-value, Holm-adjusted p-value, both signs, and the effect size (Vargha–Delaney A12, Cliff's delta, and negligible/small/medium/large) |
 | `wilcoxon_<suite>.csv` | per dimension: Wilcoxon signed-rank test over the function means: R+, R−, p-value, decision, and the +/=/− counts |
-| `friedman_<suite>.csv` | per dimension and overall: Friedman mean rank of every algorithm (1 = best), its position, chi-square and p-value |
+| `friedman_<suite>.csv` | per dimension and overall: Friedman mean rank of every algorithm (1 = best), its position, chi-square and p-value, and the Iman–Davenport F test |
+| `posthoc_<suite>.csv` | per dimension and overall: Friedman post-hoc test of every competitor against the proposed algorithm: z, unadjusted p, and Bonferroni–Dunn, Holm, Hochberg and Finner adjusted p-values |
+| `nemenyi_<suite>.csv` | per dimension and overall: the Nemenyi critical difference (CD) used by the CD diagram |
 | `settings_<suite>.csv` and `.tex` | per algorithm: the code it ran, its starting and final population size and any changed setting ("original" = published value); a ready parameter-settings table |
 
 For CEC2011 and CEC2013-LSGO the tag is `all` instead of `D<d>`: all problems
@@ -218,14 +223,68 @@ How to read the results (significance level `alpha = 0.05` by default):
   has the lower mean, **R−** the others. A small p-value with R+ > R− means
   the proposed algorithm is better over the whole suite.
 - **Friedman**: the lower the mean rank, the better. A small p-value means
-  the algorithms are not all equal.
+  the algorithms are not all equal. **Iman–Davenport** is a less
+  conservative version of the same test.
+- **Post-hoc** (after a significant Friedman test): an adjusted p-value below
+  0.05 means the proposed algorithm's mean rank differs significantly from
+  that competitor's. Holm is the usual choice; Finner and Hochberg are a little
+  more powerful, Bonferroni–Dunn the most conservative.
+- **Effect size**: A12 is the probability that a run of the proposed
+  algorithm beats a run of the competitor (0.5 = equal; above 0.5 favours the
+  proposed one). Cliff's delta = 2·A12 − 1. "Large" means |delta| ≥ 0.474.
+- **Multiple testing**: with 29 functions, a few raw "+" or "−" signs can
+  appear by chance. `ranksum_<suite>.csv` always holds the Holm-adjusted
+  p-values too; pass `'correction','holm'` to use them for the table signs.
 
 The tests need no toolbox. Their p-values equal those of MATLAB's Statistics
 and Machine Learning Toolbox (`ranksum`, `signrank`, `friedman`), including the
 exact small-sample p-values. Check which tests and which layout your target
 paper uses (for example, whether "+" is written from the proposed
 algorithm's side); the CSV files hold everything needed to rearrange the
-tables.
+tables. The post-hoc and adjusted p-values follow Derrac et al. (2011,
+Swarm Evol. Comput.) and García et al. (2010, Inf. Sci.); the Nemenyi critical
+values are computed from the studentized range distribution and match
+Demšar's (2006, JMLR) table.
+
+## Statistics figures: CD diagram, box plots, rank charts
+
+```matlab
+plot_statistics('suite','cec2017', 'optimizers',{'my-gsk','gsk','agsk'}, 'proposed','my-gsk');
+```
+
+The figures go to `results/analysis/statistics/<suite>/` (PNG and vector PDF):
+
+| File | Contents |
+|---|---|
+| `cd_<suite>_D<d>` and `cd_<suite>_overall` | critical difference diagram: every algorithm on its Friedman mean rank; a thick bar joins algorithms that are **not** significantly different (Nemenyi test) |
+| `box_<suite>_F<f>_D<d>` | box plot of the final values of all runs, one figure per function, every run shown as a dot; whiskers to the furthest runs within 1.5 IQR |
+| `box_<suite>_D<d>_overview` | the same for all functions of one dimension |
+| `ranks_<suite>_bars` | Friedman mean ranks per dimension and overall, with the values printed |
+| `ranks_<suite>_radar` | the same as a radar chart, when there are three or more dimensions |
+
+Violin plots are available with `'figures',{'violin'}`; with fewer than 20
+runs per algorithm they are drawn as box plots, because a density from so few
+runs is misleading. The y-axis is logarithmic only when the values span at
+least a decade. `plot_statistics` calls `compare_algorithms` with the same
+options, so the figures always match the tables.
+
+## Algorithm complexity (CEC protocol)
+
+The CEC2017 technical report asks for an algorithm complexity table, measured
+on function 18 with 200,000 evaluations:
+
+```matlab
+cec_complexity('suite','cec2017', 'optimizers',{'my-gsk','gsk'});
+```
+
+It measures T0 (a fixed test loop), T1 (200,000 evaluations of F18), and T̂2
+(the mean time of 5 complete runs of each algorithm with 200,000
+evaluations), for D = 10, 30, 50 and 100, and writes
+`results/analysis/complexity/cec2017/complexity_cec2017.tex` and `.csv` with
+T0, T1, T̂2 and (T̂2 − T1)/T0. It **runs** the algorithms (serially, in a
+temporary folder), so it takes from minutes to hours; keep the computer
+otherwise idle, because these are wall-clock times. For another suite, pass
+`'function'` with the function its technical report names.
 
 ## Original and changed settings (aliases)
 

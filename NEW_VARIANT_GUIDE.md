@@ -274,6 +274,8 @@ suites     = {'cec2017', 'cec2011'};
 optimizers = {'my-gsk', 'gsk'};       % first = first in legends and tables
 labels     = {'Proposed', 'GSK'};     % names shown in the figures and tables
 proposed   = 'my-gsk';                % tested against every other algorithm
+band       = 'iqr';                   % optional: shaded 25-75% band of all runs under each curve
+complexity = false;                   % true = also time the CEC complexity table (extra runs)
 ```
 
 It reads the finished runs and writes, for each suite:
@@ -286,6 +288,9 @@ It reads the finished runs and writes, for each suite:
 | Wilcoxon signed-rank | `wilcoxon_<suite>.csv` | R+, R−, p-value and decision per dimension |
 | Friedman ranks | `friedman_<suite>.csv` | mean rank of every algorithm (1 = best) per dimension and overall |
 | Settings table | `settings_<suite>.tex` and `.csv` | each name's code, starting and final population size and changed settings ("original" = published value) |
+| Post-hoc and effect sizes | `posthoc_<suite>.csv`, `ranksum_<suite>.csv` | Holm/Hochberg/Finner-corrected Friedman post-hoc tests; A12 and Cliff's delta per function |
+| CD diagram, box plots, rank charts | `results\analysis\statistics\<suite>\` | `cd_*`, `box_*` (every run as a dot), `ranks_*` |
+| Complexity table (optional) | `results\analysis\complexity\cec2017\` | T0, T1, T̂2, (T̂2 − T1)/T0; set `complexity = true` (it times extra runs) |
 
 **Reading the results** (two-sided tests, alpha = 0.05):
 
@@ -322,6 +327,13 @@ runs at the 14 CEC checkpoints.
 - **Parameter settings:** `\input{settings_cec2017.tex}` gives a ready table
   of every compared name, the code it ran, its population sizes and any
   changed setting.
+- **Statistical evidence reviewers ask for:** the Friedman ranks with the
+  Iman–Davenport test, the post-hoc table with Holm-adjusted p-values
+  (`posthoc_<suite>.csv`), the CD diagram (`cd_<suite>_overall.pdf`), and
+  effect sizes next to the rank-sum signs (`ranksum_<suite>.csv`). With 29
+  functions, consider Holm-adjusted signs (`correction = 'holm'`).
+- **Complexity:** `complexity_cec2017.tex` is the CEC complexity table
+  (T0, T1, T̂2, (T̂2 − T1)/T0); measure it on an otherwise idle computer.
 - **Environment:** `summary\environment.json` in each result folder records
   the MATLAB version, seeds and settings of the run.
 - **Keep** `results\_run_all\` until the paper is accepted: every number in

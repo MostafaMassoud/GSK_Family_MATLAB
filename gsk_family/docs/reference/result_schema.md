@@ -325,6 +325,36 @@ eGSK and ATMALS-GSK, which keep their population size), and `other_settings`
 (an alias's other settings, or `original`). The `.tex` file is the same table
 for a manuscript.
 
+## results/analysis/compare/<suite>/ statistics files
+
+Written by `scripts/compare_algorithms.m`. `<dimension>` is the dimension,
+`native` (CEC2011, CEC2013-LSGO) or `overall`.
+
+- `ranksum_<suite>.csv`: `dimension, function, proposed, competitor, p_value,
+  p_holm, sign, sign_holm, a12, cliffs_delta, effect`. `p_holm` is Holm-adjusted
+  over the functions of the dimension, per competitor; `sign`/`sign_holm` are
+  `+`, `=` or `-` from the proposed optimizer's side; `a12` is
+  P(proposed < competitor) + 0.5 P(equal); `cliffs_delta = 2*a12 - 1`;
+  `effect` is negligible (|delta| < 0.147), small (< 0.33), medium (< 0.474)
+  or large.
+- `friedman_<suite>.csv`: `dimension, optimizer, mean_rank, position,
+  n_functions, chi2, df, p_value, iman_davenport_f, id_df1, id_df2, id_p_value`.
+- `posthoc_<suite>.csv`: `dimension, control, competitor, mean_rank_control,
+  mean_rank_competitor, z, p_unadjusted, p_bonferroni_dunn, p_holm,
+  p_hochberg, p_finner, significant_holm` (z = rank difference /
+  sqrt(k(k+1)/(6N))).
+- `nemenyi_<suite>.csv`: `dimension, k, n_functions, alpha, q_alpha,
+  critical_difference` (CD = q_alpha sqrt(k(k+1)/(6N))).
+
+## results/analysis/statistics/<suite>/ and complexity/<suite>/
+
+`scripts/plot_statistics.m` writes `cd_<suite>_<dimension>`,
+`box_<suite>_F<f>_D<d>`, `box_<suite>_<dimension>_overview`, optional
+`violin_...`, `ranks_<suite>_bars` and `ranks_<suite>_radar` as PNG/PDF.
+`scripts/cec_complexity.m` writes `complexity_<suite>.csv` (`optimizer, label,
+dimension, function, evals, T0, T1, T2_hat, T2_runs, ratio`, seconds) and
+`complexity_<suite>.tex`.
+
 ## verification.json (automatic post-run check)
 
 Every `gsk_run` automatically compares the run against the same optimizer's

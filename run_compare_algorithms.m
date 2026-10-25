@@ -18,12 +18,24 @@
 %   gsk_family/results/analysis/compare/<suite>/
 %       table_<suite>_D<d>.tex/.csv    Mean (SD) per function, best mean in
 %                                      bold, +/=/- per competitor
-%       ranksum_<suite>.csv            Wilcoxon rank-sum test per function
+%       ranksum_<suite>.csv            Wilcoxon rank-sum test per function, with
+%                                      Holm-adjusted p and the effect size
+%                                      (Vargha-Delaney A12, Cliff's delta)
 %       wilcoxon_<suite>.csv           Wilcoxon signed-rank test (R+, R-, p)
-%       friedman_<suite>.csv           Friedman mean ranks
+%       friedman_<suite>.csv           Friedman mean ranks and Iman-Davenport test
+%       posthoc_<suite>.csv            post-hoc vs the proposed algorithm:
+%                                      Bonferroni-Dunn, Holm, Hochberg, Finner
+%       nemenyi_<suite>.csv            Nemenyi critical difference
 %       statistics_<suite>.csv         Best, Median, Mean, Worst, SD
 %       settings_<suite>.tex/.csv      code, population sizes and changed
 %                                      settings of each compared name
+%   gsk_family/results/analysis/statistics/<suite>/   (statistics_figures)
+%       cd_<suite>_<D or all or overall>.png/.pdf     critical difference diagram
+%       box_... / violin_...           final values of all runs, per function
+%                                      and an overview per dimension
+%       ranks_<suite>_bars / _radar    Friedman mean ranks per dimension
+%   gsk_family/results/analysis/complexity/<suite>/   (complexity = true)
+%       complexity_<suite>.tex/.csv    T0, T1, T2_hat, (T2_hat - T1)/T0
 %
 % Notes:
 %   - Works for every suite and every algorithm with results, including one
@@ -31,16 +43,18 @@
 %     and aliases from algorithms.ini (e.g. 'gsk-np50'): list them in
 %     optimizers like any algorithm. settings_<suite>.tex/.csv then shows
 %     what each name changed.
-%   - It only reads finished results; it never runs an algorithm. Run it again
-%     at any time, also on a partial campaign; it overwrites its own output.
+%   - It only reads finished results (except complexity = true, which times
+%     short runs in a temporary folder). Run it again at any time, also on a
+%     partial campaign; it overwrites its own output.
 %   - "+" means the proposed algorithm is significantly better than that
 %     competitor on that function, "-" significantly worse, "=" no
 %     significant difference (two-sided Wilcoxon rank-sum, alpha below).
 %   - CEC2013, CEC2017 and CEC2020 curves show the error f(x) - f(x*) on a log
 %     axis. CEC2011 and CEC2013-LSGO show raw objective values (linear axis
 %     when a value is zero or negative).
-%   - Options of the two commands it calls: help plot_convergence,
-%     help compare_algorithms (in gsk_family/scripts).
+%   - Options of the commands it calls: help plot_convergence,
+%     help compare_algorithms, help plot_statistics, help cec_complexity
+%     (in gsk_family/scripts).
 
 %% ------------------------------ CONFIG ----------------------------------
 
@@ -60,10 +74,18 @@ functions  = [];                       % [] = all functions found; e.g. [1 5 10]
 dimensions = [];                       % [] = all dimensions found; e.g. [10 30]; ignored for CEC2011 and CEC2013-LSGO
 
 curve      = 'median_run';             % 'median_run' = full trace of each algorithm's median run
-                                       % 'mean'       = mean over all runs at the 14 CEC checkpoints
+                                       % 'mean'/'median' = mean/median over all runs at the 14 CEC checkpoints
+band       = 'none';                   % 'iqr' = shaded 25-75% band of all runs under each curve
 formats    = {'png', 'pdf'};           % any of 'png', 'pdf', 'eps', 'fig'
 overview   = true;                     % also one figure with all functions per dimension
-alpha      = 0.05;                     % significance level of the Wilcoxon tests
+alpha      = 0.05;                     % significance level of the tests
+correction = 'none';                   % 'holm' = table signs (+/=/-) from Holm-adjusted rank-sum p-values
+
+statistics_figures = {'cd', 'box', 'ranks'};   % {} = none; CD diagram, box plots, rank charts (add 'violin' for violins)
+
+complexity = false;                    % true = also measure the CEC complexity table (T0, T1, T2) for
+                                       % cec2017; this RUNS each algorithm 5 x 200,000 evaluations
+                                       % per dimension (minutes to hours; keep the PC otherwise idle)
 % -------------------------------------------------------------------------
 
 %% ------------------------------ SET UP ----------------------------------
@@ -92,22 +114,43 @@ for s = 1:numel(suites)
     if ~isempty(optimizers); common = [common, {'optimizers', optimizers}]; end %#ok<AGROW>
     if ~isempty(labels);     common = [common, {'labels', labels}];         end %#ok<AGROW>
     try
-        plot_convergence(common{:}, 'curve', curve, 'formats', formats, 'overview', overview);
+        plot_convergence(common{:}, 'curve', curve, 'band', band, 'formats', formats, 'overview', overview);
     catch err
         fprintf(2, 'FAIL  %s convergence curves: %s\n', upper(suite), err.message);
     end
     try
         cmp = [common, {'alpha', alpha}];
         if ~isempty(proposed); cmp = [cmp, {'proposed', proposed}]; end %#ok<AGROW>
-        compare_algorithms(cmp{:});
+        compare_algorithms(cmp{:}, 'correction', correction);
     catch err
         fprintf(2, 'FAIL  %s statistics: %s\n', upper(suite), err.message);
+    end
+    if ~isempty(statistics_figures)
+        try
+            plot_statistics(cmp{:}, 'correction', correction, 'figures', statistics_figures, 'formats', formats);
+        catch err
+            fprintf(2, 'FAIL  %s statistics figures: %s\n', upper(suite), err.message);
+        end
+    end
+    if complexity
+        if strcmp(suite, 'cec2017') && ~isempty(optimizers)
+            try
+                cec_complexity('suite', suite, 'optimizers', optimizers, 'labels', labels, 'project_root', root);
+            catch err
+                fprintf(2, 'FAIL  %s complexity: %s\n', upper(suite), err.message);
+            end
+        else
+            fprintf(2, ['SKIP  %s complexity: set optimizers explicitly; the complexity table is ' ...
+                        'defined for cec2017 (other suites: call cec_complexity with ''function'')\n'], upper(suite));
+        end
     end
 end
 
 fprintf('\n==================== done ====================\n');
-fprintf('Figures under: %s\n', fullfile(root, 'results', 'analysis', 'convergence'));
-fprintf('Tables under:  %s\n', fullfile(root, 'results', 'analysis', 'compare'));
+fprintf('Convergence figures under: %s\n', fullfile(root, 'results', 'analysis', 'convergence'));
+fprintf('Tables under:              %s\n', fullfile(root, 'results', 'analysis', 'compare'));
+fprintf('Statistics figures under:  %s\n', fullfile(root, 'results', 'analysis', 'statistics'));
+if complexity; fprintf('Complexity table under:    %s\n', fullfile(root, 'results', 'analysis', 'complexity')); end
 
 function s = ternary_text(cond, a, b)
 if cond; s = a; else; s = b; end

@@ -350,7 +350,7 @@ cannot find MATLAB or g++, pass them:
 <p><strong>Step 3 - check MATLAB.</strong></p>
 <pre class="powershell"><code>matlab -batch &quot;cd(&#39;src/tests&#39;); run_matlab_smoke_tests&quot;</code></pre>
 <p>Every test should print <code>PASS</code>, and the last line reads
-<code>All 14 test(s) passed.</code></p>
+<code>All 15 test(s) passed.</code></p>
 <div class="note">
 <div class="title">
 <p>Note</p>
@@ -689,8 +689,34 @@ signs</td>
 <tr>
 <td>Wilcoxon rank-sum</td>
 <td><code>compare\&lt;suite&gt;\ranksum_&lt;suite&gt;.csv</code></td>
-<td>per function: is the difference between two algorithms
-significant?</td>
+<td>per function: is the difference between two algorithms significant?
+With the Holm-corrected p-value and the effect size (A12, Cliff's
+delta)</td>
+</tr>
+<tr>
+<td>Post-hoc tests</td>
+<td><code>compare\&lt;suite&gt;\posthoc_&lt;suite&gt;.csv</code></td>
+<td>after Friedman: proposed algorithm vs each competitor, with Holm,
+Hochberg, Finner and Bonferroni–Dunn corrections</td>
+</tr>
+<tr>
+<td>CD diagram</td>
+<td><code>statistics\&lt;suite&gt;\cd_&lt;suite&gt;_D&lt;d&gt;.png</code>
+and <code>.pdf</code></td>
+<td>the algorithms on their mean rank; a bar joins those not
+significantly different</td>
+</tr>
+<tr>
+<td>Box plots</td>
+<td><code>statistics\&lt;suite&gt;\box_&lt;suite&gt;_F&lt;f&gt;_D&lt;d&gt;.png</code>
+and <code>.pdf</code></td>
+<td>the final values of all runs of every algorithm, one figure per
+function</td>
+</tr>
+<tr>
+<td>Rank charts</td>
+<td><code>statistics\&lt;suite&gt;\ranks_&lt;suite&gt;_bars.png</code></td>
+<td>Friedman mean ranks per dimension and overall</td>
 </tr>
 <tr>
 <td>Wilcoxon signed-rank</td>
@@ -725,8 +751,18 @@ rank is better.</p>
 CEC2017 and CEC2020. CEC2011 and CEC2013-LSGO have no known optimum, so
 their curves show the objective value. By default each algorithm's
 median run is drawn; set <code>curve = 'mean'</code> for the mean of all
-runs. No toolbox is needed.</p>
+runs, and <code>band = 'iqr'</code> for a shaded 25–75% band of all runs
+under each curve. No toolbox is needed.</p>
 </div>
+<p><strong>Algorithm complexity.</strong> CEC2017 papers usually include
+the complexity table of the CEC technical report (T0, T1, T̂2, (T̂2 −
+T1)/T0). Set <code>complexity = true</code> in
+<code>run_compare_algorithms.m</code> (with <code>optimizers</code>
+listed), or run
+<code>cec_complexity('suite','cec2017','optimizers',{'my-gsk','gsk'})</code>.
+It times 5 runs of 200,000 evaluations per algorithm and dimension, so
+it takes a while; keep the computer otherwise idle. The table goes to
+<code>gsk_family\results\analysis\complexity\cec2017\</code>.</p>
 <p>Every option, and how to call the two tools directly from your own
 scripts: <a
 href="gsk_family/docs/research/comparing_algorithms.md">Comparing

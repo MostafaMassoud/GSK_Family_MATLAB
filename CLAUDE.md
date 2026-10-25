@@ -70,7 +70,7 @@ print a comparison table; run `gsk_validate --verify` for the verdict.
 cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release   # once
 cmake --build build -j; ctest --test-dir build                        # expect 13/13 C++ tests
 powershell -File scripts\build_mex_bridge.ps1                         # MEX bridge (close MATLAB first)
-matlab -batch "cd('src/tests'); run_matlab_smoke_tests"               # expect "All 14 test(s) passed."
+matlab -batch "cd('src/tests'); run_matlab_smoke_tests"               # expect "All 15 test(s) passed."
 powershell -File scripts\build_docs.ps1 -Clean                        # 49 pages + the two root guides
 ```
 
@@ -80,12 +80,23 @@ session scratchpad, never in the repository.
 
 ## Current state (2026-10-26)
 
-- `main` = `faf0567` (not pushed when written; the owner pushes). Since
-  `ca66fa0` it added `np_init`/`min_pop_size` for all seven optimizers, the
-  compare-algorithms tools, the variant guide and `my-gsk` (below). Merged
-  local branches that can be deleted with the owner's OK:
+- `main` = `e7e78ce` (aliases; not pushed when written; the owner pushes).
+  Since `ca66fa0` it added `np_init`/`min_pop_size` for all seven optimizers,
+  the compare-algorithms tools, the variant guide, `my-gsk` and aliases
+  (below). Merged local branches that can be deleted with the owner's OK:
   `docs/share-ready-runbook`, `docs/claude-handoff`, `feat/compare-algorithms`,
-  `feat/variant-guide`, `feat/my-gsk`.
+  `feat/variant-guide`, `feat/my-gsk`, `feat/algorithm-aliases`.
+- **Q1 statistics, group A (2026-10-26, uncommitted when written):**
+  `compare_algorithms` adds post-hoc tests (Bonferroni-Dunn, Holm, Hochberg,
+  Finner), Iman-Davenport, the Nemenyi CD, Holm-adjusted rank-sum p-values
+  and effect sizes (A12, Cliff's delta); `plot_statistics.m` (CD diagram, box
+  plots with every run shown, rank charts; violins opt-in with >= 20 runs);
+  IQR bands in `plot_convergence`; `cec_complexity.m` (CEC2017 complexity
+  table). The owner approved the box-plot style (light fill, coloured edge,
+  median line, every run as a dot, no top/right border). Groups B (except the
+  complexity table) and C of the Q1 list are not built: B = runtime,
+  parameter sensitivity, ablation, ERT/ECDF; C = diversity and parameter
+  trajectories (needs opt-in logging in the optimizers, owner approval).
 - **Algorithm aliases (2026-10-26):** `algorithms.ini` (root; all examples
   commented) names an optimizer plus its own settings; launchers,
   `run_experiment` and `run_compare_algorithms` take the alias like an
@@ -113,7 +124,7 @@ session scratchpad, never in the repository.
   hyphenated slug maps to its stem; `np_init`/`min_pop_size` reach it). Tested
   on all five suites and all seven optimizers plus a copy of GSK (which
   reproduces GSK exactly); the p-values equal the Statistics Toolbox's.
-- All 14 MATLAB and 13 C++ tests pass. The docs build gives 49 pages with no
+- All 15 MATLAB and 13 C++ tests pass. The docs build gives 49 pages with no
   broken links. After the comment rewrite and helper renames, DT-GSK was
   re-checked with the owner's local oracle: bit-identical on 23 of 25 fixed
   cases. Cases 18 and 22 (the full-budget D50 and D100 cells) were not rerun.

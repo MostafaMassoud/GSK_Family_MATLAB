@@ -124,7 +124,7 @@ matlab -batch "cd('src/tests'); run_matlab_smoke_tests"
 ```
 
 Every test should print `PASS`, and the last line reads
-`All 14 test(s) passed.`
+`All 15 test(s) passed.`
 
 > [!NOTE]
 > You only repeat steps 1 to 3 after changing C++ code (steps 1 and 2) or to
@@ -372,7 +372,11 @@ any time, also during a campaign.
 | Convergence figures | `convergence\<suite>\<suite>_F<f>_D<d>.png` and `.pdf` | every algorithm's curve in one figure, for each function and dimension |
 | Overview figures | `convergence\<suite>\<suite>_D<d>_overview.png` | all functions of one dimension at a glance |
 | Result tables | `compare\<suite>\table_<suite>_D<d>.tex` and `.csv` | Mean (SD) of every algorithm per function, best in bold, +/=/− signs |
-| Wilcoxon rank-sum | `compare\<suite>\ranksum_<suite>.csv` | per function: is the difference between two algorithms significant? |
+| Wilcoxon rank-sum | `compare\<suite>\ranksum_<suite>.csv` | per function: is the difference between two algorithms significant? With the Holm-corrected p-value and the effect size (A12, Cliff's delta) |
+| Post-hoc tests | `compare\<suite>\posthoc_<suite>.csv` | after Friedman: proposed algorithm vs each competitor, with Holm, Hochberg, Finner and Bonferroni–Dunn corrections |
+| CD diagram | `statistics\<suite>\cd_<suite>_D<d>.png` and `.pdf` | the algorithms on their mean rank; a bar joins those not significantly different |
+| Box plots | `statistics\<suite>\box_<suite>_F<f>_D<d>.png` and `.pdf` | the final values of all runs of every algorithm, one figure per function |
+| Rank charts | `statistics\<suite>\ranks_<suite>_bars.png` | Friedman mean ranks per dimension and overall |
 | Wilcoxon signed-rank | `compare\<suite>\wilcoxon_<suite>.csv` | over the whole suite: R+, R−, p-value |
 | Friedman ranks | `compare\<suite>\friedman_<suite>.csv` | the mean rank of every algorithm (1 = best) |
 | Settings table | `compare\<suite>\settings_<suite>.tex` and `.csv` | each algorithm's code, population sizes and changed settings ("original" = published value) |
@@ -387,7 +391,16 @@ better.
 > The curves show the error f(x) − f(x\*) on a log scale for CEC2013, CEC2017
 > and CEC2020. CEC2011 and CEC2013-LSGO have no known optimum, so their
 > curves show the objective value. By default each algorithm's median run is
-> drawn; set `curve = 'mean'` for the mean of all runs. No toolbox is needed.
+> drawn; set `curve = 'mean'` for the mean of all runs, and `band = 'iqr'` for
+> a shaded 25–75% band of all runs under each curve. No toolbox is needed.
+
+**Algorithm complexity.** CEC2017 papers usually include the complexity table
+of the CEC technical report (T0, T1, T̂2, (T̂2 − T1)/T0). Set
+`complexity = true` in `run_compare_algorithms.m` (with `optimizers` listed),
+or run `cec_complexity('suite','cec2017','optimizers',{'my-gsk','gsk'})`. It
+times 5 runs of 200,000 evaluations per algorithm and dimension, so it takes a
+while; keep the computer otherwise idle. The table goes to
+`gsk_family\results\analysis\complexity\cec2017\`.
 
 Every option, and how to call the two tools directly from your own scripts:
 [Comparing Algorithms](gsk_family/docs/research/comparing_algorithms.md). To

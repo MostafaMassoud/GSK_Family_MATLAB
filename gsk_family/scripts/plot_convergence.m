@@ -26,7 +26,12 @@ function report = plot_convergence(varargin)
 %                 median run, from curves/Figure_F<f>_D<d>_Run#<r>.csv.
 %                 'mean': the mean over all runs of the best-so-far value at
 %                 the 14 CEC checkpoints, from gen_logs/CheckpointErrors_*.csv.
-%   yscale        'auto' (default): log when every plotted value is > 0, or
+%                 'median': the median over all runs at those checkpoints.
+%   band          'none' (default) or 'iqr': a shaded band per optimizer from
+%                 the 25th to the 75th percentile of all runs at the 14 CEC
+%                 checkpoints (gen_logs), under any curve type. Quartiles use
+%                 linear interpolation.
+%   yscale       'auto' (default): log when every plotted value is > 0, or
 %                 when the suite has known optima (values below error_floor
 %                 are drawn at error_floor); otherwise linear (raw objectives
 %                 can be negative). 'log' or 'linear' force one.
@@ -57,7 +62,8 @@ p.addParameter('optimizers', {}, @(x) iscell(x) || isstring(x) || ischar(x));
 p.addParameter('labels', {}, @(x) iscell(x) || isstring(x));
 p.addParameter('functions', [], @isnumeric);
 p.addParameter('dimensions', [], @isnumeric);
-p.addParameter('curve', 'median_run', @(x) any(strcmpi(char(x), {'median_run', 'mean'})));
+p.addParameter('curve', 'median_run', @(x) any(strcmpi(char(x), {'median_run', 'mean', 'median'})));
+p.addParameter('band', 'none', @(x) any(strcmpi(char(x), {'none', 'iqr'})));
 p.addParameter('yscale', 'auto', @(x) any(strcmpi(char(x), {'auto', 'log', 'linear'})));
 p.addParameter('error_floor', 1e-8, @(x) isnumeric(x) && isscalar(x) && x > 0);
 p.addParameter('formats', {'png', 'pdf'}, @(x) iscell(x) || isstring(x) || ischar(x));
@@ -79,6 +85,7 @@ a.formats = lower(cellstr(a.formats));
 bad = setdiff(a.formats, {'png', 'pdf', 'eps', 'fig'});
 assert(isempty(bad), 'plot_convergence:args', 'unknown format(s): %s', strjoin(bad, ', '));
 a.curve = lower(char(a.curve));
+a.band = lower(char(a.band));
 a.yscale = lower(char(a.yscale));
 
 opts = resolve_optimizers(a.results_root, a.suite, a.optimizers);
@@ -86,15 +93,22 @@ labels = resolve_labels(opts, a.labels);
 native = is_native_suite(a.suite);
 known_optimum = ~native;
 
-% data{i}: containers.Map 'f|D' -> [x y] for optimizer i.
+% data{i}: containers.Map 'f|D' -> [x y] for optimizer i; bands{i}: 'f|D'
+% -> [x q25 q75] when band = 'iqr', else empty.
 data = cell(1, numel(opts));
+bands = cell(1, numel(opts));
 for i = 1:numel(opts)
     folder = fullfile(a.results_root, opts{i}, a.suite);
-    if strcmp(a.curve, 'median_run')
-        data{i} = load_median_curves(fullfile(folder, 'curves'));
-    else
-        data{i} = load_mean_curves(fullfile(folder, 'gen_logs'));
+    stats = containers.Map('KeyType', 'char', 'ValueType', 'any');
+    if ~strcmp(a.curve, 'median_run') || strcmp(a.band, 'iqr')
+        stats = load_checkpoint_stats(fullfile(folder, 'gen_logs'));
     end
+    switch a.curve
+        case 'median_run'; data{i} = load_median_curves(fullfile(folder, 'curves'));
+        case 'mean';       data{i} = pick_columns(stats, 2);
+        case 'median';     data{i} = pick_columns(stats, 3);
+    end
+    if strcmp(a.band, 'iqr'); bands{i} = pick_columns(stats, [4 5]); end
     fprintf('plot_convergence: %-12s %3d curve(s) in %s\n', labels{i}, data{i}.Count, folder);
 end
 
@@ -122,7 +136,7 @@ for c = 1:size(cells, 1)
     f = cells(c, 1); D = cells(c, 2);
     fig = new_figure(a.visible, [100 100 640 460]);
     ax = axes(fig);
-    missing = draw_cell(ax, data, labels, style, f, D, a, known_optimum, true);
+    missing = draw_cell(ax, data, bands, labels, style, f, D, a, known_optimum, true);
     title(ax, sprintf('%s  F%d  (D = %d)', suite_title(a.suite), f, D), 'FontWeight', 'normal');
     base = fullfile(a.output_dir, sprintf('%s_F%d_D%d', a.suite, f, D));
     report.figures = [report.figures, save_figure(fig, base, a.formats)];
@@ -141,7 +155,7 @@ if logical(a.overview)
     end
     for g = 1:numel(groups)
         report.figures = [report.figures, ...
-            draw_overview(groups{g}, tags{g}, data, labels, style, a, known_optimum)];
+            draw_overview(groups{g}, tags{g}, data, bands, labels, style, a, known_optimum)];
     end
 end
 
@@ -153,7 +167,7 @@ end
 
 % ---- drawing ----------------------------------------------------------------
 
-function missing = draw_cell(ax, data, labels, style, f, D, a, known_optimum, with_labels)
+function missing = draw_cell(ax, data, bands, labels, style, f, D, a, known_optimum, with_labels)
 % Draw every optimizer's curve of cell (f, D) on ax; return the labels that
 % have no data for it.
 hold(ax, 'on'); grid(ax, 'on'); box(ax, 'on');
@@ -164,8 +178,24 @@ for i = 1:numel(data)
     if isKey(data{i}, key); curves{i} = data{i}(key); else; missing{end + 1} = labels{i}; end %#ok<AGROW>
 end
 vals = cell2mat(cellfun(@(m) m(:, 2), curves(~cellfun('isempty', curves)), 'UniformOutput', false)');
+band = cell(1, numel(data));
+for i = 1:numel(data)
+    if ~isempty(bands{i}) && isKey(bands{i}, key); band{i} = bands{i}(key); end
+end
+bvals = cell2mat(cellfun(@(m) reshape(m(:, 2:3), [], 1), band(~cellfun('isempty', band)), ...
+                 'UniformOutput', false)');
+vals = [vals; bvals];
 use_log = strcmp(a.yscale, 'log') || (strcmp(a.yscale, 'auto') && ...
           (all(vals > 0) || (known_optimum && all(vals >= 0))));
+% IQR bands first, so every curve stays on top of every band.
+for i = 1:numel(data)
+    b = band{i};
+    if isempty(b) || isempty(curves{i}); continue; end
+    lo = b(:, 2); hi = b(:, 3);
+    if use_log; lo = max(lo, a.error_floor); hi = max(hi, a.error_floor); end
+    fill(ax, [b(:, 1); flipud(b(:, 1))], [lo; flipud(hi)], style(i).color, 'FaceAlpha', 0.15, ...
+         'EdgeColor', 'none', 'HandleVisibility', 'off');
+end
 for i = 1:numel(data)
     m = curves{i};
     if isempty(m); continue; end
@@ -185,7 +215,7 @@ if with_labels
 end
 end
 
-function paths = draw_overview(cells, tag, data, labels, style, a, known_optimum)
+function paths = draw_overview(cells, tag, data, bands, labels, style, a, known_optimum)
 % One tiled figure with every function of a group and one shared legend.
 n = size(cells, 1);
 ncol = min(n, 5);
@@ -194,7 +224,7 @@ fig = new_figure(a.visible, [50 50 300 * ncol, 240 * nrow + 80]);
 t = tiledlayout(fig, nrow, ncol, 'TileSpacing', 'compact', 'Padding', 'compact');
 for c = 1:n
     ax = nexttile(t);
-    draw_cell(ax, data, labels, style, cells(c, 1), cells(c, 2), a, known_optimum, false);
+    draw_cell(ax, data, bands, labels, style, cells(c, 1), cells(c, 2), a, known_optimum, false);
     title(ax, sprintf('F%d (D = %d)', cells(c, 1), cells(c, 2)), 'FontWeight', 'normal');
     set(ax, 'FontSize', 8);
 end
@@ -204,7 +234,7 @@ lg.Layout.Tile = 'north';
 xlabel(t, 'Function evaluations');
 ylabel(t, y_label(a, known_optimum, false));   % the y scale can differ by tile
 if strcmp(tag, 'all'); group_text = 'all problems'; else; group_text = tag; end
-title(t, sprintf('%s  %s  (%s)', suite_title(a.suite), group_text, curve_text(a.curve)));
+title(t, sprintf('%s  %s  (%s)', suite_title(a.suite), group_text, curve_text(a.curve, a.band)));
 paths = save_figure(fig, fullfile(a.output_dir, sprintf('%s_%s_overview', a.suite, tag)), a.formats);
 close(fig);
 end
@@ -213,10 +243,16 @@ function s = y_label(a, known_optimum, use_log)
 if known_optimum; s = 'Error  f(x) - f(x*)'; else; s = 'Objective value  f(x)'; end
 if use_log; s = [s ' (log scale)']; end
 if strcmp(a.curve, 'mean'); s = ['Mean ' lower(s(1)) s(2:end)]; end
+if strcmp(a.curve, 'median'); s = ['Median ' lower(s(1)) s(2:end)]; end
 end
 
-function s = curve_text(curve)
-if strcmp(curve, 'mean'); s = 'mean of all runs'; else; s = 'median run'; end
+function s = curve_text(curve, band)
+switch curve
+    case 'mean';   s = 'mean of all runs';
+    case 'median'; s = 'median of all runs';
+    otherwise;     s = 'median run';
+end
+if strcmp(band, 'iqr'); s = [s ', band = 25-75% of all runs']; end
 end
 
 function paths = save_figure(fig, base, formats)
@@ -279,10 +315,11 @@ for q = order
 end
 end
 
-function m = load_mean_curves(genlogs_dir)
-% Map 'f|D' -> [checkpoint mean] from CheckpointErrors_<opt>_F<f>_D<d>.csv
-% (columns Run,Seed,E<nfes>...). A run id that appears more than once
-% (resumed sessions) keeps its last row.
+function m = load_checkpoint_stats(genlogs_dir)
+% Map 'f|D' -> [nfes mean median q25 q75] over all runs at each checkpoint,
+% from CheckpointErrors_<opt>_F<f>_D<d>.csv (columns Run,Seed,E<nfes>...). A
+% run id that appears more than once (resumed sessions) keeps its last row.
+% Quartiles use linear interpolation (quantile_local).
 m = containers.Map('KeyType', 'char', 'ValueType', 'any');
 if ~exist(genlogs_dir, 'dir'); return; end
 L = dir(fullfile(genlogs_dir, 'CheckpointErrors_*_F*_D*.csv'));
@@ -298,8 +335,30 @@ for q = 1:numel(L)
     M = readmatrix(path, 'NumHeaderLines', 1);
     if isempty(M) || size(M, 2) < numel(cols); continue; end
     [~, last] = unique(M(:, 1), 'last');
-    m(sprintf('%s|%s', tok{1}, tok{2})) = [nfes(:), mean(M(last, 3:numel(cols)), 1)'];
+    E = M(last, 3:numel(cols));
+    Q = zeros(size(E, 2), 3);
+    for c = 1:size(E, 2); Q(c, :) = quantile_local(E(:, c), [0.5 0.25 0.75]); end
+    m(sprintf('%s|%s', tok{1}, tok{2})) = [nfes(:), mean(E, 1)', Q];
 end
+end
+
+function m = pick_columns(stats, cols)
+% Map 'f|D' -> [nfes stats(:, cols)] (cols of [nfes mean median q25 q75]).
+m = containers.Map('KeyType', 'char', 'ValueType', 'any');
+k = keys(stats);
+for i = 1:numel(k)
+    s = stats(k{i});
+    m(k{i}) = s(:, [1 cols]);
+end
+end
+
+function q = quantile_local(v, pr)
+% Quantiles with linear interpolation (toolbox-free quantile of a vector).
+v = sort(v(:));
+n = numel(v);
+pos = 1 + (n - 1) * pr(:)';
+lo = floor(pos); hi = min(lo + 1, n);
+q = v(lo)' + (pos - lo) .* (v(hi)' - v(lo)');
 end
 
 function opts = resolve_optimizers(results_root, suite, requested)

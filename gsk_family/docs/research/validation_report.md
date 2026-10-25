@@ -53,7 +53,8 @@ MATLAB layer covers:
 - the runner output schema, resume behavior (`test_runner_resume.m`), seed
   schedules, and the unified fair-start `X0` wiring
   (`test_runner_fair_start.m`), and the algorithms.ini aliases
-  (`test_algorithm_aliases.m`) - 14 MATLAB smoke tests in all;
+  (`test_algorithm_aliases.m`), and the comparison tools
+  (`test_comparison_tools.m`) - 15 MATLAB smoke tests in all;
 - the MEX bridge cross-check against the original-MEX ground truth at `0`
   deviation;
 - the automatic post-run verification verdict (`verification.json`).
@@ -149,9 +150,9 @@ were refreshed when DT-GSK was added as the seventh optimizer:
   ground truth at `0` deviation (`src/tests/test_mex_bridge.m`).
 - The MATLAB smoke suite (`run_matlab_smoke_tests`) was green at that
   snapshot: common helpers, the six optimizers of the time, the runner, and the
-  bridge cross-check. It now has 14 tests, adding `test_dt_gsk_smoke.m`,
-  `test_runner_resume.m`, `test_runner_fair_start.m` and
-  `test_algorithm_aliases.m`.
+  bridge cross-check. It now has 15 tests, adding `test_dt_gsk_smoke.m`,
+  `test_runner_resume.m`, `test_runner_fair_start.m`,
+  `test_algorithm_aliases.m` and `test_comparison_tools.m`.
 - **DT-GSK** (added after that snapshot) was validated against its reference
   implementation: a line-by-line port matched the unmodified reference
   implementation on identical random numbers in all four dimension tiers and

@@ -153,7 +153,7 @@ T = r.table;  % dim, func, best/median/mean_gen/_ref, best_ok, median_ok, mean_o
 ```powershell
 cmake --build build -j; ctest --test-dir build            # 13/13
 powershell -File scripts\build_mex_bridge.ps1             # after C++ suite or MEX changes
-matlab -batch "cd('src/tests'); run_matlab_smoke_tests"   # "All 13 test(s) passed."
+matlab -batch "cd('src/tests'); run_matlab_smoke_tests"   # "All 14 test(s) passed."
 powershell -File scripts\build_docs.ps1 -Clean            # 49 pages + the two root guides
 ```
 
@@ -183,9 +183,26 @@ on purpose. The only other expected hit is this skill file, which holds the
 word list (`rg` skips hidden folders by default; the Grep tool does not). Then follow the git rule in `CLAUDE.md`: branch, commit, and
 fast-forward only on the owner's word.
 
+## Run an optimizer with changed settings (aliases)
+
+- Add an `[alias]` to `algorithms.ini` in the repository root (`base =` plus
+  settings) and list the alias in the launcher's `optimizers`, or pass it as
+  `'optimizer'` to `run_experiment`. Never put an alias in the owner's
+  launcher CONFIG without being asked.
+- Plain names must give bit-identical results after any change to alias
+  handling: rerun the seven plain on a few CEC2017 cells and compare
+  `per_run.csv` with a run made before the change (`isequal` on
+  `best_fitness`, `seed`, `nfes`).
+- A new option of one of the seven goes into `alias_setting_names` in
+  `run_experiment.m`, the table in `docs/getting-started/command_reference.md`
+  ("Algorithm aliases") and the list at the top of `algorithms.ini`.
+
 ## Add a new optimizer
 
-Follow `docs/development/extension_guide.md`. In short:
+The quick path for a researcher is `new_gsk_variant('<name>','base','<one of
+the seven>')` (no registration for MATLAB runs; `NEW_VARIANT_GUIDE.md`). For a
+family member with reference reproduction, follow
+`docs/development/extension_guide.md`. In short:
 
 - Create `src/optimizers/<slug>/<slug_underscored>_optimize.m` with the
   result contract of `docs/reference/matlab_interface.md`.

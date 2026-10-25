@@ -51,7 +51,13 @@ is a starting point that honors the structs in
     given. Register it in `src/runners/run_experiment.m` only for
     reference-mode seeding (the seed/RNG switches there) or for the C++ CLI
     (below). [Comparing Algorithms](../research/comparing_algorithms.md) is the
-    short version of this recipe for researchers.
+    short version of this recipe for researchers. Every option the new file
+    reads (`options.<name>`, `isfield(options,'<name>')`,
+    `local_option(options,'<name>',...)`) can then be set from an alias in the
+    root `algorithms.ini`; the runner finds the accepted names by reading the
+    file. An option of one of the seven must also be added to its list in
+    `alias_setting_names` (`src/runners/run_experiment.m`) and to the table in
+    the command reference, "Algorithm aliases".
 11. Add a smoke test `src/tests/test_<stem>_smoke.m`, and add a reference table
     under `benchmarks/cec_reference_results/` plus a page under `docs/`.
 

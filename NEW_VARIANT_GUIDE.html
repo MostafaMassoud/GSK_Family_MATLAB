@@ -164,14 +164,17 @@ your change</a></li>
 <li><a href="#5-check-it" id="toc-5-check-it">5. Check it</a></li>
 <li><a href="#6-run-the-experiments" id="toc-6-run-the-experiments">6.
 Run the experiments</a></li>
-<li><a href="#7-convergence-figures-and-statistics"
-id="toc-7-convergence-figures-and-statistics">7. Convergence figures and
+<li><a href="#7-original-and-standardized-settings"
+id="toc-7-original-and-standardized-settings">7. Original and
+standardized settings</a></li>
+<li><a href="#8-convergence-figures-and-statistics"
+id="toc-8-convergence-figures-and-statistics">8. Convergence figures and
 statistics</a></li>
-<li><a href="#8-put-it-in-the-manuscript"
-id="toc-8-put-it-in-the-manuscript">8. Put it in the manuscript</a></li>
-<li><a href="#9-common-problems" id="toc-9-common-problems">9. Common
+<li><a href="#9-put-it-in-the-manuscript"
+id="toc-9-put-it-in-the-manuscript">9. Put it in the manuscript</a></li>
+<li><a href="#10-common-problems" id="toc-10-common-problems">10. Common
 problems</a></li>
-<li><a href="#10-where-to-go-next" id="toc-10-where-to-go-next">10.
+<li><a href="#11-where-to-go-next" id="toc-11-where-to-go-next">11.
 Where to go next</a></li>
 </ul>
 </nav>
@@ -189,8 +192,8 @@ member.</li>
 <li><strong>Edit</strong> Change the search in one MATLAB file.</li>
 <li><strong>Check</strong> A 10-second test run; an untouched copy
 reproduces its base exactly.</li>
-<li><strong>Run</strong> Run your variant and the algorithms you compare
-against on the same benchmarks.</li>
+<li><strong>Run</strong> Run your variant next to the others, with
+original or changed settings.</li>
 <li><strong>Analyze</strong> Press Run once for the figures and the
 tables.</li>
 </ol>
@@ -215,6 +218,7 @@ your variant gets all of them for free.</p>
   run_all_cec2017.m          &lt;- launchers (one per suite)
   run_all_cec2011.m
   run_compare_algorithms.m   &lt;- figures and statistics
+  algorithms.ini             &lt;- aliases: other settings (step 7)
   gsk_family\
     src\optimizers\
       gsk\                   &lt;- the seven built-in optimizers
@@ -426,6 +430,9 @@ it).</li>
 <p><strong>New parameters:</strong> read them with a default, in the
 style of the file, so runs without the option keep working:</p>
 <pre class="matlab"><code>alpha = local_option(options, &#39;alpha&#39;, 0.2);   % my new parameter, default 0.2</code></pre>
+<p>A parameter read this way can then be changed without editing the
+file, from an alias in <code>algorithms.ini</code> (step 7), for example
+<code>alpha = 0.5</code>.</p>
 <p>The full contract of <code>problem</code>, <code>options</code> and
 <code>result</code> is in the <a
 href="gsk_family/docs/reference/matlab_interface.md">MATLAB
@@ -537,8 +544,55 @@ dimensions or algorithms later without losing finished runs, set
 <code>use_parallel = true</code> and choose the number of workers
 yourself; see <a href="RUNBOOK.html">Runbook</a> section 5.</p>
 </section>
-<section id="7-convergence-figures-and-statistics" class="level1">
-<h1>7. Convergence figures and statistics</h1>
+<section id="7-original-and-standardized-settings" class="level1">
+<h1>7. Original and standardized settings</h1>
+<p>By default every algorithm, yours included, runs with its
+<strong>original settings</strong>: its own population size and
+parameters. To also run an algorithm under other settings, and keep both
+sets of results, give it an <strong>alias</strong> in
+<code>algorithms.ini</code> (repository root, next to the
+launchers):</p>
+<pre class="ini"><code>[gsk-np50]
+base    = gsk
+np_init = 50
+
+[my-gsk-np50]
+base    = my-gsk
+np_init = 50</code></pre>
+<p>Then list the names in the launcher like any algorithm:</p>
+<pre class="matlab"><code>optimizers = {&#39;gsk&#39;, &#39;my-gsk&#39;, &#39;gsk-np50&#39;, &#39;my-gsk-np50&#39;};</code></pre>
+<p><code>gsk</code> and <code>my-gsk</code> run with their original
+settings, the two aliases with NP = 50, and every name gets its own
+results folder. Step 8 compares all four in one go.</p>
+<div class="cards">
+
+<ul>
+<li><strong>Every setting listed</strong> <code>algorithms.ini</code>
+shows each algorithm's settings with their original values, and a
+commented example for each: remove the <code>;</code> to use it.</li>
+<li><strong>Your own parameters too</strong> Settings your file reads,
+e.g. <code>alpha = local_option(options, 'alpha', 0.3)</code>, work in
+an alias: <code>alpha = 0.5</code>.</li>
+<li><strong>Same seeds</strong> Aliases get the same seeds as all the
+other algorithms, so the comparison stays fair.</li>
+<li><strong>Mistakes caught</strong> A misspelled setting stops the run
+and lists the accepted ones.</li>
+</ul>
+</div>
+
+<div class="important">
+<div class="title">
+<p>Important</p>
+</div>
+<p>A population size or parameter other than an algorithm's original
+must be reported as a changed setting in a paper. The settings table of
+step 8 lists exactly what each name changed. After editing an alias that
+already has results, give it a new name: the runner refuses to mix two
+settings in one results folder.</p>
+</div>
+</section>
+<section id="8-convergence-figures-and-statistics" class="level1">
+<h1>8. Convergence figures and statistics</h1>
 <p>Open <code>run_compare_algorithms.m</code> (next to the launchers),
 set its CONFIG block, and press <strong>Run</strong>:</p>
 <pre class="matlab"><code>suites     = {&#39;cec2017&#39;, &#39;cec2011&#39;};
@@ -586,6 +640,12 @@ dimension</td>
 <td>mean rank of every algorithm (1 = best) per dimension and
 overall</td>
 </tr>
+<tr>
+<td>Settings table</td>
+<td><code>settings_&lt;suite&gt;.tex</code> and <code>.csv</code></td>
+<td>each name's code, starting and final population size and changed
+settings ("original" = published value)</td>
+</tr>
 </tbody>
 </table>
 <p><strong>Reading the results</strong> (two-sided tests, alpha =
@@ -617,8 +677,8 @@ partial campaign: it only reads results and overwrites its own
 output.</p>
 </div>
 </section>
-<section id="8-put-it-in-the-manuscript" class="level1">
-<h1>8. Put it in the manuscript</h1>
+<section id="9-put-it-in-the-manuscript" class="level1">
+<h1>9. Put it in the manuscript</h1>
 <ul>
 <li><strong>Figures:</strong> use the PDF files (vector graphics). Say
 in the caption which curve is shown: "median run" or "mean of 51
@@ -631,6 +691,10 @@ you follow.</li>
 of the suite (table in step 6), the same seed and starting population
 for every algorithm in each run (unified seed policy), and your
 variant's parameter values.</li>
+<li><strong>Parameter settings:</strong>
+<code>\input{settings_cec2017.tex}</code> gives a ready table of every
+compared name, the code it ran, its population sizes and any changed
+setting.</li>
 <li><strong>Environment:</strong> <code>summary\environment.json</code>
 in each result folder records the MATLAB version, seeds and settings of
 the run.</li>
@@ -639,8 +703,8 @@ is accepted: every number in the tables can be traced to a single run in
 <code>summary\per_run.csv</code>.</li>
 </ul>
 </section>
-<section id="9-common-problems" class="level1">
-<h1>9. Common problems</h1>
+<section id="10-common-problems" class="level1">
+<h1>10. Common problems</h1>
 <table>
 <thead>
 <tr>
@@ -659,6 +723,18 @@ is accepted: every number in the tables can be traced to a single run in
 <td><code>new_gsk_variant:exists</code></td>
 <td>The folder exists already; nothing was changed. Choose another name
 or delete that folder yourself.</td>
+</tr>
+<tr>
+<td><code>unknown optimizer 'x'</code> or a message naming
+<code>algorithms.ini</code> and a line</td>
+<td>The name is not an algorithm or an alias, or the alias has a
+mistake; the message names the line and lists the accepted settings
+(step 7).</td>
+</tr>
+<tr>
+<td><code>... was written with alias settings ...</code></td>
+<td>You edited an alias that already has results. Give the edited alias
+a new name, or delete its results folder.</td>
 </tr>
 <tr>
 <td><code>no results for my-gsk on cec2017</code></td>
@@ -688,8 +764,8 @@ compared; the others are listed as <code>skipped</code>.</td>
 </tbody>
 </table>
 </section>
-<section id="10-where-to-go-next" class="level1">
-<h1>10. Where to go next</h1>
+<section id="11-where-to-go-next" class="level1">
+<h1>11. Where to go next</h1>
 <ul>
 <li><a href="RUNBOOK.html">Runbook</a>: setup, all launchers, parallel
 runs.</li>

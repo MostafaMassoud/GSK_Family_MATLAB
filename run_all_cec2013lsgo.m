@@ -25,6 +25,8 @@
 %% ------------------------------ CONFIG ----------------------------------
 optimizers  = {'gsk'};
 % optimizers = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk', 'dt-gsk'};
+% Aliases from algorithms.ini (next to this file) work too, e.g. {'gsk', 'gsk-np50'}:
+% the same code under other settings, with its own results folder.
 
 functions   = 1:15;        % CEC2013-LSGO has 15 problems
 dimensions  = 0;           % 0 = each problem's native (large-scale) dimension

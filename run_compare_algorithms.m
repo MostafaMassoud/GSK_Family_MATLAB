@@ -22,10 +22,15 @@
 %       wilcoxon_<suite>.csv           Wilcoxon signed-rank test (R+, R-, p)
 %       friedman_<suite>.csv           Friedman mean ranks
 %       statistics_<suite>.csv         Best, Median, Mean, Worst, SD
+%       settings_<suite>.tex/.csv      code, population sizes and changed
+%                                      settings of each compared name
 %
 % Notes:
 %   - Works for every suite and every algorithm with results, including one
-%     you added yourself (see gsk_family/docs/research/comparing_algorithms.md).
+%     you added yourself (see gsk_family/docs/research/comparing_algorithms.md)
+%     and aliases from algorithms.ini (e.g. 'gsk-np50'): list them in
+%     optimizers like any algorithm. settings_<suite>.tex/.csv then shows
+%     what each name changed.
 %   - It only reads finished results; it never runs an algorithm. Run it again
 %     at any time, also on a partial campaign; it overwrites its own output.
 %   - "+" means the proposed algorithm is significantly better than that

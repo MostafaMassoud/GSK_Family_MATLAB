@@ -13,6 +13,8 @@ function report = plot_convergence(varargin)
 %   suite         suite id, e.g. 'cec2017'.
 %   optimizers    cell of optimizer ids, in legend order. Default: every
 %                 optimizer folder under results_root that holds this suite.
+%                 algorithms.ini aliases (e.g. 'gsk-np50') work the same way:
+%                 each has its own results folder.
 %   labels        legend names, same order as optimizers. Default: the usual
 %                 names (GSK, AGSK, APGSK, FDB-AGSK, ATMALS-GSK, eGSK, DT-GSK),
 %                 or the id in upper case for any other optimizer.

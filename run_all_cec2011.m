@@ -26,6 +26,8 @@
 %% ------------------------------ CONFIG ----------------------------------
 optimizers  = {'gsk'};
 % optimizers = {'gsk', 'agsk', 'apgsk','fdb-agsk','egsk','atmals-gsk','dt-gsk'};
+% Aliases from algorithms.ini (next to this file) work too, e.g. {'gsk', 'gsk-np50'}:
+% the same code under other settings, with its own results folder.
 
 functions   = 4:6;         % subset; full suite is 1:22 (none excluded)
 dimensions  = 0;            % 0 = each problem's native dimension (required for CEC2011)

@@ -172,6 +172,9 @@ id="toc-42-from-a-terminal-powershell">4.2 From a terminal
 <li><a href="#43-run-everything-the-full-protocols"
 id="toc-43-run-everything-the-full-protocols">4.3 Run everything: the
 full protocols</a></li>
+<li><a href="#44-original-or-changed-settings-aliases"
+id="toc-44-original-or-changed-settings-aliases">4.4 Original or changed
+settings: aliases</a></li>
 </ul></li>
 <li><a href="#5-running-in-parallel-in-matlab"
 id="toc-5-running-in-parallel-in-matlab">5. Running in parallel in
@@ -316,6 +319,7 @@ placeholder; replace it with your own folder). The full copy is about
   run_all_cec2017.m
   run_all_cec2020.m
   run_compare_algorithms.m      &lt;- figures and statistics of finished runs (section 6)
+  algorithms.ini                &lt;- aliases: algorithms with changed settings (section 4.4)
   gsk_family\                   &lt;- the project
     src\                        &lt;- MATLAB code (algorithms, runner, tests)
     benchmarks\                 &lt;- C++ benchmark suites, their data, reference results
@@ -346,7 +350,7 @@ cannot find MATLAB or g++, pass them:
 <p><strong>Step 3 - check MATLAB.</strong></p>
 <pre class="powershell"><code>matlab -batch &quot;cd(&#39;src/tests&#39;); run_matlab_smoke_tests&quot;</code></pre>
 <p>Every test should print <code>PASS</code>, and the last line reads
-<code>All 13 test(s) passed.</code></p>
+<code>All 14 test(s) passed.</code></p>
 <div class="note">
 <div class="title">
 <p>Note</p>
@@ -490,6 +494,44 @@ without losing finished runs, set <code>overwrite = false</code>.</p>
 runs an experiment from a config file; see the <a
 href="gsk_family/docs/getting-started/command_reference.md">Command
 Reference</a>.</p>
+</section>
+<section id="44-original-or-changed-settings-aliases" class="level2">
+<h2>4.4 Original or changed settings: aliases</h2>
+<p>Every algorithm runs with its <strong>original settings</strong> (its
+published population size and parameters) unless you say otherwise. Two
+ways to change them:</p>
+<ul>
+<li><p><strong>The same change for all algorithms:</strong> the
+launcher's <code>np_init</code> (starting population size) and
+<code>min_pop_size</code> (final size of the algorithms that shrink
+their population). <code>[]</code> keeps each algorithm's original
+value.</p></li>
+<li><p><strong>A change for one algorithm, kept next to the
+original:</strong> an <strong>alias</strong> in
+<code>algorithms.ini</code> (repository root). An alias is a name you
+choose for an algorithm plus its settings:</p>
+<pre class="ini"><code>[gsk-np50]
+base    = gsk
+np_init = 50</code></pre>
+<p>Then use the name in the launcher like any algorithm:
+<code>optimizers = {'gsk', 'gsk-np50'}</code>. <code>gsk</code> runs
+with its original settings, <code>gsk-np50</code> with NP = 50, and each
+gets its own results folder.</p></li>
+</ul>
+<p><code>algorithms.ini</code> lists every setting of every algorithm
+with its original value, and has a commented example for each one:
+remove the <code>;</code> to use it.</p>
+<div class="note">
+<div class="title">
+<p>Note</p>
+</div>
+<p>All aliases get the same seeds as the other algorithms, so
+comparisons stay fair. A misspelled setting stops the run and lists the
+accepted ones. After editing an alias that already has results, give it
+a new name: the runner refuses to mix two settings in one results
+folder. Aliases work in the MATLAB launchers and
+<code>run_experiment</code>, not in the <code>gsk_run</code> tool.</p>
+</div>
 <p><strong>Where the results go:</strong>
 <code>gsk_family\results\_run_all\&lt;algorithm&gt;\&lt;suite&gt;\</code></p>
 <table>
@@ -660,6 +702,13 @@ significant?</td>
 <td><code>compare\&lt;suite&gt;\friedman_&lt;suite&gt;.csv</code></td>
 <td>the mean rank of every algorithm (1 = best)</td>
 </tr>
+<tr>
+<td>Settings table</td>
+<td><code>compare\&lt;suite&gt;\settings_&lt;suite&gt;.tex</code> and
+<code>.csv</code></td>
+<td>each algorithm's code, population sizes and changed settings
+("original" = published value)</td>
+</tr>
 </tbody>
 </table>
 <p><strong>How to read it.</strong> In the tables, <strong>+</strong>
@@ -723,6 +772,13 @@ Parallel Computing Toolbox licence.</td>
 <td>The first run is slow</td>
 <td>MATLAB, the pool and the bridge start up once; later runs are
 faster.</td>
+</tr>
+<tr>
+<td><code>unknown optimizer 'x'</code> or a message naming
+<code>algorithms.ini</code> and a line</td>
+<td>The name is not an algorithm or an alias, or the alias has a
+mistake; the message says which line and lists the accepted settings
+(section 4.4).</td>
 </tr>
 </tbody>
 </table>

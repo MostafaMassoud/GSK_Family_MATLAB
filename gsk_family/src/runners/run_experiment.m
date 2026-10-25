@@ -25,6 +25,20 @@ function run_experiment(varargin)
 % variant, treated like np_init (comparison table skipped, different-value
 % trees refused).
 %
+% 'optimizer' may also be an alias from algorithms.ini in the repository root
+% (one level above project_root; 'aliases_file',path picks another file). An
+% alias names a base optimizer and its own settings, e.g. [gsk-np100] with
+% base = gsk and np_init = 100. It runs the base's code with those settings;
+% its np_init and min_pop_size replace the call's. Its files are named after
+% the alias (pass an output_dir of its own; the launchers use
+% results/_run_all/<alias>/<suite>), and environment.json records the base
+% and the settings. Unknown setting names, protected ones (seed,
+% rand_generator, initial_population, rng_state_after_initialization,
+% protocol) and min_pop_size for gsk, egsk or atmals-gsk are refused. Changed
+% settings make the run a variant (comparison table skipped), and a tree
+% written with other alias settings is refused. Seeds are those of the base,
+% so aliases and optimizers are compared on the same seeds.
+%
 % 'verbose',false hides the per-run lines and prints one summary row per
 % (function, dimension); useful for long multi-run sweeps.
 %
@@ -89,9 +103,14 @@ p.addParameter('use_parallel', false, @(x) islogical(x) || isnumeric(x));
 p.addParameter('write_graphs', false, @(x) islogical(x) || isnumeric(x));
 p.addParameter('np_init', [], @isnumeric);
 p.addParameter('min_pop_size', [], @isnumeric);
+p.addParameter('aliases_file', '', @(x) ischar(x) || isstring(x));
 p.parse(varargin{:});
 a = p.Results;
 a.optimizer = canonical_optimizer_id(a.optimizer);
+% An alias from algorithms.ini runs its base optimizer with its own settings:
+% from here on a.optimizer is the base (it decides the algorithm, seeds and
+% options) and a.name the alias (it names the files and labels the results).
+a = resolve_alias(a);
 if ~isempty(a.np_init)
     % 12 is the population floor of AGSK, APGSK and FDB-AGSK (min_pop_size),
     % so one value is valid for the whole family.
@@ -190,8 +209,8 @@ per_run_path = fullfile(summary_dir, 'per_run.csv');
 per_run_header = ['optimizer,suite,function,dimension,run,seed,best_fitness,error,' ...
                   'nfes,termination,runtime_seconds,max_nfes,rand_generator'];
 upgrade_legacy_per_run(per_run_path, per_run_header, summary_dir, a.project_root, session_tag);
-existing_records = load_existing_per_run_records(summary_dir, a.optimizer, a.suite);
-stats = load_existing_summary_stats(summary_dir, a.optimizer, a.suite);
+existing_records = load_existing_per_run_records(summary_dir, a.name, a.suite);
+stats = load_existing_summary_stats(summary_dir, a.name, a.suite);
 if ~isempty(stats)
     fprintf('run_experiment: loaded %d existing summary row(s) for resume/add mode.\n', numel(stats));
 end
@@ -239,7 +258,7 @@ for dim = a.dimensions(:)'
     % summary/<opt>_<dtag>_log_<yyyy-mm-dd_HH.MM.SS>.txt (dtag D<dim> or native)
     if dim == 0; dtag = 'native'; else; dtag = sprintf('D%d', dim); end
     stamp = datestr(now, 'yyyy-mm-dd_HH.MM.SS');
-    diary(fullfile(summary_dir, sprintf('%s_%s_log_%s.txt', a.optimizer, dtag, stamp)));
+    diary(fullfile(summary_dir, sprintf('%s_%s_log_%s.txt', a.name, dtag, stamp)));
     diary on;
     % Detailed log of every run of every function in this dimension:
     % summary/<opt>_<dtag>_runs_log_<stamp>.txt
@@ -386,6 +405,8 @@ for dim = a.dimensions(:)'
         % the client problem, whose MEX handle is invalid on a worker).
         opt_name = a.optimizer; suite_name = a.suite; proot = a.project_root; np_init = a.np_init;
         min_pop_size = a.min_pop_size;
+        run_label = a.name;                 % the alias for an algorithms.ini alias, else opt_name
+        alias_settings = a.alias_settings;  % its other settings (plain numbers and logicals)
         mnf = a.max_nfes; nruns = a.runs; verbose = logical(a.verbose);
         optimum_local = problem.optimum;
         rand_gen = effective_rand_generator(a);   % reference/unified may differ from a.rand_generator
@@ -406,6 +427,7 @@ for dim = a.dimensions(:)'
                 scheduled_seed = run_seeds(rr);
                 run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, ...
                                                  np_init, min_pop_size);
+                run_opts = add_alias_settings(run_opts, alias_settings);
                 if use_unified_x0
                     [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen, np_init);
                     run_opts.initial_population = x0;
@@ -437,12 +459,12 @@ for dim = a.dimensions(:)'
                 run_term{rr} = result.termination;
                 notes_c{rr} = result.notes;
                 prun_rows{rr} = sprintf('%s,%s,%d,%d,%d,%s,%.17g,%.17g,%d,%s,%.6f,%d,%s\n', ...
-                        opt_name, suite_name, func_id, D, run_id, seed_to_text(seed), ...
+                        run_label, suite_name, func_id, D, run_id, seed_to_text(seed), ...
                         result.best_fitness, err_out, result.nfes, ...
                         result.termination, result.runtime_seconds, wp.max_nfes, rand_gen);
                 if verbose
                     verb_rows{rr} = sprintf('%s %s f%d D%d run %d/%d: best=%.6e error=%.6e nfes=%d (%.1fs)\n', ...
-                            opt_name, suite_name, func_id, D, run_id, nruns, ...
+                            run_label, suite_name, func_id, D, run_id, nruns, ...
                             result.best_fitness, result.error, result.nfes, result.runtime_seconds);
                 end
             end
@@ -454,6 +476,7 @@ for dim = a.dimensions(:)'
                 scheduled_seed = run_seeds(rr);
                 run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, ...
                                                  np_init, min_pop_size);
+                run_opts = add_alias_settings(run_opts, alias_settings);
                 if use_unified_x0
                     [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen, np_init);
                     run_opts.initial_population = x0;
@@ -483,12 +506,12 @@ for dim = a.dimensions(:)'
                 run_term{rr} = result.termination;
                 notes_c{rr} = result.notes;
                 prun_rows{rr} = sprintf('%s,%s,%d,%d,%d,%s,%.17g,%.17g,%d,%s,%.6f,%d,%s\n', ...
-                        opt_name, suite_name, func_id, D, run_id, seed_to_text(seed), ...
+                        run_label, suite_name, func_id, D, run_id, seed_to_text(seed), ...
                         result.best_fitness, err_out, result.nfes, ...
                         result.termination, result.runtime_seconds, wp.max_nfes, rand_gen);
                 if verbose
                     verb_rows{rr} = sprintf('%s %s f%d D%d run %d/%d: best=%.6e error=%.6e nfes=%d (%.1fs)\n', ...
-                            opt_name, suite_name, func_id, D, run_id, nruns, ...
+                            run_label, suite_name, func_id, D, run_id, nruns, ...
                             result.best_fitness, result.error, result.nfes, result.runtime_seconds);
                 end
             end
@@ -502,7 +525,7 @@ for dim = a.dimensions(:)'
             if verbose && ~isempty(verb_rows{rr}); fprintf('%s', verb_rows{rr}); end
         end
 
-        write_checkpoint_errors(genlogs_dir, a.optimizer, func_id, D, checkpoints, runs_to_do, run_seeds, chk_errors, session_tag);
+        write_checkpoint_errors(genlogs_dir, a.name, func_id, D, checkpoints, runs_to_do, run_seeds, chk_errors, session_tag);
         append_function_runs(runs_log, func_id, D, known_optimum, runs_to_do, ...
                              run_seeds, run_best, run_errv, run_nfes, run_term, run_rt, problem, report_zero_tol(a));
         [combined_runs, combined_values] = combine_existing_and_new_values( ...
@@ -563,7 +586,7 @@ for dim = a.dimensions(:)'
             fprintf('(comparison table skipped: %s)\n', cmp_err.message);
         end
         try
-            fprintf('\nPost-processing artifacts for %s %s %s...\n', upper(a.optimizer), upper(a.suite), dtag);
+            fprintf('\nPost-processing artifacts for %s %s %s...\n', upper(a.name), upper(a.suite), dtag);
             if logical(a.write_graphs)
                 ng = make_convergence_graphs(graphs_dir, a, curve_f, curve_d, curve_x, curve_y, session_tag);
                 fprintf('Saved %d convergence graph(s) to %s\n', ng, graphs_dir);
@@ -577,7 +600,7 @@ for dim = a.dimensions(:)'
         print_resume_messages(dim_resume_messages);
     end
     if ~isempty(dim_D)
-        write_summary_files(summary_dir, a.optimizer, a.suite, stats, known_optimum, session_tag, unique(dim_D));
+        write_summary_files(summary_dir, a.name, a.suite, stats, known_optimum, session_tag, unique(dim_D));
         written_dims = union(written_dims, dim_D);
     end
     close_runs_log(runs_log);
@@ -593,7 +616,7 @@ if isempty(stats)
 else
     remaining_dims = setdiff(unique([stats.dim]), written_dims);
 end
-write_summary_files(summary_dir, a.optimizer, a.suite, stats, known_optimum, session_tag, ...
+write_summary_files(summary_dir, a.name, a.suite, stats, known_optimum, session_tag, ...
                     remaining_dims, isempty(written_dims));
 fprintf('  [2/2] Writing environment metadata...\n');
 write_environment(summary_dir, a, stats, skipped, notes, known_optimum, checkpoint_fracs, toc(total), session_tag);
@@ -717,6 +740,7 @@ end
 path = fullfile(summary_dir, 'run_config.json');
 prev_np = [];
 prev_min = [];
+prev_alias = '';
 if isfile(path)
     try
         cfg = jsondecode(fileread(path));
@@ -726,8 +750,19 @@ if isfile(path)
         if isfield(cfg, 'min_pop_size') && isnumeric(cfg.min_pop_size)
             prev_min = double(cfg.min_pop_size);
         end
+        if isfield(cfg, 'alias_settings') && ischar(cfg.alias_settings)
+            prev_alias = cfg.alias_settings;
+        end
     catch
     end
+end
+% An algorithms.ini alias whose settings were edited since the tree was
+% written would mix two configurations in one tree.
+if ~strcmp(prev_alias, a.alias_text)
+    error('run_experiment:args', ...
+          ['%s was written with alias settings "%s"; %s now has "%s". ' ...
+           'Use a new alias name, a new output_dir or ''overwrite'',true.'], summary_dir, ...
+          prev_alias, a.name, a.alias_text);
 end
 if ~strcmp(np_init_text(a.optimizer, prev_np), np_init_text(a.optimizer, a.np_init))
     error('run_experiment:args', ...
@@ -762,6 +797,140 @@ end
 function tf = is_family_optimizer(optimizer)
 %IS_FAMILY_OPTIMIZER True for the seven GSK-family optimizers shipped here.
 tf = any(strcmp(optimizer, {'gsk', 'agsk', 'apgsk', 'fdb-agsk', 'atmals-gsk', 'egsk', 'dt-gsk'}));
+end
+
+function a = resolve_alias(a)
+%RESOLVE_ALIAS Turn an algorithms.ini alias into its base optimizer and settings.
+% Sets a.name (the alias, or the optimizer itself), a.alias_settings (struct of
+% settings passed to the optimizer, without np_init/min_pop_size, which go to
+% a.np_init/a.min_pop_size and replace the call's values), a.alias_text (all
+% settings as one line, '' for a plain optimizer) and a.alias_file. A name
+% that is one of the seven, or a folder under src/optimizers, is a plain
+% optimizer; anything else must be an alias.
+a.name = a.optimizer;
+a.alias_settings = struct();
+a.alias_text = '';
+a.alias_file = '';
+root = char(a.project_root);
+if isempty(a.optimizer) || isempty(root)
+    return;   % missing arguments are reported later
+end
+file = char(a.aliases_file);
+if isempty(file)
+    file = fullfile(fileparts(regexprep(root, '[\\/]+$', '')), 'algorithms.ini');
+end
+if is_real_optimizer(a.optimizer, root)
+    % A plain optimizer. An [alias] of the same name would be ignored, so it
+    % is an error; any other problem in the file does not stop this run.
+    try
+        clash = isKey(read_algorithm_aliases(file), a.optimizer);
+    catch
+        clash = false;
+    end
+    if clash
+        error('run_experiment:args', ['%s: [%s] has the name of an optimizer; give the alias ' ...
+              'a new name (e.g. [%s-np100]) and set base = %s'], file, a.optimizer, a.optimizer, a.optimizer);
+    end
+    return;
+end
+aliases = read_algorithm_aliases(file);
+if ~isKey(aliases, a.optimizer)
+    error('run_experiment:args', ['unknown optimizer ''%s'': it is not one of the seven, not a ' ...
+          'folder under src/optimizers, and not an [alias] in %s'], a.optimizer, file);
+end
+al = aliases(a.optimizer);
+base = al.base;
+if ~is_real_optimizer(base, root)
+    error('run_experiment:args', ['%s: [%s] has base = %s, which is not one of the seven or a ' ...
+          'folder under src/optimizers (an alias cannot be the base of another alias)'], ...
+          file, al.name, base);
+end
+s = al.settings;
+if isfield(s, 'np')   % the name GSK, eGSK and ATMALS-GSK use internally
+    if isfield(s, 'np_init')
+        error('run_experiment:args', '%s: [%s] sets both np and np_init; keep np_init', file, al.name);
+    end
+    s.np_init = s.np; s = rmfield(s, 'np');
+end
+if isfield(s, 'np_init'); a.np_init = s.np_init; s = rmfield(s, 'np_init'); end
+if isfield(s, 'min_pop_size')
+    if any(strcmp(base, {'gsk', 'egsk', 'atmals-gsk'}))
+        error('run_experiment:args', ['%s: [%s] sets min_pop_size, but %s keeps a fixed ' ...
+              'population (only np_init applies)'], file, al.name, base);
+    end
+    a.min_pop_size = s.min_pop_size; s = rmfield(s, 'min_pop_size');
+end
+protected = {'seed', 'rand_generator', 'initial_population', 'rng_state_after_initialization', 'protocol'};
+allowed = alias_setting_names(base, root);
+for f = fieldnames(s)'
+    k = f{1};
+    if any(strcmp(k, protected))
+        error('run_experiment:args', ['%s: [%s] sets %s, which the runner controls ' ...
+              '(seed, random generator, starting population, CEC protocol)'], file, al.name, k);
+    end
+    if ~any(strcmp(k, allowed))
+        error('run_experiment:args', '%s: [%s] unknown setting %s for %s. Accepted: %s', ...
+              file, al.name, k, base, strjoin([{'np_init'}, pop_names(base), allowed], ', '));
+    end
+end
+a.optimizer = base;
+a.name = al.name;
+a.alias_settings = s;
+a.alias_text = al.text;
+a.alias_file = file;
+fprintf('run_experiment: %s is an alias of %s from %s (%s)\n', a.name, base, file, ...
+        ternary(isempty(al.text), 'no settings changed', al.text));
+end
+
+function tf = is_real_optimizer(name, root)
+%IS_REAL_OPTIMIZER One of the seven, or a folder under src/optimizers.
+tf = is_family_optimizer(name) || exist(fullfile(root, 'src', 'optimizers', name), 'dir') == 7;
+end
+
+function c = pop_names(base)
+% Population settings an alias may set besides np_init.
+if any(strcmp(base, {'gsk', 'egsk', 'atmals-gsk'})); c = {}; else; c = {'min_pop_size'}; end
+end
+
+function names = alias_setting_names(base, root)
+%ALIAS_SETTING_NAMES Settings (other than np_init/min_pop_size) an alias may set.
+% The seven list the options their code reads (see each optimizer's help
+% text). For a user-added optimizer they are the names its main file reads
+% from options (options.<name>, isfield(options,'<name>'),
+% local_option(options,'<name>',...)).
+switch base
+    case 'gsk';        names = {'kf', 'kr', 'k', 'p'};
+    case 'agsk';       names = {};
+    case 'apgsk';      names = {};
+    case 'fdb-agsk';   names = {'fdb_case'};
+    case 'atmals-gsk'; names = {'kf_pool', 'kr_pool', 'k_pool', 'p_pool', 'pls_pool'};
+    case 'egsk';       names = {'kf1', 'kf2', 'kr', 'k', 'use_fmincon'};
+    case 'dt-gsk';     names = {};
+    otherwise
+        file = fullfile(root, 'src', 'optimizers', base, [strrep(base, '-', '_') '_optimize.m']);
+        names = {};
+        if isfile(file)
+            txt = fileread(file);
+            t1 = regexp(txt, 'options\.([A-Za-z]\w*)', 'tokens');
+            t2 = regexp(txt, '(?:local_option|isfield)\(\s*options\s*,\s*''([A-Za-z]\w*)''', 'tokens');
+            names = unique(lower([cellfun(@(c) c{1}, t1, 'UniformOutput', false), ...
+                                  cellfun(@(c) c{1}, t2, 'UniformOutput', false)]));
+        end
+        names = setdiff(names, {'np', 'np_init', 'min_pop_size', 'seed', 'rand_generator', ...
+                                'initial_population', 'rng_state_after_initialization', 'protocol'});
+end
+end
+
+function opts = add_alias_settings(opts, settings)
+%ADD_ALIAS_SETTINGS Copy an alias's settings into one run's options struct.
+for f = fieldnames(settings)'
+    opts.(f{1}) = settings.(f{1});
+end
+end
+
+function v = setting_or(settings, name, default)
+% settings.(name) when set, else default.
+if isfield(settings, name); v = settings.(name); else; v = default; end
 end
 
 function s = np_init_text(optimizer, np_init)
@@ -1162,12 +1331,12 @@ function fid = open_runs_log(summary_dir, a, dtag, stamp, known_optimum, func_li
 %OPEN_RUNS_LOG Open the detailed per-dimension runs log and write its header.
 % File: summary/<opt>_<dtag>_runs_log_<stamp>.txt. Returns -1 on failure
 % (logging is then off).
-path = fullfile(summary_dir, sprintf('%s_%s_runs_log_%s.txt', a.optimizer, dtag, stamp));
+path = fullfile(summary_dir, sprintf('%s_%s_runs_log_%s.txt', a.name, dtag, stamp));
 fid = fopen(path, 'w');
 if fid < 0; return; end
 bar = repmat('=', 1, 110);
 fprintf(fid, '%s\n', bar);
-fprintf(fid, 'DETAILED PER-RUN LOG   %s   %s   %s\n', upper(a.optimizer), upper(a.suite), dtag);
+fprintf(fid, 'DETAILED PER-RUN LOG   %s   %s   %s\n', upper(a.name), upper(a.suite), dtag);
 fprintf(fid, 'runs per function : %d\n', a.runs);
 fprintf(fid, 'functions         : %s\n', mat2str(func_list(:)'));
 if known_optimum
@@ -1337,7 +1506,10 @@ function write_environment(summary_dir, a, stats, skipped, notes, known_optimum,
 % Write summary/environment.json: settings, seed scheme, platform, git commit,
 % runtime, skipped cells and optimizer notes. The old file is archived first.
 env = struct();
-env.optimizer = a.optimizer;
+env.optimizer = a.name;
+env.base_optimizer = a.optimizer;   % differs from optimizer for an algorithms.ini alias
+env.alias_settings = a.alias_text;  % its settings ('' = none or not an alias)
+env.aliases_file = a.alias_file;    % the file it came from ('' = not an alias)
 env.suite = a.suite;
 env.functions = a.functions(:)';
 env.dimensions_requested = a.dimensions(:)';
@@ -1688,7 +1860,7 @@ cmd = sprintf(['run_experiment(''optimizer'',''%s'',''suite'',''%s'',''functions
                '''project_root'',''%s'',''output_dir'',''%s'',''overwrite'',%s,' ...
                '''verbose'',%s,''seed_policy'',''%s'',''rand_generator'',''%s'',' ...
                '''use_parallel'',%s,''write_graphs'',%s)'], ...
-              a.optimizer, a.suite, mat2str(a.functions(:)'), mat2str(a.dimensions(:)'), ...
+              a.name, a.suite, mat2str(a.functions(:)'), mat2str(a.dimensions(:)'), ...
               a.runs, a.base_seed, a.max_nfes, a.project_root, a.output_dir, ...
               string(logical(a.overwrite)), string(logical(a.verbose)), char(a.seed_policy), ...
               char(effective_rand_generator(a)), string(logical(a.use_parallel)), ...
@@ -1751,7 +1923,7 @@ else
 end
 if native; dlabel = 'native'; else; dlabel = sprintf('%d', D); end
 fprintf('\n%s\n', rule);
-fprintf('| %-*s |\n', W, sprintf('%s - %s - D=%s', a.optimizer, upper(a.suite), dlabel));
+fprintf('| %-*s |\n', W, sprintf('%s - %s - D=%s', a.name, upper(a.suite), dlabel));
 fprintf('%s\n', rule);
 fprintf('| %-*s |\n', W, sprintf('%d functions x %d runs | Budget: %s NFEs', ...
         nfuncs, a.runs, with_commas(problem.max_nfes)));
@@ -2057,6 +2229,11 @@ if ~population_is_default(a, dim)
             min_pop_text(a.optimizer, a.min_pop_size), a.optimizer);
     return;
 end
+if ~isempty(fieldnames(a.alias_settings))
+    fprintf(['\n(%s changes %s settings (%s) -- not the published setting, ' ...
+             'reference comparison skipped)\n'], a.name, a.optimizer, a.alias_text);
+    return;
+end
 ref = load_reference_means(a.project_root, a.optimizer, a.suite, dim);
 if ref.Count == 0
     fprintf('\n(no reference table for %s %s D%d -- comparison skipped)\n', a.optimizer, a.suite, dim);
@@ -2068,7 +2245,7 @@ near_solved = 1.0;  % both error means below this -> "solved" (its % is just noi
 box = ['+' repmat('=', 1, 78) '+'];
 if dim == 0; dlabel = 'native dims'; else; dlabel = sprintf('D=%d', dim); end
 title = sprintf('Mean Error Comparison: Reference %s vs %s_%s (%s)', ...
-                upper(a.optimizer), a.optimizer, a.suite, dlabel);
+                upper(a.optimizer), a.name, a.suite, dlabel);
 fprintf('\n%s\n|%s|\n%s\n', box, center(title, 78), box);
 if known
     fprintf('  Zero threshold: %g;  near-solved (both < %g) shown as ~ and counted =\n\n', zt, near_solved);
@@ -2082,7 +2259,7 @@ sep = ['+' repmat('-',1,wF) '+' repmat('-',1,wR) '+' repmat('-',1,wN) '+' ...
 fprintf('%s\n', sep);
 fprintf('|%s|%s|%s|%s|%s|%s|\n', center('Func', wF), ...
         center(sprintf('Reference %s Mean', upper(a.optimizer)), wR), ...
-        center(sprintf('%s Mean', a.optimizer), wN), center('Delta(New-Old)', wD), ...
+        center(sprintf('%s Mean', a.name), wN), center('Delta(New-Old)', wD), ...
         center('% Improve', wP), center('Status', wS));
 fprintf('%s\n', sep);
 
@@ -2129,7 +2306,7 @@ fg   = [0.15 0.15 0.15];     % dark grey for axes/text
 blue = [0.00 0.447 0.741];   % clear line colour
 n = 0;
 total = numel(funcs);
-label = sprintf('Rendering convergence graphs (%s %s)', upper(a.optimizer), upper(a.suite));
+label = sprintf('Rendering convergence graphs (%s %s)', upper(a.name), upper(a.suite));
 if total == 0
     fprintf('  %s: none queued\n', label);
     return;
@@ -2166,7 +2343,7 @@ for i = 1:numel(funcs)
             'FontSize', 11, 'Box', 'on', 'LineWidth', 0.75);
     xlabel(ax, 'Function evaluations', 'Color', fg);
     title(ax, sprintf('F%d', funcs(i)), 'Color', [0.1 0.1 0.1], 'FontSize', 12);
-    legend(ax, h, upper(a.optimizer), 'Location', 'northeast', ...
+    legend(ax, h, upper(a.name), 'Location', 'northeast', ...
            'TextColor', fg, 'Color', 'w', 'EdgeColor', [0.7 0.7 0.7]);
     try
         graph_path = fullfile(graphs_dir, sprintf('Figure_F%d_D%d.png', funcs(i), dims(i)));
@@ -2248,7 +2425,9 @@ switch policy_for_strides
 end
 
 cfg = struct();
-cfg.alg_name = a.optimizer;
+cfg.alg_name = a.name;
+cfg.base_optimizer = a.optimizer;   % differs from alg_name for an algorithms.ini alias
+cfg.alias_settings = a.alias_text;  % its settings ('' = none or not an alias)
 cfg.suite = upper(a.suite);
 cfg.base_seed = a.base_seed;
 cfg.seed_policy = char(a.seed_policy);
@@ -2277,9 +2456,12 @@ cfg.np_init = a.np_init;   % initial NP override (empty = optimizer default)
 % final NP override; empty = default, and empty for optimizers that ignore it
 cfg.min_pop_size = ternary(uses_min_pop_size(a.optimizer), a.min_pop_size, []);
 if strcmp(a.optimizer, 'gsk')
-    % reference GSK defaults -- the values this run actually used
+    % GSK parameters this run actually used: the reference defaults, or an
+    % alias's own values
+    s = a.alias_settings;
     cfg.pop_size = ternary(isempty(a.np_init), 100, a.np_init);
-    cfg.KF = 0.5; cfg.KR = 0.9; cfg.K = 10; cfg.P = 0.1;
+    cfg.KF = setting_or(s, 'kf', 0.5); cfg.KR = setting_or(s, 'kr', 0.9);
+    cfg.K = setting_or(s, 'k', 10); cfg.P = setting_or(s, 'p', 0.1);
 elseif strcmp(a.optimizer, 'dt-gsk')
     % dimension-tiered 'pub' profile (dt_gsk_config); NP_init = 5*D unless
     % np_init replaces it

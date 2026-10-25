@@ -555,6 +555,10 @@ Before reporting results:
 9. State whether CEC2017 F2 was excluded.
 10. State whether eGSK used `fmincon` and which Optimization Toolbox version was
     installed.
+11. Report every setting that differs from an optimizer's published one
+    (population sizes, parameters, `algorithms.ini` aliases): the
+    `settings_<suite>.tex` table of `compare_algorithms` lists them, and each
+    tree's `environment.json` records `base_optimizer` and `alias_settings`.
 
 ## 19. Literature and provenance
 

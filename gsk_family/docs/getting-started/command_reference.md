@@ -315,6 +315,7 @@ CLI flags, or the MATLAB runner.
 | RNG family | `rand_generator: threefry` | `--rand-generator threefry` | `'rand_generator','threefry'` | overridden under `reference`: AGSK/APGSK/FDB-AGSK/eGSK/ATMALS-GSK use legacy `seed`; GSK uses `twister`. Under `unified`, MATLAB uses `threefry` when supported and falls back to `twister`. DT-GSK always uses `threefry` |
 | Initial population | `np_init: N` (`0`=default) | `--np-init N` | `'np_init',N` (`[]`=default) | also `np_init` in `run_all_cec*.m` CONFIG and `run_all.ps1 -NpInit N`; integer `>= 12`, same NP for every optimizer ([population size](#population-size)) |
 | Final population | `min_pop_size: M` (`0`=default) | `--min-pop-size M` | `'min_pop_size',M` (`[]`=default) | also `min_pop_size` in `run_all_cec*.m` CONFIG and `run_all.ps1 -MinPopSize M`; integer `>= 11`; AGSK/APGSK/FDB-AGSK/DT-GSK (GSK/eGSK/ATMALS-GSK ignore it) ([population size](#population-size)) |
+| Algorithm settings (aliases) | not supported | not supported | `'optimizer','<alias>'` (`'aliases_file',path` for another file) | an `[alias]` in the root `algorithms.ini`: a base optimizer plus its own settings; use the alias in `run_all_cec*.m` `optimizers` ([aliases](#algorithm-aliases-algorithmsini)) |
 
 `gsk_run` and shipped `configs/*.yml` use `seed_policy='reference'` for
 published-table reproduction. The root `run_all_cec*.m` launchers use
@@ -401,6 +402,47 @@ Interface-default populations:
 
 All seven: `run_experiment(..., 'np_init', N)` or `np_init = N` in a launcher's CONFIG.
 Final size (AGSK, APGSK, FDB-AGSK, DT-GSK): `'min_pop_size', M` or `min_pop_size = M`.
+
+#### Algorithm aliases (`algorithms.ini`)
+
+The launcher-wide `np_init` and `min_pop_size` change every listed optimizer.
+To change one optimizer only, and keep its original results next to it,
+define an alias in `algorithms.ini` in the repository root:
+
+```ini
+[gsk-np50]
+base    = gsk
+np_init = 50
+```
+
+and list it like an optimizer: `optimizers = {'gsk', 'gsk-np50'}` in a
+`run_all_cec*.m` launcher, or `run_experiment('optimizer','gsk-np50', ...)`.
+The alias runs the base's code with its settings, writes to its own results
+folder (`results/_run_all/gsk-np50/<suite>/` from the launchers), uses the
+base's seeds, and records `base_optimizer` and `alias_settings` in
+`environment.json` and `run_config.json`. Its `np_init`/`min_pop_size` replace
+the launcher's. The settings each base accepts (originals in brackets):
+
+| Base | Settings |
+|---|---|
+| `gsk` | `np_init` (100), `kf` (0.5), `kr` (0.9), `k` (10), `p` (0.1) |
+| `agsk`, `apgsk` | `np_init` (100), `min_pop_size` (12) |
+| `fdb-agsk` | `np_init` (100), `min_pop_size` (12), `fdb_case` (1; 1 to 5) |
+| `atmals-gsk` | `np_init` (100), `kf_pool` (0.2:0.1:0.8), `kr_pool` (0.85:0.01:1), `k_pool` (8:30), `p_pool` (0.05:0.01:0.15), `pls_pool` (1:0.1:2); each pool must contain 0.5, 0.9, 10, 0.1 and 1 |
+| `egsk` | `np_init` (100), `kf1` (0.5), `kf2` (0.5), `kr` (1), `k` (10), `use_fmincon` (true) |
+| `dt-gsk` | `np_init` (5*D), `min_pop_size` (12; 25 for D >= 50) |
+| your own (e.g. `my-gsk`) | `np_init`, `min_pop_size`, and every option its main file reads (`options.<name>`, `isfield(options,'<name>')`, `local_option(options,'<name>',...)`) |
+
+Values are numbers, lists `[0.3 0.5]`, ranges `0.2:0.1:0.8`, or
+`true`/`false`; nothing is evaluated as code. Refused with
+`run_experiment:args`: an unknown setting (the message lists the accepted
+ones), `seed`, `rand_generator`, `initial_population`,
+`rng_state_after_initialization`, `protocol`, `min_pop_size` for GSK/eGSK/
+ATMALS-GSK, an alias named like an optimizer, and resuming a results folder
+written with other alias settings. A file error names its line
+(`read_algorithm_aliases:file`). Changed settings make the run a variant: the
+in-run reference comparison is skipped. `gsk_run` and the YAML configs do not
+read `algorithms.ini`.
 
 **"Iterations".** GSK-family optimizers are population algorithms; the run
 length is an **evaluation budget** `max_nfes`, not an iteration count. The

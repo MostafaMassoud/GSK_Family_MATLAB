@@ -179,6 +179,15 @@ The same pattern exists for `run_all_cec2011`, `run_all_cec2013`,
 **unified** seed policy with the `threefry` generator (the fair cross-family
 schedule) and write under `results\_run_all\<optimizer>\<suite>\`.
 
+`optimizers` may also list aliases from `algorithms.ini` (next to the
+launchers): a name for an optimizer with its own settings, e.g. `gsk-np50`
+with `base = gsk` and `np_init = 50`. Each alias runs the base's code with
+those settings into its own folder, next to the original. Then
+`run_compare_algorithms.m` (also next to the launchers) draws the
+convergence figures and writes the tables and tests for any mix of
+optimizers and aliases. See the command reference, "Algorithm aliases", and
+[Comparing Algorithms](../research/comparing_algorithms.md).
+
 ### (b) The `gsk_run` orchestrator (config or flags)
 
 `build\gsk_run.exe` validates the request against the C++ benchmark factory,

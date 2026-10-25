@@ -109,6 +109,12 @@ The rule is deliberately optimizer-free. The seed must depend only on:
 - the benchmark function number `func`, and
 - the repeated-trial index `run`.
 
+An `algorithms.ini` alias (an optimizer under its own name and settings) is
+seeded as its base optimizer under every policy, so an alias and the
+optimizers it is compared with share the seed of each cell. Under `unified`
+it also gets the runner's shared `X0` (at its own `np_init` when it sets one),
+unless its base is DT-GSK, which draws its own.
+
 It must not depend on optimizer name, optimizer index, `alg_code`, population
 size, evaluation budget, suite name, local-search availability, or any other
 algorithm-specific value. This is the key fairness rule: if two algorithms are

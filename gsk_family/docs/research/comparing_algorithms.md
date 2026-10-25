@@ -204,6 +204,7 @@ the first in `optimizers`). Add more competitors to the list, for example
 | `ranksum_<suite>.csv` | per function: two-sided Wilcoxon rank-sum test over the 51 runs, proposed algorithm vs each competitor, p-value and sign |
 | `wilcoxon_<suite>.csv` | per dimension: Wilcoxon signed-rank test over the function means: R+, R−, p-value, decision, and the +/=/− counts |
 | `friedman_<suite>.csv` | per dimension and overall: Friedman mean rank of every algorithm (1 = best), its position, chi-square and p-value |
+| `settings_<suite>.csv` and `.tex` | per algorithm: the code it ran, its starting and final population size and any changed setting ("original" = published value); a ready parameter-settings table |
 
 For CEC2011 and CEC2013-LSGO the tag is `all` instead of `D<d>`: all problems
 form one group, each at its own dimension.
@@ -225,6 +226,31 @@ exact small-sample p-values. Check which tests and which layout your target
 paper uses (for example, whether "+" is written from the proposed
 algorithm's side); the CSV files hold everything needed to rearrange the
 tables.
+
+## Original and changed settings (aliases)
+
+Every algorithm runs with its original settings by default. To compare an
+algorithm under other settings as well, define an alias in `algorithms.ini`
+in the repository root, for example:
+
+```ini
+[gsk-np50]
+base    = gsk
+np_init = 50
+```
+
+Run it like any algorithm (`optimizers = {'gsk', 'gsk-np50'}` in a launcher),
+and compare it like any algorithm:
+
+```matlab
+compare_algorithms('suite','cec2017', 'optimizers',{'my-gsk','gsk','gsk-np50'}, 'proposed','my-gsk');
+```
+
+Each alias has its own results folder and shares the seeds of the others. The
+settings table (`settings_<suite>.tex`) shows what each name changed. Every
+setting each algorithm accepts, with its original value, is listed in
+`algorithms.ini` and in the
+[Command Reference](../getting-started/command_reference.md), "Algorithm aliases".
 
 ## Other suites and the seven built-in optimizers
 

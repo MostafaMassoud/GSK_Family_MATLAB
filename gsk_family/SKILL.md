@@ -237,7 +237,17 @@ under `src` or GSK code under `benchmarks`.
   root `run_all_cec*.m` launchers; or a direct `run_experiment(...)` call.
 - Optimizers: `src/optimizers/<slug>/<slug_with_underscores>_optimize.m`; DT-GSK
   is `src/optimizers/dt-gsk/dt_gsk_optimize.m` (+ `dt_gsk_config.m`,
-  `dt_gsk_graph.m`; validation record in its `README.md`).
+  `dt_gsk_graph.m`; validation record in its `README.md`). A new optimizer:
+  `scripts/new_gsk_variant.m` (renamed copy of one of the seven; no
+  registration needed for MATLAB runs).
+- Aliases: `algorithms.ini` in the repository root, read by
+  `src/runners/read_algorithm_aliases.m`. `run_experiment` resolves an alias
+  to its base (`resolve_alias`): the base decides code, seeds and options,
+  the alias names files and results (`a.name`), and `alias_setting_names`
+  lists the settings each base accepts. `test_algorithm_aliases.m` covers it.
+- Comparison of optimizers with each other: `run_compare_algorithms.m` (root)
+  -> `scripts/plot_convergence.m` and `scripts/compare_algorithms.m`
+  (figures, Mean/SD, rank-sum, signed-rank, Friedman, settings tables).
 - Run-level comparison of two `per_run.csv` sets (e.g. a MATLAB DT-GSK campaign
   vs `benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv`):
   `scripts/compare_reference_runs.m` (needs the Statistics and Machine Learning
@@ -340,7 +350,7 @@ ctest --test-dir build --output-on-failure
 # MEX bridge (required before any MATLAB CEC experiment):
 powershell -File scripts\build_mex_bridge.ps1
 
-# MATLAB smoke tests (13 tests, incl. test_dt_gsk_smoke; no MEX bridge needed):
+# MATLAB smoke tests (14 tests, incl. test_dt_gsk_smoke; no MEX bridge needed):
 matlab -batch "cd('src/tests'); run_matlab_smoke_tests"
 
 # Documentation site (also regenerates ../RUNBOOK.html):

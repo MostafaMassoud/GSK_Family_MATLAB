@@ -70,7 +70,7 @@ print a comparison table; run `gsk_validate --verify` for the verdict.
 cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release   # once
 cmake --build build -j; ctest --test-dir build                        # expect 13/13 C++ tests
 powershell -File scripts\build_mex_bridge.ps1                         # MEX bridge (close MATLAB first)
-matlab -batch "cd('src/tests'); run_matlab_smoke_tests"               # expect "All 13 test(s) passed."
+matlab -batch "cd('src/tests'); run_matlab_smoke_tests"               # expect "All 14 test(s) passed."
 powershell -File scripts\build_docs.ps1 -Clean                        # 49 pages + the two root guides
 ```
 
@@ -78,21 +78,32 @@ From Git Bash, give MATLAB Windows paths (`D:/...`), never `/d/...`. Run
 anything longer than a few minutes in the background, with logs in the
 session scratchpad, never in the repository.
 
-## Current state (2026-10-25)
+## Current state (2026-10-26)
 
-- `main` = `7d42135` (not yet pushed when written). Since `ca66fa0` it added
-  `np_init` and `min_pop_size` for all seven optimizers (launchers,
-  `run_experiment`, YAML configs, `gsk_run`, `run_all.ps1`) and the
-  compare-algorithms tools below. The local branches
-  `docs/share-ready-runbook`, `docs/claude-handoff` and
-  `feat/compare-algorithms` are merged and can be deleted with the owner's OK.
-- **Uncommitted (2026-10-25):** `scripts/new_gsk_variant.m` (one command
-  creates a renamed copy of any of the seven; all seven copies verified bit
-  identical to their base), `run_compare_algorithms.m` (root, press-Run
-  figures and tables), root `NEW_VARIANT_GUIDE.md`/`.html`, a clearer
-  RUNBOOK (flow, full protocols in 4.3, section 6 rewritten), the new root
-  page design in `build_docs.ps1`, and `run_experiment` passing `protocol`
-  to user-added optimizers.
+- `main` = `faf0567` (not pushed when written; the owner pushes). Since
+  `ca66fa0` it added `np_init`/`min_pop_size` for all seven optimizers, the
+  compare-algorithms tools, the variant guide and `my-gsk` (below). Merged
+  local branches that can be deleted with the owner's OK:
+  `docs/share-ready-runbook`, `docs/claude-handoff`, `feat/compare-algorithms`,
+  `feat/variant-guide`, `feat/my-gsk`.
+- **Algorithm aliases (2026-10-26):** `algorithms.ini` (root; all examples
+  commented) names an optimizer plus its own settings; launchers,
+  `run_experiment` and `run_compare_algorithms` take the alias like an
+  optimizer. Runner: `resolve_alias` and `alias_setting_names` in
+  `run_experiment.m`, parser `src/runners/read_algorithm_aliases.m`. The base
+  decides code, seeds and options; the alias names files and results.
+  `compare_algorithms` writes `settings_<suite>.csv/.tex`. Plain runs of the
+  seven verified bit-identical to before (140 CEC2017 runs). New test
+  `test_algorithm_aliases.m`. `gsk_run`/YAML do not read aliases (owner's
+  choice, may come later).
+- `gsk_family/src/optimizers/my-gsk/` (commit `faf0567`) is an unedited copy
+  of GSK made for a researcher to edit; it reproduces GSK exactly.
+- **`3269d00`:** `scripts/new_gsk_variant.m` (renamed copy of any of the
+  seven; all seven copies bit-identical to their base),
+  `run_compare_algorithms.m` (root, press-Run figures and tables), root
+  `NEW_VARIANT_GUIDE.md`/`.html`, a clearer RUNBOOK, the root page design
+  (`$rootTemplate` in `build_docs.ps1`), and `protocol` passed to user-added
+  optimizers.
 - **In `7d42135`, for researchers comparing their own variant
   with the family:** `scripts/plot_convergence.m` (several optimizers' curves
   in one figure per function), `scripts/compare_algorithms.m` (Mean/SD tables
@@ -102,7 +113,7 @@ session scratchpad, never in the repository.
   hyphenated slug maps to its stem; `np_init`/`min_pop_size` reach it). Tested
   on all five suites and all seven optimizers plus a copy of GSK (which
   reproduces GSK exactly); the p-values equal the Statistics Toolbox's.
-- All 13 MATLAB and 13 C++ tests pass. The docs build gives 49 pages with no
+- All 14 MATLAB and 13 C++ tests pass. The docs build gives 49 pages with no
   broken links. After the comment rewrite and helper renames, DT-GSK was
   re-checked with the owner's local oracle: bit-identical on 23 of 25 fixed
   cases. Cases 18 and 22 (the full-budget D50 and D100 cells) were not rerun.

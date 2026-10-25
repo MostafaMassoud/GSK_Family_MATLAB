@@ -6,6 +6,19 @@ Keep a Changelog; this project uses semantic versioning.
 ## [Unreleased]
 
 ### Added
+- Algorithm aliases: `algorithms.ini` (repository root) defines names for an
+  optimizer plus its own settings (`[gsk-np50]`, `base = gsk`,
+  `np_init = 50`). The launchers, `run_experiment` and `run_compare_algorithms`
+  accept them like optimizers. An alias runs its base's code with the base's
+  seeds into its own results folder; unknown, protected and misplaced
+  settings are refused, a tree written with other alias settings is refused,
+  and `environment.json`/`run_config.json` record `base_optimizer` and
+  `alias_settings`. Parser: `src/runners/read_algorithm_aliases.m` (values are
+  parsed, never evaluated). Plain runs of the seven are bit-identical to
+  before (checked on 140 CEC2017 runs). New test `test_algorithm_aliases.m`
+  (14 MATLAB tests).
+- `compare_algorithms` writes `settings_<suite>.csv`/`.tex`: each compared
+  name's code, population sizes and changed settings.
 - `scripts/new_gsk_variant.m`: one command creates a new optimizer as a
   renamed copy of any of the seven; an untouched copy reproduces its base
   bit for bit (checked for all seven, and ATMALS-GSK also on CEC2011).

@@ -84,9 +84,12 @@ Variant parameter fields (all optional, reference defaults apply):
   (12; same `>= 11` / `np_init >= min_pop_size` rule, `apgsk_optimize:options`);
   the KF/KR pools, negative KF pool, senior `p`, and the gate/junior-schedule
   constants are fixed reference values (not options)
-- `atmals-gsk`: reference value ranges, `protocol` (`'cec2017'` default or `'cec2011'`)
-- `egsk`: reference `KF1/KF2/KR/K`, `use_fmincon` (`true` reference default;
-  `false` only for explicit non-reference diagnostics)
+- `atmals-gsk`: `np` (100), the value pools `kf_pool` (0.2:0.1:0.8), `kr_pool`
+  (0.85:0.01:1), `k_pool` (8:30), `p_pool` (0.05:0.01:0.15), `pls_pool`
+  (1:0.1:2), each of which must contain its start value (0.5, 0.9, 10, 0.1, 1;
+  else `atmals_gsk:options`), and `protocol` (`'cec2017'` default or `'cec2011'`)
+- `egsk`: `np` (100), `kf1` (0.5), `kf2` (0.5), `kr` (1), `k` (10), `use_fmincon`
+  (`true` reference default; `false` only for explicit non-reference diagnostics)
 - `fdb-agsk`: `fdb_case` (1..5, default 1), `np_init` (100; `40*D` reference harness opt-in)
 - `dt-gsk`: `np_init` (`5*D`) and `min_pop_size` (the final NLPSR size
   `n_min`: 12, or 25 for `D >= 50`), each an integer `>= 5` and a non-`pub`
@@ -95,7 +98,12 @@ Variant parameter fields (all optional, reference defaults apply):
   `D >= 50`, `D >= 100`)
 
 The runner's `'np_init'` and `'min_pop_size'` arguments set these for the
-whole family; see the command reference, "Population size".
+whole family; see the command reference, "Population size". An alias in the
+root `algorithms.ini` sets them, and the other fields above, for one
+optimizer under its own name (`np_init` there also stands for `np`);
+`seed`, `rand_generator`, `initial_population`,
+`rng_state_after_initialization` and `protocol` stay under the runner's
+control. See the command reference, "Algorithm aliases".
 
 ## Result struct
 

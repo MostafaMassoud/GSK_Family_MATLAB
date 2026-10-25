@@ -24,6 +24,7 @@ README.md, RUNBOOK.md, RUNBOOK.html   start here
 NEW_VARIANT_GUIDE.md, .html           build and compare your own GSK variant
 run_all_cec2011.m ... run_all_cec2020.m   launchers: open one in MATLAB, press Run
 run_compare_algorithms.m              convergence figures and statistics, press Run
+algorithms.ini                        aliases: algorithms with changed settings
 build.txt                             build commands (also in RUNBOOK.md)
 gsk_family/                           the project: code, benchmarks, docs, tests
 ```

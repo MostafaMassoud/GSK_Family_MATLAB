@@ -154,7 +154,7 @@ a small run works, then commit to the full campaign, then validate and archive.
    ctest --test-dir build --output-on-failure
    ```
 
-3. **Run the MATLAB smoke tests** (13 tests) so the optimizers, runner, and
+3. **Run the MATLAB smoke tests** (14 tests) so the optimizers, runner, and
    bridge cross-check are green before you generate evidence.
 
    ```powershell
@@ -169,7 +169,9 @@ a small run works, then commit to the full campaign, then validate and archive.
    ```
 
 5. **Run the intended campaign** at the real budget and run count. The root
-   launchers default to `unified` + `threefry`:
+   launchers default to `unified` + `threefry`. Any optimizer run with changed
+   settings goes in as an `algorithms.ini` alias, so its tree, name and
+   recorded `alias_settings` keep it apart from the original:
 
    ```matlab
    run_all_cec2017     % the optimizers in its CONFIG block, fair cross-family schedule

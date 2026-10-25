@@ -43,6 +43,13 @@ function report = compare_algorithms(varargin)
 %                              function means (R+, R-, p), and the +/=/- counts
 %   friedman_<suite>.csv       per group and overall: Friedman mean ranks,
 %                              chi-square and p-value
+%   settings_<suite>.csv/.tex  per optimizer: the code it ran (the base of
+%                              an algorithms.ini alias), its initial and
+%                              final population sizes and any other changed
+%                              settings ("original" = published value), from
+%                              its summary/environment.json
+% Optimizer names may be algorithms.ini aliases (e.g. gsk-np50): each is read
+% from its own results folder like any optimizer.
 % Signs are from the proposed optimizer's side: "+" it is significantly
 % better than that competitor (p < alpha and lower ranks), "-" significantly
 % worse, "=" no significant difference. R+ sums the ranks of the functions on
@@ -111,6 +118,7 @@ else
     gid = cells(:, 2); gdims = unique(gid)';
 end
 if ~exist(a.output_dir, 'dir'); mkdir(a.output_dir); end
+report.settings = write_settings_table(a, opts, labels);
 
 fst = fopen(fullfile(a.output_dir, sprintf('statistics_%s.csv', a.suite)), 'w');
 frs = fopen(fullfile(a.output_dir, sprintf('ranksum_%s.csv', a.suite)), 'w');
@@ -123,7 +131,9 @@ fprintf(fwx, ['dimension,proposed,competitor,n_functions,r_plus,r_minus,p_value,
               'wins,ties,losses\n']);
 fprintf(ffr, 'dimension,optimizer,mean_rank,position,n_functions,chi2,df,p_value\n');
 
+settings_rows = report.settings;
 report = struct('optimizers', {opts}, 'proposed', prop, 'groups', struct([]), 'skipped', {{}});
+report.settings = settings_rows;
 all_means = zeros(0, numel(opts));   % every compared cell, for the overall Friedman row
 for g = gdims
     gc = cells(gid == g, :);
@@ -415,6 +425,76 @@ for i = comp
     fprintf(fid, ' & %d/%d/%d', nnz(sgn(:, i) == '+'), nnz(sgn(:, i) == '='), nnz(sgn(:, i) == '-'));
 end
 fprintf(fid, ' \\\\\n\\hline\n\\end{tabular}\n');
+end
+
+function rows = write_settings_table(a, opts, labels)
+% settings_<suite>.csv and .tex: for each compared name, the algorithm code
+% it ran (base), its starting and final population sizes and any other
+% changed settings, read from <results_root>/<name>/<suite>/summary/
+% environment.json (written by run_experiment). "original" means the
+% algorithm's published value.
+rows = struct('name', {}, 'label', {}, 'base', {}, 'np_init', {}, 'min_pop_size', {}, 'other', {});
+for i = 1:numel(opts)
+    env = struct();
+    path = fullfile(a.results_root, opts{i}, a.suite, 'summary', 'environment.json');
+    if isfile(path)
+        try env = jsondecode(fileread(path)); catch; end
+    end
+    base = opts{i};
+    if isfield(env, 'base_optimizer') && ~isempty(env.base_optimizer); base = env.base_optimizer; end
+    other = 'original';
+    if isfield(env, 'alias_settings') && ~isempty(env.alias_settings)
+        parts = strtrim(strsplit(env.alias_settings, ','));
+        parts = parts(~startsWith(parts, {'np_init', 'np ', 'min_pop_size'}));
+        if ~isempty(parts); other = strjoin(parts, ', '); end
+    end
+    rows(end + 1) = struct('name', opts{i}, 'label', labels{i}, 'base', base, ...
+        'np_init', np_text(env, base), 'min_pop_size', min_text(env, base), 'other', other); %#ok<AGROW>
+end
+fid = fopen(fullfile(a.output_dir, sprintf('settings_%s.csv', a.suite)), 'w');
+c1 = onCleanup(@() fclose(fid));
+fprintf(fid, 'name,label,base,np_init,min_pop_size,other_settings\n');
+for r = rows
+    fprintf(fid, '%s,%s,%s,"%s","%s","%s"\n', r.name, r.label, r.base, r.np_init, r.min_pop_size, r.other);
+end
+fid2 = fopen(fullfile(a.output_dir, sprintf('settings_%s.tex', a.suite)), 'w');
+c2 = onCleanup(@() fclose(fid2));
+fprintf(fid2, '%% %s: settings of each compared algorithm ("original" = published value).\n', suite_title(a.suite));
+fprintf(fid2, '\\begin{tabular}{lllll}\n\\hline\n');
+fprintf(fid2, 'Algorithm & Code & Initial NP & Final NP & Other settings \\\\\n\\hline\n');
+for r = rows
+    fprintf(fid2, '%s & %s & %s & %s & %s \\\\\n', tex_escape(r.label), tex_escape(display_name(r.base)), ...
+            tex_escape(r.np_init), tex_escape(r.min_pop_size), tex_escape(r.other));
+end
+fprintf(fid2, '\\hline\n\\end{tabular}\n');
+end
+
+function s = np_text(env, base)
+% Starting population size: the run's value, or the base's original.
+if isfield(env, 'np_init') && ~isempty(env.np_init)
+    s = sprintf('%g', env.np_init);
+elseif strcmp(base, 'dt-gsk')
+    s = '5D (original)';
+elseif any(strcmp(base, {'gsk', 'agsk', 'apgsk', 'fdb-agsk', 'atmals-gsk', 'egsk'}))
+    s = '100 (original)';
+else
+    s = 'original';   % a user-added optimizer: its own default
+end
+end
+
+function s = min_text(env, base)
+% Final population size: the run's value, the base's original, or "fixed".
+if any(strcmp(base, {'gsk', 'egsk', 'atmals-gsk'}))
+    s = 'fixed';
+elseif isfield(env, 'min_pop_size') && ~isempty(env.min_pop_size)
+    s = sprintf('%g', env.min_pop_size);
+elseif strcmp(base, 'dt-gsk')
+    s = '12; 25 for D >= 50 (original)';
+elseif any(strcmp(base, {'agsk', 'apgsk', 'fdb-agsk'}))
+    s = '12 (original)';
+else
+    s = 'original';
+end
 end
 
 function s = tex_escape(s)

@@ -242,7 +242,12 @@ delete those benchmark-side folders during cleanup, and do not let
 
 Fields written by `run_experiment`:
 
-- `optimizer`, `suite`, `functions`, `dimensions_requested`, `dimensions_run`,
+- `optimizer` (the name the run was given: an optimizer, or an
+  `algorithms.ini` alias), `base_optimizer` (the code it ran; equal to
+  `optimizer` except for an alias), `alias_settings` (the alias's settings as
+  one line, e.g. `kf = 0.7, kr = 0.8`; `''` when none), `aliases_file` (the
+  file it came from; `''` when not an alias)
+- `suite`, `functions`, `dimensions_requested`, `dimensions_run`,
   `runs`, `base_seed`, `seed_policy`, `rand_generator`,
   `initial_population_policy`, `use_parallel`, `write_graphs`,
   `max_nfes_override`
@@ -299,7 +304,26 @@ the three strides as `null` and leave `phase0_protocol.json`'s
 `seed_policy.base_seed_field` and `seed_policy.stride_field` empty, since their
 seed is `dim*func*run` and `base_seed` is unused. `dt-gsk` records the unified
 formula and strides under every policy, and its `run_config.json` adds
-`profile: "pub"`.
+`profile: "pub"`. `run_config.json` also records `alg_name` (the run's name),
+`base_optimizer` and `alias_settings` (as in `environment.json`); `gsk` runs
+record the `KF`/`KR`/`K`/`P` values they used, an alias's own values included.
+A resumed tree whose recorded `alias_settings` differ from the alias's current
+settings is refused, so one tree never mixes two configurations.
+
+An alias's files are named after the alias: its tree (from the launchers)
+is `results/_run_all/<alias>/<suite>/`, with `<alias>_<suite>_D<dim>.csv`,
+`CheckpointErrors_<alias>_F<f>_D<d>.csv`, and `<alias>` in the `optimizer`
+column of `per_run.csv`.
+
+## results/analysis/compare/<suite>/settings_<suite>.csv and .tex
+
+Written by `scripts/compare_algorithms.m` (and `run_compare_algorithms.m`)
+from each compared tree's `environment.json`. Columns: `name`, `label`,
+`base` (the code it ran), `np_init` and `min_pop_size` (the values used, with
+"(original)" when the optimizer's published value applies; "fixed" for GSK,
+eGSK and ATMALS-GSK, which keep their population size), and `other_settings`
+(an alias's other settings, or `original`). The `.tex` file is the same table
+for a manuscript.
 
 ## verification.json (automatic post-run check)
 

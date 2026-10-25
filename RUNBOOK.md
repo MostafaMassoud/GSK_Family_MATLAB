@@ -77,6 +77,7 @@ GSK_Family_MATLAB\              <- repository root
   run_all_cec2017.m
   run_all_cec2020.m
   run_compare_algorithms.m      <- figures and statistics of finished runs (section 6)
+  algorithms.ini                <- aliases: algorithms with changed settings (section 4.4)
   gsk_family\                   <- the project
     src\                        <- MATLAB code (algorithms, runner, tests)
     benchmarks\                 <- C++ benchmark suites, their data, reference results
@@ -123,7 +124,7 @@ matlab -batch "cd('src/tests'); run_matlab_smoke_tests"
 ```
 
 Every test should print `PASS`, and the last line reads
-`All 13 test(s) passed.`
+`All 14 test(s) passed.`
 
 > [!NOTE]
 > You only repeat steps 1 to 3 after changing C++ code (steps 1 and 2) or to
@@ -234,6 +235,38 @@ There is also a C++ command-line tool, `gsk_run`, that runs an experiment from
 a config file; see the
 [Command Reference](gsk_family/docs/getting-started/command_reference.md).
 
+### 4.4 Original or changed settings: aliases
+
+Every algorithm runs with its **original settings** (its published population
+size and parameters) unless you say otherwise. Two ways to change them:
+
+- **The same change for all algorithms:** the launcher's `np_init` (starting
+  population size) and `min_pop_size` (final size of the algorithms that
+  shrink their population). `[]` keeps each algorithm's original value.
+- **A change for one algorithm, kept next to the original:** an **alias** in
+  `algorithms.ini` (repository root). An alias is a name you choose for an
+  algorithm plus its settings:
+
+  ```ini
+  [gsk-np50]
+  base    = gsk
+  np_init = 50
+  ```
+
+  Then use the name in the launcher like any algorithm:
+  `optimizers = {'gsk', 'gsk-np50'}`. `gsk` runs with its original settings,
+  `gsk-np50` with NP = 50, and each gets its own results folder.
+
+`algorithms.ini` lists every setting of every algorithm with its original
+value, and has a commented example for each one: remove the `;` to use it.
+
+> [!NOTE]
+> All aliases get the same seeds as the other algorithms, so comparisons stay
+> fair. A misspelled setting stops the run and lists the accepted ones. After
+> editing an alias that already has results, give it a new name: the runner
+> refuses to mix two settings in one results folder. Aliases work in the
+> MATLAB launchers and `run_experiment`, not in the `gsk_run` tool.
+
 **Where the results go:** `gsk_family\results\_run_all\<algorithm>\<suite>\`
 
 | File | Contents |
@@ -342,6 +375,7 @@ any time, also during a campaign.
 | Wilcoxon rank-sum | `compare\<suite>\ranksum_<suite>.csv` | per function: is the difference between two algorithms significant? |
 | Wilcoxon signed-rank | `compare\<suite>\wilcoxon_<suite>.csv` | over the whole suite: R+, R−, p-value |
 | Friedman ranks | `compare\<suite>\friedman_<suite>.csv` | the mean rank of every algorithm (1 = best) |
+| Settings table | `compare\<suite>\settings_<suite>.tex` and `.csv` | each algorithm's code, population sizes and changed settings ("original" = published value) |
 
 **How to read it.** In the tables, **+** means the proposed algorithm is
 significantly better than that competitor on that function, **−** that it is
@@ -369,6 +403,7 @@ add your own algorithm to the comparison: [New Variant Guide](NEW_VARIANT_GUIDE.
 | Out of memory, MATLAB exits during a parallel run | Use fewer workers (section 5) and continue with `overwrite = false`. |
 | The parallel pool does not start | The runs continue one at a time with the same results; check the Parallel Computing Toolbox licence. |
 | The first run is slow | MATLAB, the pool and the bridge start up once; later runs are faster. |
+| `unknown optimizer 'x'` or a message naming `algorithms.ini` and a line | The name is not an algorithm or an alias, or the alias has a mistake; the message says which line and lists the accepted settings (section 4.4). |
 
 More cases: [Troubleshooting](gsk_family/docs/getting-started/troubleshooting.md).
 

@@ -10,7 +10,7 @@ one command or one small edit.
 1. **Create** One command makes a renamed copy of a family member.
 2. **Edit** Change the search in one MATLAB file.
 3. **Check** A 10-second test run; an untouched copy reproduces its base exactly.
-4. **Run** Run your variant and the algorithms you compare against on the same benchmarks.
+4. **Run** Run your variant next to the others, with original or changed settings.
 5. **Analyze** Press Run once for the figures and the tables.
 
 </div>
@@ -33,6 +33,7 @@ GSK_Family_MATLAB\
   run_all_cec2017.m          <- launchers (one per suite)
   run_all_cec2011.m
   run_compare_algorithms.m   <- figures and statistics
+  algorithms.ini             <- aliases: other settings (step 7)
   gsk_family\
     src\optimizers\
       gsk\                   <- the seven built-in optimizers
@@ -148,6 +149,9 @@ runs without the option keep working:
 alpha = local_option(options, 'alpha', 0.2);   % my new parameter, default 0.2
 ```
 
+A parameter read this way can then be changed without editing the file, from
+an alias in `algorithms.ini` (step 7), for example `alpha = 0.5`.
+
 The full contract of `problem`, `options` and `result` is in the
 [MATLAB interface](gsk_family/docs/reference/matlab_interface.md), and the
 [Extension Guide](gsk_family/docs/development/extension_guide.md) explains it
@@ -217,7 +221,50 @@ For CEC2011, open `run_all_cec2011.m` and set the same `optimizers`,
 For long campaigns, run several runs at once with `use_parallel = true` and
 choose the number of workers yourself; see [Runbook](RUNBOOK.md) section 5.
 
-## 7. Convergence figures and statistics
+## 7. Original and standardized settings
+
+By default every algorithm, yours included, runs with its **original
+settings**: its own population size and parameters. To also run an algorithm
+under other settings, and keep both sets of results, give it an **alias** in
+`algorithms.ini` (repository root, next to the launchers):
+
+```ini
+[gsk-np50]
+base    = gsk
+np_init = 50
+
+[my-gsk-np50]
+base    = my-gsk
+np_init = 50
+```
+
+Then list the names in the launcher like any algorithm:
+
+```matlab
+optimizers = {'gsk', 'my-gsk', 'gsk-np50', 'my-gsk-np50'};
+```
+
+`gsk` and `my-gsk` run with their original settings, the two aliases with
+NP = 50, and every name gets its own results folder. Step 8 compares all four
+in one go.
+
+<div class="cards">
+
+- **Every setting listed** `algorithms.ini` shows each algorithm's settings with their original values, and a commented example for each: remove the `;` to use it.
+- **Your own parameters too** Settings your file reads, e.g. `alpha = local_option(options, 'alpha', 0.3)`, work in an alias: `alpha = 0.5`.
+- **Same seeds** Aliases get the same seeds as all the other algorithms, so the comparison stays fair.
+- **Mistakes caught** A misspelled setting stops the run and lists the accepted ones.
+
+</div>
+
+> [!IMPORTANT]
+> A population size or parameter other than an algorithm's original must be
+> reported as a changed setting in a paper. The settings table of step 8 lists
+> exactly what each name changed. After editing an alias that already has
+> results, give it a new name: the runner refuses to mix two settings in one
+> results folder.
+
+## 8. Convergence figures and statistics
 
 Open `run_compare_algorithms.m` (next to the launchers), set its CONFIG block,
 and press **Run**:
@@ -238,6 +285,7 @@ It reads the finished runs and writes, for each suite:
 | Spreadsheet tables | same folder, `.csv` | the same numbers with every p-value; `statistics_<suite>.csv` adds Best, Median, Worst |
 | Wilcoxon signed-rank | `wilcoxon_<suite>.csv` | R+, R−, p-value and decision per dimension |
 | Friedman ranks | `friedman_<suite>.csv` | mean rank of every algorithm (1 = best) per dimension and overall |
+| Settings table | `settings_<suite>.tex` and `.csv` | each name's code, starting and final population size and changed settings ("original" = published value) |
 
 **Reading the results** (two-sided tests, alpha = 0.05):
 
@@ -261,7 +309,7 @@ runs at the 14 CEC checkpoints.
 > also on a partial campaign: it only reads results and overwrites its own
 > output.
 
-## 8. Put it in the manuscript
+## 9. Put it in the manuscript
 
 - **Figures:** use the PDF files (vector graphics). Say in the caption which
   curve is shown: "median run" or "mean of 51 runs".
@@ -271,24 +319,29 @@ runs at the 14 CEC checkpoints.
 - **Protocol to report:** 51 independent runs, the budget of the suite (table
   in step 6), the same seed and starting population for every algorithm in
   each run (unified seed policy), and your variant's parameter values.
+- **Parameter settings:** `\input{settings_cec2017.tex}` gives a ready table
+  of every compared name, the code it ran, its population sizes and any
+  changed setting.
 - **Environment:** `summary\environment.json` in each result folder records
   the MATLAB version, seeds and settings of the run.
 - **Keep** `results\_run_all\` until the paper is accepted: every number in
   the tables can be traced to a single run in `summary\per_run.csv`.
 
-## 9. Common problems
+## 10. Common problems
 
 | Message or symptom | What to do |
 |---|---|
 | `Unrecognized function or variable 'my_gsk_optimize'` | The folder, file and function names do not match step 3 (folder `my-gsk`, file and function `my_gsk_optimize`). |
 | `new_gsk_variant:exists` | The folder exists already; nothing was changed. Choose another name or delete that folder yourself. |
+| `unknown optimizer 'x'` or a message naming `algorithms.ini` and a line | The name is not an algorithm or an alias, or the alias has a mistake; the message names the line and lists the accepted settings (step 7). |
+| `... was written with alias settings ...` | You edited an alias that already has results. Give the edited alias a new name, or delete its results folder. |
 | `no results for my-gsk on cec2017` | The runs are not finished or not in `results\_run_all\my-gsk\cec2017\`. |
 | A figure lacks one algorithm | That algorithm has no curve for this function yet; it is listed as `incomplete`. |
 | A function is missing from the tables | Only functions that every listed algorithm has finished are compared; the others are listed as `skipped`. |
 | `gskcec:mexMissingPrerequisite` | Build the MEX bridge ([Runbook](RUNBOOK.md) section 3). |
 | Out of memory during a parallel run | Use fewer workers and continue with `overwrite = false` ([Runbook](RUNBOOK.md) section 5). |
 
-## 10. Where to go next
+## 11. Where to go next
 
 - [Runbook](RUNBOOK.md): setup, all launchers, parallel runs.
 - [Comparing Algorithms](gsk_family/docs/research/comparing_algorithms.md): every option of the figure and table tools.

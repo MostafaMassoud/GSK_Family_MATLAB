@@ -24,6 +24,8 @@
 %% ------------------------------ CONFIG ----------------------------------
 optimizers  = {'gsk'};
 % optimizers = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk', 'dt-gsk'};
+% Aliases from algorithms.ini (next to this file) work too, e.g. {'gsk', 'gsk-np50'}:
+% the same code under other settings, with its own results folder.
 
 functions   = 1:28;          % CEC2013 has 28 functions (none excluded)
 dimensions  = [10 30 50];    % CEC2013 standard dims (reference has D10/D30/D50)

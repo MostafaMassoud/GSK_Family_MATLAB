@@ -31,6 +31,8 @@
 
 optimizers = {'gsk'};
 %optimizers = {'gsk', 'agsk', 'apgsk', 'atmals-gsk', 'egsk', 'fdb-agsk', 'dt-gsk'};
+% Aliases from algorithms.ini (next to this file) work too, e.g. {'gsk', 'gsk-np50'}:
+% the same code under other settings, with its own results folder.
 
 functions   = [1:30];             % F2 is excluded automatically, so 29 functions run
 dimensions  = [10];   % CEC2017 standard dims are [10 30 50 100]; this runs D10 only

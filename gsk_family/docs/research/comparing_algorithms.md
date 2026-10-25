@@ -11,20 +11,23 @@
 > one-time setup in the [Runbook](../../../RUNBOOK.md) is done (MEX bridge
 > built, first run works).
 
-## The four steps at a glance
+## The steps at a glance
 
 | Step | What you do | Result |
 |---|---|---|
 | 1 | Add your variant as a new folder (skip if you only compare the seven) | `src/optimizers/<name>/` |
 | 2 | Run every algorithm on the same suite, functions, dimensions and runs | `results/_run_all/<name>/<suite>/` |
 | 3 | `plot_convergence` | one figure per function with every algorithm's curve |
-| 4 | `compare_algorithms` | Mean/SD tables (CSV and LaTeX), Wilcoxon, Friedman, post-hoc tests and effect sizes |
-| 5 | `plot_statistics` | CD diagram, box plots and rank charts |
-| (6) | `cec_complexity` | the CEC algorithm complexity table (runs the algorithms) |
+| 4 | `compare_algorithms` | Mean/SD tables (CSV and LaTeX), Wilcoxon, Friedman, post-hoc tests, effect sizes, runtime table |
+| 5 | `plot_statistics` | CD diagram, box plots, rank and runtime charts |
+| 6 | `plot_performance` | success rates, ERT tables, ECDF data profiles |
+| (7) | `make_study_aliases`, then `plot_sensitivity` / `plot_ablation` | parameter sensitivity and ablation studies (extra runs) |
+| (8) | `cec_complexity` | the CEC algorithm complexity table (runs the algorithms) |
 
-Steps 3 to 5 together are one click: open `run_compare_algorithms.m` in the
+Steps 3 to 6 together are one click: open `run_compare_algorithms.m` in the
 repository root, set its CONFIG block (suites, algorithms, proposed
-algorithm) and press Run; set `complexity = true` there for step 6. The
+algorithm) and press Run; its `sensitivity`, `ablation` and `complexity`
+entries add steps 7 and 8. The
 sections below show the commands it calls, for use in your own scripts. The [New Variant Guide](../../../NEW_VARIANT_GUIDE.md)
 walks through the whole path for a new variant.
 
@@ -267,6 +270,111 @@ runs per algorithm they are drawn as box plots, because a density from so few
 runs is misleading. The y-axis is logarithmic only when the values span at
 least a decade. `plot_statistics` calls `compare_algorithms` with the same
 options, so the figures always match the tables.
+
+## Runtime
+
+`compare_algorithms` also writes `runtime_<suite>.tex` and `.csv`: the
+seconds per run (as timed by each algorithm, from its start to its result),
+mean (SD) per dimension and algorithm, and per function in the CSV.
+`plot_statistics` draws them as `runtime_<suite>` (bars with SD error bars).
+Compare runtimes only between runs made on the same computer with the same
+settings: parallel runs share the processor.
+
+## Success rates, ERT and ECDF data profiles
+
+```matlab
+plot_performance('suite','cec2017', 'optimizers',{'my-gsk','gsk','agsk'});
+```
+
+For a target error t, a run succeeds at the first recorded budget at which
+its error is ≤ t. For every function, algorithm and target (following COCO,
+Hansen et al.):
+
+- **success rate** = successful runs / runs;
+- **ERT** (expected running time) = the evaluations used by all runs until
+  success, counting the full budget for each unsuccessful run, divided by the
+  number of successful runs (∞ when none succeeds);
+- **ECDF data profile** = the fraction of (function, target, run) triples
+  reached within each number of evaluations, one curve per algorithm. The
+  higher and further left a curve, the faster and more reliable the
+  algorithm.
+
+The default targets are 10², 10, 1, 10⁻¹, 10⁻², 10⁻⁴, 10⁻⁶ and 10⁻⁸
+(`'targets'` changes them). CEC2011 and CEC2013-LSGO have no known optimum,
+so there the targets apply to the distance to the best value any compared
+algorithm found, divided by max(|that value|, 1).
+
+Outputs in `results/analysis/performance/<suite>/`: `performance_<suite>.csv`
+(every function, algorithm and target), `ert_<suite>_D<d>.tex` (ERT and
+success rate per function at `'ert_target'`, default the smallest target, the
+smallest ERT in bold), `ecdf_<suite>_D<d>` and `ecdf_<suite>_overall` (all
+dimensions pooled, x = fraction of the budget).
+
+**Smooth curves need a denser log.** By default the runs record their best
+value only at the 14 CEC checkpoints (1%, 2%, ... 100% of the budget), so
+ERT and the ECDF step at those budgets. Add `trace_points = 50;` to a
+launcher's CONFIG block (or pass `'trace_points',50` to `run_experiment`)
+before running: each run then also writes its best value at 50 log-spaced
+budgets to `gen_logs/BestTrace_*.csv`, and `plot_performance` uses them. This
+does not change the runs or any other file.
+
+## Parameter sensitivity
+
+How much does a parameter matter? Run a grid of settings and compare the
+grid points with each other.
+
+1. Write the grid as aliases (they are appended to `algorithms.ini`):
+
+   ```matlab
+   make_study_aliases('sensitivity', 'gsk', {'kf', [0.3 0.5 0.7]});
+   make_study_aliases('sensitivity', 'gsk', {'kf', [0.3 0.5 0.7], 'kr', [0.8 0.9 1]});   % two parameters
+   ```
+
+   It prints the launcher line, e.g.
+   `optimizers = {'gsk', 'gsk-kf-0p3', 'gsk-kf-0p5', 'gsk-kf-0p7'}`.
+2. Run them with a launcher. A grid costs one campaign per point, so a few
+   functions or D10 are often enough.
+3. Plot:
+
+   ```matlab
+   plot_sensitivity('suite','cec2017', 'base','gsk', 'spec',{'kf',[0.3 0.5 0.7]});
+   ```
+
+One parameter gives a line chart of the Friedman mean rank against the
+value, one line per dimension and a thick line for all dimensions; two
+parameters give a heatmap with the best cell framed. The numbers go to
+`sensitivity_<suite>_<base>.csv`, and the full comparison tables of the grid
+to its `compare` folder (`results/analysis/sensitivity/<suite>/<base>/`).
+
+## Ablation study
+
+Which new parts of your variant actually help? Switch each one off and
+compare.
+
+1. Give each new part of your variant an on/off switch, read like any
+   parameter:
+
+   ```matlab
+   use_step_a = local_option(options, 'use_step_a', true);
+   ...
+   if use_step_a
+       % the new step
+   end
+   ```
+
+2. Write one alias per switch, run them with the full variant, and plot:
+
+   ```matlab
+   make_study_aliases('ablation', 'my-gsk', {'use_step_a', 'use_step_b'});
+   % run: optimizers = {'my-gsk', 'my-gsk-no-use-step-a', 'my-gsk-no-use-step-b'}
+   plot_ablation('suite','cec2017', 'base','my-gsk', 'switches',{'use_step_a','use_step_b'});
+   ```
+
+`ablation_<suite>_<base>.tex` lists every version: the part switched off, the
+Friedman mean rank, the +/=/− counts of the full variant against it, and the
+signed-rank p-value per dimension; the chart shows the mean ranks. A part
+helps when switching it off makes the rank worse and the full variant wins
+more functions than it loses.
 
 ## Algorithm complexity (CEC protocol)
 

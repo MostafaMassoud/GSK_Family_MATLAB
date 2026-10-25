@@ -656,10 +656,16 @@ settings ("original" = published value)</td>
 Cliff's delta per function</td>
 </tr>
 <tr>
-<td>CD diagram, box plots, rank charts</td>
+<td>CD diagram, box plots, rank and runtime charts</td>
 <td><code>results\analysis\statistics\&lt;suite&gt;\</code></td>
 <td><code>cd_*</code>, <code>box_*</code> (every run as a dot),
-<code>ranks_*</code></td>
+<code>ranks_*</code>, <code>runtime_*</code></td>
+</tr>
+<tr>
+<td>ERT and ECDF data profiles</td>
+<td><code>results\analysis\performance\&lt;suite&gt;\</code></td>
+<td>success rate and ERT per function and target, <code>ecdf_*</code>
+curves (smooth with <code>trace_points = 50</code> in the launcher)</td>
 </tr>
 <tr>
 <td>Complexity table (optional)</td>
@@ -697,6 +703,27 @@ Run <code>run_compare_algorithms.m</code> again at any time, also on a
 partial campaign: it only reads results and overwrites its own
 output.</p>
 </div>
+<p><strong>Sensitivity and ablation.</strong> Two studies reviewers
+often ask about a new variant:</p>
+<ul>
+<li><p><em>Is it sensitive to its parameters?</em> Write a grid of
+settings as aliases, run them, then plot the Friedman ranks over the
+grid:</p>
+<pre class="matlab"><code>make_study_aliases(&#39;sensitivity&#39;, &#39;my-gsk&#39;, {&#39;alpha&#39;, [0.1 0.3 0.5]});
+% run them with a launcher, then in run_compare_algorithms.m:
+sensitivity = {&#39;my-gsk&#39;, {&#39;alpha&#39;, [0.1 0.3 0.5]}};</code></pre></li>
+<li><p><em>Does each new part help?</em> Give each part an on/off switch
+in your file
+(<code>use_step_a = local_option(options, 'use_step_a', true);</code>),
+then:</p>
+<pre class="matlab"><code>make_study_aliases(&#39;ablation&#39;, &#39;my-gsk&#39;, {&#39;use_step_a&#39;, &#39;use_step_b&#39;});
+% run them with my-gsk, then in run_compare_algorithms.m:
+ablation = {&#39;my-gsk&#39;, {&#39;use_step_a&#39;, &#39;use_step_b&#39;}};</code></pre></li>
+</ul>
+<p>Both need extra runs (one campaign per grid point or per switched-off
+part); a few functions or D10 are often enough. Details: <a
+href="gsk_family/docs/research/comparing_algorithms.md">Comparing
+Algorithms</a>.</p>
 </section>
 <section id="9-put-it-in-the-manuscript" class="level1">
 <h1>9. Put it in the manuscript</h1>
@@ -726,6 +753,13 @@ With 29 functions, consider Holm-adjusted signs
 <li><strong>Complexity:</strong> <code>complexity_cec2017.tex</code> is
 the CEC complexity table (T0, T1, T̂2, (T̂2 − T1)/T0); measure it on an
 otherwise idle computer.</li>
+<li><strong>Speed and reliability:</strong>
+<code>runtime_&lt;suite&gt;.tex</code> (seconds per run),
+<code>ert_&lt;suite&gt;_D&lt;d&gt;.tex</code> and the ECDF figures (how
+often and how fast each algorithm reaches each target error).</li>
+<li><strong>Robustness:</strong> the sensitivity chart or heatmap and
+the ablation table, when the paper claims a parameter is robust or a
+component helps.</li>
 <li><strong>Environment:</strong> <code>summary\environment.json</code>
 in each result folder records the MATLAB version, seeds and settings of
 the run.</li>

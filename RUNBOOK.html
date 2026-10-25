@@ -719,6 +719,18 @@ function</td>
 <td>Friedman mean ranks per dimension and overall</td>
 </tr>
 <tr>
+<td>Runtime</td>
+<td><code>compare\&lt;suite&gt;\runtime_&lt;suite&gt;.tex</code>,
+<code>statistics\&lt;suite&gt;\runtime_&lt;suite&gt;.png</code></td>
+<td>seconds per run of every algorithm</td>
+</tr>
+<tr>
+<td>ERT and ECDF</td>
+<td><code>performance\&lt;suite&gt;\ert_&lt;suite&gt;_D&lt;d&gt;.tex</code>,
+<code>ecdf_&lt;suite&gt;_D&lt;d&gt;.png</code></td>
+<td>how often and how fast each algorithm reaches target errors</td>
+</tr>
+<tr>
 <td>Wilcoxon signed-rank</td>
 <td><code>compare\&lt;suite&gt;\wilcoxon_&lt;suite&gt;.csv</code></td>
 <td>over the whole suite: R+, R−, p-value</td>
@@ -754,6 +766,21 @@ median run is drawn; set <code>curve = 'mean'</code> for the mean of all
 runs, and <code>band = 'iqr'</code> for a shaded 25–75% band of all runs
 under each curve. No toolbox is needed.</p>
 </div>
+<p><strong>Smoother ERT and ECDF curves.</strong> By default each run
+records its best value only at the 14 CEC checkpoints. Add
+<code>trace_points = 50;</code> to a launcher's CONFIG block before
+running (a commented line is already there) to also log it at 50
+budgets; the runs themselves do not change.</p>
+<p><strong>Sensitivity and ablation studies.</strong>
+<code>make_study_aliases</code> writes the aliases for a parameter grid
+(<code>make_study_aliases('sensitivity','gsk',{'kf',[0.3 0.5 0.7]})</code>)
+or for your variant with one component switched off at a time
+(<code>make_study_aliases('ablation','my-gsk',{'use_step_a'})</code>).
+Run them with a launcher, then set <code>sensitivity</code> or
+<code>ablation</code> in <code>run_compare_algorithms.m</code>.
+Step-by-step: <a
+href="gsk_family/docs/research/comparing_algorithms.md">Comparing
+Algorithms</a>.</p>
 <p><strong>Algorithm complexity.</strong> CEC2017 papers usually include
 the complexity table of the CEC technical report (T0, T1, T̂2, (T̂2 −
 T1)/T0). Set <code>complexity = true</code> in

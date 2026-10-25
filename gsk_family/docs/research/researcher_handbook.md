@@ -566,6 +566,10 @@ Before reporting results:
     per-function signs. Say whether the signs use raw or Holm-adjusted
     p-values, and include the CEC complexity table (`cec_complexity`) for
     CEC2017.
+13. For claims about speed, robustness or components, add the runtime table,
+    the ERT/ECDF data profiles (`plot_performance`; run with `trace_points`
+    for smooth curves), and sensitivity or ablation studies
+    (`make_study_aliases`, `plot_sensitivity`, `plot_ablation`).
 
 ## 19. Literature and provenance
 

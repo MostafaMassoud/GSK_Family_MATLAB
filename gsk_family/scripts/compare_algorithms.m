@@ -60,6 +60,9 @@ function report = compare_algorithms(varargin)
 %   nemenyi_<suite>.csv        per group and overall: the Nemenyi critical
 %                              difference CD at alpha (used by the CD diagram
 %                              of plot_statistics)
+%   runtime_<suite>.csv/.tex   seconds per run (runtime_seconds of per_run.csv):
+%                              per function in the CSV, mean (SD) per group
+%                              and optimizer in the LaTeX table
 %   settings_<suite>.csv/.tex  per optimizer: the code it ran (the base of
 %                              an algorithms.ini alias), its initial and
 %                              final population sizes and any other changed
@@ -117,10 +120,14 @@ native = any(strcmp(a.suite, {'cec2011', 'cec2013lsgo'}));
 known_optimum = ~native;
 comp = setdiff(1:numel(opts), ip, 'stable');
 
-% runs{i}: containers.Map 'f|D' -> per-run values of optimizer i.
+% runs{i}: containers.Map 'f|D' -> per-run values of optimizer i;
+% times{i}: the same for runtime_seconds.
 runs = cell(1, numel(opts));
+times = cell(1, numel(opts));
 for i = 1:numel(opts)
-    runs{i} = load_runs(fullfile(a.results_root, opts{i}, a.suite, 'summary', 'per_run.csv'), known_optimum);
+    pr = fullfile(a.results_root, opts{i}, a.suite, 'summary', 'per_run.csv');
+    runs{i} = load_runs(pr, known_optimum);
+    times{i} = load_runs(pr, known_optimum, 'runtime_seconds');
     fprintf('compare_algorithms: %-12s %3d (function, dimension) cell(s)\n', labels{i}, runs{i}.Count);
 end
 
@@ -253,7 +260,9 @@ for g = gdims
     report.groups(end).posthoc = ph;
     report.groups(end).a12 = a12;
     report.groups(end).p_holm = p_holm;
+    report.groups(end).cells = gc;
 end
+report.runtime = write_runtime_tables(a, opts, labels, times, report.groups);
 
 if numel(report.groups) > 1
     nall = size(all_means, 1);
@@ -634,6 +643,49 @@ end
 fprintf(fid2, '\\hline\n\\end{tabular}\n');
 end
 
+function rt = write_runtime_tables(a, opts, labels, times, groups)
+% runtime_<suite>.csv: seconds per run (runtime_seconds of per_run.csv, timed
+% by each optimizer from its start to its result) per (dimension, function,
+% optimizer): runs, mean, SD, median. runtime_<suite>.tex: mean (SD) seconds
+% per run over all runs of all functions of each group, one column per
+% optimizer. Times depend on the computer and on parallel load; compare
+% optimizers run on the same machine with the same settings.
+rt = struct('tag', {}, 'mean', {}, 'sd', {});
+fid = fopen(fullfile(a.output_dir, sprintf('runtime_%s.csv', a.suite)), 'w');
+c1 = onCleanup(@() fclose(fid));
+fprintf(fid, 'dimension,function,optimizer,runs,mean_seconds,sd_seconds,median_seconds\n');
+for g = 1:numel(groups)
+    gc = groups(g).cells;
+    if strcmp(groups(g).tag, 'all'); dtext = 'native'; else; dtext = groups(g).tag(2:end); end
+    pooled = cell(1, numel(opts));
+    for c = 1:size(gc, 1)
+        key = sprintf('%d|%d', gc(c, 1), gc(c, 2));
+        for i = 1:numel(opts)
+            t = times{i}(key);
+            pooled{i} = [pooled{i}; t(:)];
+            fprintf(fid, '%s,%d,%s,%d,%.6f,%.6f,%.6f\n', dtext, gc(c, 1), opts{i}, numel(t), ...
+                    mean(t), std(t), median(t));
+        end
+    end
+    rt(end + 1) = struct('tag', groups(g).tag, 'mean', cellfun(@mean, pooled), ...
+                         'sd', cellfun(@std, pooled)); %#ok<AGROW>
+end
+fid2 = fopen(fullfile(a.output_dir, sprintf('runtime_%s.tex', a.suite)), 'w');
+c2 = onCleanup(@() fclose(fid2));
+fprintf(fid2, '%% %s: mean (SD) seconds per run over all runs of all functions; same computer and settings.\n', ...
+        suite_title(a.suite));
+fprintf(fid2, '\\begin{tabular}{l%s}\n\\hline\n', repmat('r', 1, numel(opts)));
+fprintf(fid2, 'Group');
+for i = 1:numel(opts); fprintf(fid2, ' & %s', tex_escape(labels{i})); end
+fprintf(fid2, ' \\\\\n\\hline\n');
+for g = 1:numel(rt)
+    fprintf(fid2, '%s', strrep(rt(g).tag, 'all', 'all problems'));
+    for i = 1:numel(opts); fprintf(fid2, ' & %.3g (%.2g)', rt(g).mean(i), rt(g).sd(i)); end
+    fprintf(fid2, ' \\\\\n');
+end
+fprintf(fid2, '\\hline\n\\end{tabular}\n');
+end
+
 function s = np_text(env, base)
 % Starting population size: the run's value, or the base's original.
 if isfield(env, 'np_init') && ~isempty(env.np_init)
@@ -676,13 +728,16 @@ end
 
 % ---- data loading -------------------------------------------------------------
 
-function m = load_runs(path, known_optimum)
+function m = load_runs(path, known_optimum, vcol)
 % Map 'f|D' -> per-run values from per_run.csv (the error column, or
-% best_fitness when the suite has no known optimum). A run id that appears
-% more than once (resumed sessions) keeps its last row.
+% best_fitness when the suite has no known optimum; vcol picks another
+% column, e.g. runtime_seconds). A run id that appears more than once
+% (resumed sessions) keeps its last row.
 assert(isfile(path), 'compare_algorithms:noResults', 'missing %s', path);
 T = readtable(path, 'VariableNamingRule', 'preserve', 'Delimiter', ',');
-if known_optimum; vcol = 'error'; else; vcol = 'best_fitness'; end
+if nargin < 3
+    if known_optimum; vcol = 'error'; else; vcol = 'best_fitness'; end
+end
 F = T.('function'); D = T.dimension; R = T.run; V = T.(vcol);
 m = containers.Map('KeyType', 'char', 'ValueType', 'any');
 [~, last] = unique([F D R], 'rows', 'last');

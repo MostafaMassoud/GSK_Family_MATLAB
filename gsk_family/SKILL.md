@@ -251,8 +251,10 @@ under `src` or GSK code under `benchmarks`.
   signed-rank, Friedman with Iman-Davenport, post-hoc Holm/Hochberg/Finner,
   Nemenyi CD, settings tables), `scripts/plot_statistics.m` (CD diagram, box
   plots, rank charts) and, opt-in, `scripts/cec_complexity.m` (CEC
-  complexity table; it runs the optimizers). `test_comparison_tools.m`
-  covers them.
+  complexity table; it runs the optimizers), `scripts/plot_performance.m`
+  (success rate, ERT, ECDF; dense data with the runner's `trace_points`),
+  and `scripts/make_study_aliases.m` with `plot_sensitivity.m` and
+  `plot_ablation.m`. `test_comparison_tools.m` covers them.
 - Run-level comparison of two `per_run.csv` sets (e.g. a MATLAB DT-GSK campaign
   vs `benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv`):
   `scripts/compare_reference_runs.m` (needs the Statistics and Machine Learning

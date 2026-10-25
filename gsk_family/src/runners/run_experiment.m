@@ -42,6 +42,13 @@ function run_experiment(varargin)
 % 'verbose',false hides the per-run lines and prints one summary row per
 % (function, dimension); useful for long multi-run sweeps.
 %
+% 'trace_points',n (default 0 = off; else an integer >= 2, e.g. 50) also
+% writes gen_logs/BestTrace_<name>_F<f>_D<d>.csv: the best-so-far value of
+% every run at n log-spaced budgets from 1 to max_nfes (same layout as the
+% checkpoint files), for smooth ERT and ECDF data profiles
+% (scripts/plot_performance.m). It reads the runs' own convergence records,
+% so the runs and every other file are unchanged.
+%
 % An existing output_dir is resumed by default. Generated CSVs are appended
 % where possible. A completed run id is skipped when its stored seed, cell
 % budget (max_nfes) and generator match the active run; otherwise it is re-run
@@ -104,6 +111,7 @@ p.addParameter('write_graphs', false, @(x) islogical(x) || isnumeric(x));
 p.addParameter('np_init', [], @isnumeric);
 p.addParameter('min_pop_size', [], @isnumeric);
 p.addParameter('aliases_file', '', @(x) ischar(x) || isstring(x));
+p.addParameter('trace_points', 0, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x == fix(x) && x ~= 1);
 p.parse(varargin{:});
 a = p.Results;
 a.optimizer = canonical_optimizer_id(a.optimizer);
@@ -526,6 +534,18 @@ for dim = a.dimensions(:)'
         end
 
         write_checkpoint_errors(genlogs_dir, a.name, func_id, D, checkpoints, runs_to_do, run_seeds, chk_errors, session_tag);
+        if a.trace_points > 0
+            % Optional dense trace for ERT/ECDF: best-so-far value at
+            % trace_points log-spaced budgets, from the runs' own convergence
+            % records (no change to the runs or to CheckpointErrors_*.csv).
+            tpts = trace_budgets(problem.max_nfes, a.trace_points);
+            trace = zeros(nr_todo, numel(tpts));
+            for rr = 1:nr_todo
+                trace(rr, :) = checkpoint_errors(min(conv_nfes{rr}, problem.max_nfes), conv_err{rr}, tpts);
+            end
+            write_checkpoint_errors(genlogs_dir, a.name, func_id, D, tpts, runs_to_do, run_seeds, trace, ...
+                                    session_tag, 'BestTrace');
+        end
         append_function_runs(runs_log, func_id, D, known_optimum, runs_to_do, ...
                              run_seeds, run_best, run_errv, run_nfes, run_term, run_rt, problem, report_zero_tol(a));
         [combined_runs, combined_values] = combine_existing_and_new_values( ...
@@ -1292,11 +1312,14 @@ end
 
 % ---- per-cell artifact writers ---------------------------------------------
 
-function write_checkpoint_errors(genlogs_dir, optimizer, func_id, D, checkpoints, run_ids, seeds, chk, session_tag)
-% CheckpointErrors_<optimizer>_F<f>_D<d>.csv: one row per run, columns
-% Run,Seed,E<checkpoint>..., the best-so-far error at each CEC checkpoint.
-% Appends when the header matches; otherwise archives the file and rewrites.
-path = fullfile(genlogs_dir, sprintf('CheckpointErrors_%s_F%d_D%d.csv', optimizer, func_id, D));
+function write_checkpoint_errors(genlogs_dir, optimizer, func_id, D, checkpoints, run_ids, seeds, chk, session_tag, prefix)
+% <prefix>_<optimizer>_F<f>_D<d>.csv: one row per run, columns
+% Run,Seed,E<budget>..., the best-so-far error at each budget. The prefix is
+% CheckpointErrors (the CEC checkpoints, default) or BestTrace (the optional
+% trace_points budgets). Appends when the header matches; otherwise
+% archives the file and rewrites.
+if nargin < 10; prefix = 'CheckpointErrors'; end
+path = fullfile(genlogs_dir, sprintf('%s_%s_F%d_D%d.csv', prefix, optimizer, func_id, D));
 expected_header = sprintf('Run,Seed%s', sprintf(',E%d', checkpoints));
 write_header = true;
 mode = 'w';
@@ -1538,6 +1561,7 @@ env.statistics_basis = ternary(known_optimum, 'error_vs_optimum', 'raw_objective
 env.report_zero_tol = report_zero_tol(a);
 env.optimizer_options = optimizer_options_metadata(a.optimizer, a.suite);
 env.checkpoint_fractions = fracs;
+env.trace_points = a.trace_points;   % 0 = no BestTrace_*.csv
 env.data_root = fullfile(a.project_root, 'benchmarks', 'cec_suite_cpp', a.suite, 'input_data');
 env.reference_root = fullfile(a.project_root, 'benchmarks', 'cec_reference_results');
 env.output_dir = a.output_dir;
@@ -1682,6 +1706,12 @@ for c = 1:numel(checkpoints)
     if isempty(idx); idx = 1; end
     e(c) = conv_err(idx);
 end
+end
+
+function b = trace_budgets(max_nfes, n)
+% n log-spaced budgets from 1 to max_nfes (rounded, unique) for the
+% optional BestTrace_*.csv files.
+b = unique(round(logspace(0, log10(max_nfes), n)));
 end
 
 function idx = median_run_index(values)

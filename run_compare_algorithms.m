@@ -27,6 +27,7 @@
 %                                      Bonferroni-Dunn, Holm, Hochberg, Finner
 %       nemenyi_<suite>.csv            Nemenyi critical difference
 %       statistics_<suite>.csv         Best, Median, Mean, Worst, SD
+%       runtime_<suite>.tex/.csv       seconds per run, mean (SD)
 %       settings_<suite>.tex/.csv      code, population sizes and changed
 %                                      settings of each compared name
 %   gsk_family/results/analysis/statistics/<suite>/   (statistics_figures)
@@ -34,6 +35,13 @@
 %       box_... / violin_...           final values of all runs, per function
 %                                      and an overview per dimension
 %       ranks_<suite>_bars / _radar    Friedman mean ranks per dimension
+%       runtime_<suite>                seconds per run
+%   gsk_family/results/analysis/performance/<suite>/  (performance = true)
+%       performance_<suite>.csv        success rate and ERT per function and target
+%       ert_<suite>_<D>.tex            ERT (success rate) table
+%       ecdf_<suite>_<D or overall>    ECDF data profiles
+%   gsk_family/results/analysis/sensitivity/ and ablation/   (when set)
+%       plot_sensitivity / plot_ablation tables and figures
 %   gsk_family/results/analysis/complexity/<suite>/   (complexity = true)
 %       complexity_<suite>.tex/.csv    T0, T1, T2_hat, (T2_hat - T1)/T0
 %
@@ -81,11 +89,16 @@ overview   = true;                     % also one figure with all functions per 
 alpha      = 0.05;                     % significance level of the tests
 correction = 'none';                   % 'holm' = table signs (+/=/-) from Holm-adjusted rank-sum p-values
 
-statistics_figures = {'cd', 'box', 'ranks'};   % {} = none; CD diagram, box plots, rank charts (add 'violin' for violins)
+statistics_figures = {'cd', 'box', 'ranks', 'runtime'};   % {} = none; CD diagram, box plots, rank and runtime charts (add 'violin' for violins)
+performance = true;                    % success rates, ERT tables and ECDF data profiles (smooth with launcher trace_points)
 
 complexity = false;                    % true = also measure the CEC complexity table (T0, T1, T2) for
                                        % cec2017; this RUNS each algorithm 5 x 200,000 evaluations
                                        % per dimension (minutes to hours; keep the PC otherwise idle)
+
+% Optional studies (run their aliases first; see make_study_aliases):
+sensitivity = {};                      % e.g. {'gsk', {'kf', [0.3 0.5 0.7]}}  or  {'gsk', {'kf', [0.3 0.5], 'kr', [0.8 0.9]}}
+ablation    = {};                      % e.g. {'my-gsk', {'use_step_a', 'use_step_b'}}
 % -------------------------------------------------------------------------
 
 %% ------------------------------ SET UP ----------------------------------
@@ -132,6 +145,33 @@ for s = 1:numel(suites)
             fprintf(2, 'FAIL  %s statistics figures: %s\n', upper(suite), err.message);
         end
     end
+    if performance
+        try
+            pf = {'suite', suite, 'results_root', results_root, 'project_root', root, ...
+                  'functions', functions, 'dimensions', dimensions, 'formats', formats};
+            if ~isempty(optimizers); pf = [pf, {'optimizers', optimizers}]; end %#ok<AGROW>
+            if ~isempty(labels);     pf = [pf, {'labels', labels}];         end %#ok<AGROW>
+            plot_performance(pf{:});
+        catch err
+            fprintf(2, 'FAIL  %s performance profiles: %s\n', upper(suite), err.message);
+        end
+    end
+    if ~isempty(sensitivity)
+        try
+            plot_sensitivity('suite', suite, 'base', sensitivity{1}, 'spec', sensitivity{2}, ...
+                             'results_root', results_root, 'project_root', root, 'formats', formats);
+        catch err
+            fprintf(2, 'FAIL  %s sensitivity: %s\n', upper(suite), err.message);
+        end
+    end
+    if ~isempty(ablation)
+        try
+            plot_ablation('suite', suite, 'base', ablation{1}, 'switches', ablation{2}, ...
+                          'results_root', results_root, 'project_root', root, 'formats', formats);
+        catch err
+            fprintf(2, 'FAIL  %s ablation: %s\n', upper(suite), err.message);
+        end
+    end
     if complexity
         if strcmp(suite, 'cec2017') && ~isempty(optimizers)
             try
@@ -150,6 +190,9 @@ fprintf('\n==================== done ====================\n');
 fprintf('Convergence figures under: %s\n', fullfile(root, 'results', 'analysis', 'convergence'));
 fprintf('Tables under:              %s\n', fullfile(root, 'results', 'analysis', 'compare'));
 fprintf('Statistics figures under:  %s\n', fullfile(root, 'results', 'analysis', 'statistics'));
+if performance; fprintf('Performance profiles under: %s\n', fullfile(root, 'results', 'analysis', 'performance')); end
+if ~isempty(sensitivity); fprintf('Sensitivity under:         %s\n', fullfile(root, 'results', 'analysis', 'sensitivity')); end
+if ~isempty(ablation); fprintf('Ablation under:            %s\n', fullfile(root, 'results', 'analysis', 'ablation')); end
 if complexity; fprintf('Complexity table under:    %s\n', fullfile(root, 'results', 'analysis', 'complexity')); end
 
 function s = ternary_text(cond, a, b)

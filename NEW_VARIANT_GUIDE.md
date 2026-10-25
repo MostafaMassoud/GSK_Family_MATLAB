@@ -289,7 +289,8 @@ It reads the finished runs and writes, for each suite:
 | Friedman ranks | `friedman_<suite>.csv` | mean rank of every algorithm (1 = best) per dimension and overall |
 | Settings table | `settings_<suite>.tex` and `.csv` | each name's code, starting and final population size and changed settings ("original" = published value) |
 | Post-hoc and effect sizes | `posthoc_<suite>.csv`, `ranksum_<suite>.csv` | Holm/Hochberg/Finner-corrected Friedman post-hoc tests; A12 and Cliff's delta per function |
-| CD diagram, box plots, rank charts | `results\analysis\statistics\<suite>\` | `cd_*`, `box_*` (every run as a dot), `ranks_*` |
+| CD diagram, box plots, rank and runtime charts | `results\analysis\statistics\<suite>\` | `cd_*`, `box_*` (every run as a dot), `ranks_*`, `runtime_*` |
+| ERT and ECDF data profiles | `results\analysis\performance\<suite>\` | success rate and ERT per function and target, `ecdf_*` curves (smooth with `trace_points = 50` in the launcher) |
 | Complexity table (optional) | `results\analysis\complexity\cec2017\` | T0, T1, T̂2, (T̂2 − T1)/T0; set `complexity = true` (it times extra runs) |
 
 **Reading the results** (two-sided tests, alpha = 0.05):
@@ -314,6 +315,31 @@ runs at the 14 CEC checkpoints.
 > also on a partial campaign: it only reads results and overwrites its own
 > output.
 
+**Sensitivity and ablation.** Two studies reviewers often ask about a new
+variant:
+
+- *Is it sensitive to its parameters?* Write a grid of settings as aliases,
+  run them, then plot the Friedman ranks over the grid:
+
+  ```matlab
+  make_study_aliases('sensitivity', 'my-gsk', {'alpha', [0.1 0.3 0.5]});
+  % run them with a launcher, then in run_compare_algorithms.m:
+  sensitivity = {'my-gsk', {'alpha', [0.1 0.3 0.5]}};
+  ```
+
+- *Does each new part help?* Give each part an on/off switch in your file
+  (`use_step_a = local_option(options, 'use_step_a', true);`), then:
+
+  ```matlab
+  make_study_aliases('ablation', 'my-gsk', {'use_step_a', 'use_step_b'});
+  % run them with my-gsk, then in run_compare_algorithms.m:
+  ablation = {'my-gsk', {'use_step_a', 'use_step_b'}};
+  ```
+
+Both need extra runs (one campaign per grid point or per switched-off part);
+a few functions or D10 are often enough. Details:
+[Comparing Algorithms](gsk_family/docs/research/comparing_algorithms.md).
+
 ## 9. Put it in the manuscript
 
 - **Figures:** use the PDF files (vector graphics). Say in the caption which
@@ -334,6 +360,11 @@ runs at the 14 CEC checkpoints.
   functions, consider Holm-adjusted signs (`correction = 'holm'`).
 - **Complexity:** `complexity_cec2017.tex` is the CEC complexity table
   (T0, T1, T̂2, (T̂2 − T1)/T0); measure it on an otherwise idle computer.
+- **Speed and reliability:** `runtime_<suite>.tex` (seconds per run),
+  `ert_<suite>_D<d>.tex` and the ECDF figures (how often and how fast each
+  algorithm reaches each target error).
+- **Robustness:** the sensitivity chart or heatmap and the ablation table,
+  when the paper claims a parameter is robust or a component helps.
 - **Environment:** `summary\environment.json` in each result folder records
   the MATLAB version, seeds and settings of the run.
 - **Keep** `results\_run_all\` until the paper is accepted: every number in

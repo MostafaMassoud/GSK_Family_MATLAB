@@ -26,6 +26,9 @@ function report = plot_statistics(varargin)
 %   'ranks'   Friedman mean ranks as grouped bars per group and overall
 %             (ranks_<suite>_bars.*), and a radar chart over the groups when
 %             there are at least three (ranks_<suite>_radar.*).
+%   'runtime' mean seconds per run (all runs of all functions) per group and
+%             optimizer, with SD error bars and the mean printed on each bar
+%             (runtime_<suite>.*).
 % Groups are the dimensions (fixed-dimension suites) or 'all' (cec2011,
 % cec2013lsgo).
 %
@@ -49,7 +52,7 @@ p.addParameter('functions', [], @isnumeric);
 p.addParameter('dimensions', [], @isnumeric);
 p.addParameter('alpha', 0.05, @(x) isnumeric(x) && isscalar(x) && x > 0 && x < 1);
 p.addParameter('correction', 'none', @(x) any(strcmpi(char(x), {'none', 'holm'})));
-p.addParameter('figures', {'cd', 'box', 'ranks'}, @(x) iscell(x) || isstring(x) || ischar(x));
+p.addParameter('figures', {'cd', 'box', 'ranks', 'runtime'}, @(x) iscell(x) || isstring(x) || ischar(x));
 p.addParameter('formats', {'png', 'pdf'}, @(x) iscell(x) || isstring(x) || ischar(x));
 p.addParameter('yscale', 'auto', @(x) any(strcmpi(char(x), {'auto', 'log', 'linear'})));
 p.addParameter('error_floor', 1e-8, @(x) isnumeric(x) && isscalar(x) && x > 0);
@@ -70,7 +73,7 @@ a.results_root = char(a.results_root); a.output_dir = char(a.output_dir); a.comp
 a.figures = lower(cellstr(a.figures));
 a.formats = lower(cellstr(a.formats));
 a.yscale = lower(char(a.yscale));
-bad = setdiff(a.figures, {'cd', 'box', 'violin', 'ranks'});
+bad = setdiff(a.figures, {'cd', 'box', 'violin', 'ranks', 'runtime'});
 assert(isempty(bad), 'plot_statistics:args', 'unknown figure(s): %s', strjoin(bad, ', '));
 if ~exist(a.output_dir, 'dir'); mkdir(a.output_dir); end
 
@@ -135,6 +138,9 @@ end
 
 if any(strcmp(a.figures, 'ranks'))
     report.figures = [report.figures, rank_charts(groups, labels, style, a)];
+end
+if any(strcmp(a.figures, 'runtime'))
+    report.figures = [report.figures, runtime_chart(rep.runtime, labels, style, a)];
 end
 fprintf('plot_statistics: wrote %d file(s) to %s\n', numel(report.figures), a.output_dir);
 end
@@ -364,11 +370,13 @@ k = size(R, 2);
 fig = new_figure(a.visible, [100 100 max(620, 130 * numel(tags) + 260), 440]);
 ax = axes(fig); hold(ax, 'on'); box(ax, 'off');
 % Same look as the box plots: light fill, coloured edge, the rank on top.
-b = bar(ax, R, 'grouped', 'BarWidth', 0.82);
+% One group: pad with an empty row, so bar keeps one series per optimizer.
+b = bar(ax, [R; nan(size(R, 1) == 1, k)], 'grouped', 'BarWidth', 0.82);
 for i = 1:k
     b(i).FaceColor = style(i, :); b(i).FaceAlpha = 0.25;
     b(i).EdgeColor = style(i, :); b(i).LineWidth = 1.2; b(i).DisplayName = labels{i};
-    text(ax, b(i).XEndPoints, b(i).YEndPoints + 0.06 * k / 5, compose('%.2f', b(i).YData), ...
+    ng = numel(tags);
+    text(ax, b(i).XEndPoints(1:ng), b(i).YEndPoints(1:ng) + 0.06 * k / 5, compose('%.2f', b(i).YData(1:ng)), ...
          'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontSize', 8, ...
          'Color', style(i, :) * 0.7);
 end
@@ -376,6 +384,7 @@ set(ax, 'XTick', 1:numel(tags), 'XTickLabel', cellfun(@group_text, tags, 'Unifor
         'XGrid', 'off', 'YGrid', 'on', 'GridAlpha', 0.12, 'TickDir', 'out', 'LineWidth', 0.8);
 ylabel(ax, 'Friedman mean rank (lower is better)');
 ylim(ax, [0, k + 0.6]);
+xlim(ax, [0.5, numel(tags) + 0.5]);
 legend(ax, 'Location', 'northoutside', 'Orientation', 'horizontal', 'Interpreter', 'none', 'Box', 'off');
 title(ax, sprintf('%s  Friedman mean ranks', suite_title(a.suite)), 'FontWeight', 'normal');
 paths = save_figure(fig, fullfile(a.output_dir, sprintf('ranks_%s_bars', a.suite)), a.formats);
@@ -399,6 +408,39 @@ if nnz(spokes) >= 3
     paths = [paths, save_figure(fig, fullfile(a.output_dir, sprintf('ranks_%s_radar', a.suite)), a.formats)];
     close(fig);
 end
+end
+
+function paths = runtime_chart(rt, labels, style, a)
+% Mean seconds per run with SD error bars, in the style of the rank chart.
+tags = {rt.tag};
+M = cell2mat(arrayfun(@(r) r.mean(:)', rt(:), 'UniformOutput', false));
+E = cell2mat(arrayfun(@(r) r.sd(:)', rt(:), 'UniformOutput', false));
+k = size(M, 2);
+fig = new_figure(a.visible, [100 100 max(620, 130 * numel(tags) + 260), 440]);
+ax = axes(fig); hold(ax, 'on'); box(ax, 'off');
+% One group: pad with an empty row, so bar keeps one series per optimizer.
+b = bar(ax, [M; nan(size(M, 1) == 1, k)], 'grouped', 'BarWidth', 0.82);
+for i = 1:k
+    b(i).FaceColor = style(i, :); b(i).FaceAlpha = 0.25;
+    b(i).EdgeColor = style(i, :); b(i).LineWidth = 1.2; b(i).DisplayName = labels{i};
+    errorbar(ax, b(i).XEndPoints(1:numel(tags)), M(:, i)', zeros(1, numel(tags)), E(:, i)', 'LineStyle', 'none', ...
+             'Color', style(i, :) * 0.7, 'LineWidth', 0.9, 'CapSize', 4, 'HandleVisibility', 'off');
+end
+ng = numel(tags);
+for i = 1:k
+    text(ax, b(i).XEndPoints(1:ng), M(:, i)' + E(:, i)' + 0.02 * max(M(:) + E(:)), ...
+         compose('%.3g', M(:, i)'), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+         'FontSize', 8, 'Color', style(i, :) * 0.7);
+end
+ylim(ax, [0, 1.12 * max(M(:) + E(:))]);
+set(ax, 'XTick', 1:numel(tags), 'XTickLabel', cellfun(@group_text, tags, 'UniformOutput', false), ...
+        'XGrid', 'off', 'YGrid', 'on', 'GridAlpha', 0.12, 'TickDir', 'out', 'LineWidth', 0.8);
+xlim(ax, [0.5, numel(tags) + 0.5]);
+ylabel(ax, 'Seconds per run (mean, SD)');
+legend(ax, 'Location', 'northoutside', 'Orientation', 'horizontal', 'Interpreter', 'none', 'Box', 'off');
+title(ax, sprintf('%s  runtime per run', suite_title(a.suite)), 'FontWeight', 'normal');
+paths = save_figure(fig, fullfile(a.output_dir, sprintf('runtime_%s', a.suite)), a.formats);
+close(fig);
 end
 
 % ---- helpers ---------------------------------------------------------------------

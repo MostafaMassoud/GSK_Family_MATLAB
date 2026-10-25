@@ -6,6 +6,17 @@ Keep a Changelog; this project uses semantic versioning.
 ## [Unreleased]
 
 ### Added
+- Group B of the Q1 analyses: `runtime_<suite>.csv/.tex` in
+  `compare_algorithms` and a runtime chart in `plot_statistics`;
+  `scripts/plot_performance.m` (success rates, ERT and ECDF data profiles;
+  ERT checked against hand-computed cases); `scripts/make_study_aliases.m`,
+  `scripts/plot_sensitivity.m` and `scripts/plot_ablation.m` for sensitivity
+  and ablation studies built on aliases; `run_compare_algorithms.m` gains
+  `performance`, `sensitivity` and `ablation` CONFIG entries.
+- `run_experiment(..., 'trace_points', n)` (and a commented `trace_points`
+  line in every launcher CONFIG, read only when set) writes
+  `gen_logs/BestTrace_*.csv` at n log-spaced budgets for smooth ERT/ECDF; the
+  runs and all other files are unchanged (checked).
 - `compare_algorithms`: Friedman post-hoc tests against the proposed
   optimizer (Bonferroni-Dunn, Holm, Hochberg, Finner; `posthoc_<suite>.csv`),
   the Iman-Davenport test (in `friedman_<suite>.csv`), the Nemenyi critical

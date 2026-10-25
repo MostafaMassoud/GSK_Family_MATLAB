@@ -10,7 +10,12 @@ function test_comparison_tools()
 %   2. 'correction','holm' gives table signs no more significant than the
 %      raw ones;
 %   3. plot_statistics draws the CD diagram, box, violin and rank figures;
-%   4. plot_convergence draws median curves with IQR bands.
+%   4. plot_convergence draws median curves with IQR bands;
+%   5. compare_algorithms writes the runtime table;
+%   6. plot_performance gives the hand-computed success rates and ERT on
+%      made-up traces, and draws the ECDF and the ERT table;
+%   7. make_study_aliases writes sensitivity and ablation aliases with the
+%      documented names and settings, and refuses to write them twice.
 
 here = fileparts(mfilename('fullpath'));
 project_root = fileparts(fileparts(here));
@@ -69,6 +74,54 @@ assert(numel(st.figures) >= numel(need), 'plot_statistics report');
 cv = plot_convergence('suite', 'sphere', 'optimizers', names, 'results_root', root, ...
     'output_dir', fullfile(root, 'conv'), 'curve', 'median', 'band', 'iqr', 'formats', {'png'});
 assert(isfile(fullfile(root, 'conv', 'sphere_F1_D10.png')) && isempty(cv.incomplete), 'banded curves');
+
+% 5. Runtime table (written by compare_algorithms in part 1).
+T = readtable(fullfile(cmp, 'runtime_sphere.csv'), 'TextType', 'char', 'VariableNamingRule', 'preserve');
+assert(height(T) == 3 * 2 && all(T.runs == 12) && all(T.mean_seconds >= 0), 'runtime table');
+assert(isfile(fullfile(cmp, 'runtime_sphere.tex')) && numel(rep.runtime) == 2, 'runtime tex and report');
+
+% 6. ERT and success rate on hand-made traces (budgets 10, 100, 1000; 4 runs).
+pr = fullfile(root, 'perf');
+vals = {[5 0.5 0.001; 5 5 5; 1 0.1 0.01; 50 50 0.5], [9 9 9; 9 9 9; 9 9 9; 9 9 0.001]};
+for i = 1:2
+    gl = fullfile(pr, sprintf('opt-%c', 'a' + i - 1), 'sphere', 'gen_logs'); mkdir(gl);
+    fid = fopen(fullfile(gl, sprintf('BestTrace_opt-%c_F1_D10.csv', 'a' + i - 1)), 'w');
+    fprintf(fid, 'Run,Seed,E10,E100,E1000\n');
+    for r = 1:4; fprintf(fid, '%d,1,%.17g,%.17g,%.17g\n', r, vals{i}(r, :)); end
+    fclose(fid);
+end
+pf = plot_performance('suite', 'sphere', 'optimizers', {'opt-a', 'opt-b'}, 'results_root', pr, ...
+    'output_dir', fullfile(pr, 'out'), 'targets', [1 0.01], 'formats', {'png'});
+pick = @(o, t) pf.results([pf.results.opt] == o & [pf.results.target] == t);
+r1 = pick(1, 1); r2 = pick(1, 0.01); r3 = pick(2, 1);
+% opt-a, target 1: runs reach it at 100, never, 10, 1000 -> SR 3/4, ERT (100+1000+10+1000)/3.
+assert(abs(r1.sr - 0.75) < 1e-12 && abs(r1.ert - 2110 / 3) < 1e-9, 'ERT/SR target 1');
+% opt-a, target 0.01: runs 1 and 3 at 1000 -> ERT 4000/2.
+assert(abs(r2.sr - 0.5) < 1e-12 && abs(r2.ert - 2000) < 1e-9, 'ERT/SR target 0.01');
+% opt-b, target 1: only run 4, at 1000 -> ERT 4000.
+assert(abs(r3.sr - 0.25) < 1e-12 && abs(r3.ert - 4000) < 1e-9, 'ERT/SR opt-b');
+assert(isfile(fullfile(pr, 'out', 'ecdf_sphere_D10.png')) && isfile(fullfile(pr, 'out', 'ert_sphere_D10.tex')), ...
+       'ECDF figure and ERT table');
+
+% 7. Study aliases: names, the written file, and the refusal to write twice.
+ini = fullfile(root, 'study.ini');
+n1 = make_study_aliases('sensitivity', 'gsk', {'kf', [0.3 0.5], 'np_init', [50 100]}, 'file', ini, ...
+                        'project_root', project_root);
+assert(isequal(n1, {'gsk-kf-0p3-npinit-50', 'gsk-kf-0p3-npinit-100', 'gsk-kf-0p5-npinit-50', ...
+                    'gsk-kf-0p5-npinit-100'}), 'sensitivity alias names');
+n2 = make_study_aliases('ablation', 'egsk', {'use_fmincon'}, 'file', ini, 'project_root', project_root);
+assert(isequal(n2, {'egsk-no-use-fmincon'}), 'ablation alias name');
+m = read_algorithm_aliases(ini);
+al = m('gsk-kf-0p5-npinit-50');
+assert(m.Count == 5 && strcmp(al.base, 'gsk') && al.settings.kf == 0.5 && al.settings.np_init == 50, 'written aliases');
+assert(islogical(m('egsk-no-use-fmincon').settings.use_fmincon), 'ablation switch is false');
+try
+    make_study_aliases('ablation', 'egsk', {'use_fmincon'}, 'file', ini, 'project_root', project_root);
+    error('test_comparison_tools:noError', 'second write must be refused');
+catch err
+    assert(strcmp(err.identifier, 'make_study_aliases:exists'), 'refusal id: %s', err.identifier);
+end
+assert(isequal(make_study_aliases('ablation', 'egsk', {'use_fmincon'}, 'dry_run', true), n2), 'dry run');
 
 fprintf('test_comparison_tools: PASS\n');
 end

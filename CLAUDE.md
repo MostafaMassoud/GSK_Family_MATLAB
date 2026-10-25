@@ -86,7 +86,14 @@ session scratchpad, never in the repository.
   (below). Merged local branches that can be deleted with the owner's OK:
   `docs/share-ready-runbook`, `docs/claude-handoff`, `feat/compare-algorithms`,
   `feat/variant-guide`, `feat/my-gsk`, `feat/algorithm-aliases`.
-- **Q1 statistics, group A (2026-10-26, uncommitted when written):**
+- **Q1 analyses, group B (2026-10-26, uncommitted when written):** runtime
+  table/chart, `plot_performance.m` (success rate, ERT, ECDF),
+  `make_study_aliases.m` + `plot_sensitivity.m` + `plot_ablation.m`, and the
+  runner's opt-in `trace_points` (`gen_logs/BestTrace_*.csv`; launchers read
+  it only when added to CONFIG, a commented line is there). Group C
+  (diversity, exploration/exploitation, parameter trajectories) is not built:
+  it needs opt-in logging inside the seven optimizers and the owner's OK.
+- **Q1 statistics, group A (committed `3e5831a`):**
   `compare_algorithms` adds post-hoc tests (Bonferroni-Dunn, Holm, Hochberg,
   Finner), Iman-Davenport, the Nemenyi CD, Holm-adjusted rank-sum p-values
   and effect sizes (A12, Cliff's delta); `plot_statistics.m` (CD diagram, box

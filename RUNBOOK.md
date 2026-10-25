@@ -377,6 +377,8 @@ any time, also during a campaign.
 | CD diagram | `statistics\<suite>\cd_<suite>_D<d>.png` and `.pdf` | the algorithms on their mean rank; a bar joins those not significantly different |
 | Box plots | `statistics\<suite>\box_<suite>_F<f>_D<d>.png` and `.pdf` | the final values of all runs of every algorithm, one figure per function |
 | Rank charts | `statistics\<suite>\ranks_<suite>_bars.png` | Friedman mean ranks per dimension and overall |
+| Runtime | `compare\<suite>\runtime_<suite>.tex`, `statistics\<suite>\runtime_<suite>.png` | seconds per run of every algorithm |
+| ERT and ECDF | `performance\<suite>\ert_<suite>_D<d>.tex`, `ecdf_<suite>_D<d>.png` | how often and how fast each algorithm reaches target errors |
 | Wilcoxon signed-rank | `compare\<suite>\wilcoxon_<suite>.csv` | over the whole suite: R+, R−, p-value |
 | Friedman ranks | `compare\<suite>\friedman_<suite>.csv` | the mean rank of every algorithm (1 = best) |
 | Settings table | `compare\<suite>\settings_<suite>.tex` and `.csv` | each algorithm's code, population sizes and changed settings ("original" = published value) |
@@ -393,6 +395,18 @@ better.
 > curves show the objective value. By default each algorithm's median run is
 > drawn; set `curve = 'mean'` for the mean of all runs, and `band = 'iqr'` for
 > a shaded 25–75% band of all runs under each curve. No toolbox is needed.
+
+**Smoother ERT and ECDF curves.** By default each run records its best value
+only at the 14 CEC checkpoints. Add `trace_points = 50;` to a launcher's
+CONFIG block before running (a commented line is already there) to also log
+it at 50 budgets; the runs themselves do not change.
+
+**Sensitivity and ablation studies.** `make_study_aliases` writes the aliases
+for a parameter grid (`make_study_aliases('sensitivity','gsk',{'kf',[0.3 0.5 0.7]})`)
+or for your variant with one component switched off at a time
+(`make_study_aliases('ablation','my-gsk',{'use_step_a'})`). Run them with a
+launcher, then set `sensitivity` or `ablation` in `run_compare_algorithms.m`.
+Step-by-step: [Comparing Algorithms](gsk_family/docs/research/comparing_algorithms.md).
 
 **Algorithm complexity.** CEC2017 papers usually include the complexity table
 of the CEC technical report (T0, T1, T̂2, (T̂2 − T1)/T0). Set

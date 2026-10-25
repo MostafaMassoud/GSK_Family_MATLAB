@@ -48,7 +48,10 @@ rand_generator = 'threefry';
 use_parallel = false;      % serial by default; set true only after checking worker paths
 write_graphs = false;      % false = keep numeric curves/gen_logs, skip slow PNG rendering
 overwrite = true;          % true = archive the previous result tree and start clean
+%trace_points = 50;          % optional: log each run's best value at 50 budgets (smooth ERT/ECDF curves)
 % -------------------------------------------------------------------------
+% trace_points: 0 (no extra log) unless set in CONFIG above.
+if ~exist('trace_points', 'var'); trace_points = 0; end
 
 suite = 'cec2013lsgo';
 
@@ -83,7 +86,7 @@ for i = 1:numel(optimizers)
             'verbose', false, 'seed_policy', seed_policy, ...
             'rand_generator', rand_generator, ...
             'use_parallel', use_parallel, ...
-            'write_graphs', write_graphs);
+            'write_graphs', write_graphs, 'trace_points', trace_points);
         fprintf('PASS  %s\n', upper(opt));
         passed_optimizers{end + 1} = opt; %#ok<SAGROW>
     catch err

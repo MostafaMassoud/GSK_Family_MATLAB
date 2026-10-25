@@ -219,6 +219,16 @@ Example with `max_nfes = 300000`:
 These logs are useful for convergence plots and ablation studies because they
 show how quickly an optimizer improves, not only where it finishes.
 
+## `gen_logs/BestTrace_<optimizer>_F<func>_D<dim>.csv` (optional)
+
+Written only when the run uses `'trace_points',n` (a launcher's
+`trace_points` CONFIG entry). Same layout as the checkpoint file
+(`Run,Seed,E<b1>,E<b2>,...`), at `n` log-spaced budgets from 1 to `max_nfes`
+(`unique(round(logspace(0, log10(max_nfes), n)))`, so possibly fewer than `n`
+columns), taken from the same convergence records with the same clipping rule.
+`scripts/plot_performance.m` prefers it to the checkpoint file for ERT and
+ECDF. `environment.json` records `trace_points` (0 = off).
+
 ## Benchmark-side curated curves and logs
 
 Generated experiment artifacts live under `results/<optimizer>/<suite>/`.
@@ -350,7 +360,26 @@ Written by `scripts/compare_algorithms.m`. `<dimension>` is the dimension,
 
 `scripts/plot_statistics.m` writes `cd_<suite>_<dimension>`,
 `box_<suite>_F<f>_D<d>`, `box_<suite>_<dimension>_overview`, optional
-`violin_...`, `ranks_<suite>_bars` and `ranks_<suite>_radar` as PNG/PDF.
+`violin_...`, `ranks_<suite>_bars`, `ranks_<suite>_radar` and
+`runtime_<suite>` as PNG/PDF. `compare_algorithms` writes
+`runtime_<suite>.csv` (`dimension, function, optimizer, runs, mean_seconds,
+sd_seconds, median_seconds`) and `runtime_<suite>.tex`.
+
+`scripts/plot_performance.m` writes `results/analysis/performance/<suite>/`:
+`performance_<suite>.csv` (`dimension, function, optimizer, target, runs,
+successes, success_rate, ert`; `ert` is `Inf` when no run reaches the
+target), `ert_<suite>_<dimension>.tex` and the ECDF figures
+`ecdf_<suite>_<dimension>` and `ecdf_<suite>_overall`.
+
+`scripts/plot_sensitivity.m` writes
+`results/analysis/sensitivity/<suite>/<base>/sensitivity_<suite>_<base>.csv`
+(`group, <param>[, <param2>], alias, mean_rank`) and its figures;
+`scripts/plot_ablation.m` writes
+`results/analysis/ablation/<suite>/<base>/ablation_<suite>_<base>.csv`
+(`version, label, switched_off, mean_rank, full_wins, ties, full_losses,
+signed_rank_p_<group>...`), the `.tex` table and the chart. Both keep the full
+`compare_algorithms` tables of their runs in a `compare/` subfolder.
+
 `scripts/cec_complexity.m` writes `complexity_<suite>.csv` (`optimizer, label,
 dimension, function, evals, T0, T1, T2_hat, T2_runs, ratio`, seconds) and
 `complexity_<suite>.tex`.

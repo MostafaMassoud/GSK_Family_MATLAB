@@ -6,6 +6,8 @@ Helper tooling in PowerShell and MATLAB only.
 |---|---|---|
 | `build_mex_bridge.ps1` | PowerShell | Build the optional `gskcec_eval` MEX bridge (MATLAB -> ported C++ benchmarks) with a MinGW-w64 C++20 toolchain into `build/mex/`, linked fully static (no MinGW runtime DLL needed at load time). |
 | `analyze_results.m` | MATLAB | Toolbox-free statistics + figures over `results/`: per-function generated-vs-reference comparison, Friedman ranks, Wilcoxon signed-rank vs the references, and boxplot/convergence PDFs. |
+| `plot_convergence.m` | MATLAB | Convergence curves of several optimizers (the seven, or one you added) in one figure per (function, dimension), plus a tiled overview per dimension, as PNG/PDF/EPS/FIG, for any suite. Median-run traces from `curves/` or the mean over all runs at the CEC checkpoints from `gen_logs/`. Base MATLAB only. |
+| `compare_algorithms.m` | MATLAB | Optimizer-vs-optimizer statistics for any suite from each `summary/per_run.csv`: Best/Median/Mean/Worst/SD, Mean (SD) tables in CSV and LaTeX, per-function Wilcoxon rank-sum signs (+/=/-) of a proposed optimizer against each competitor, the multiple-problem Wilcoxon signed-rank test (R+, R-, p) and Friedman ranks. Base MATLAB only; p-values equal the Statistics Toolbox's `ranksum`, `signrank` and `friedman`. |
 | `compare_reference_runs.m` | MATLAB | Per-(dimension, function) comparison of two `per_run.csv` sets (e.g. a MATLAB DT-GSK campaign vs the imported reference runs): Best/Median/Mean, order-of-magnitude agreement, two-sided Wilcoxon rank-sum at `alpha`, paired signed-rank when the seeds match, Holm-adjusted p-values. Needs the Statistics and Machine Learning Toolbox. |
 | `build_docs.ps1` | PowerShell | Generate the HTML documentation site, including the runbook and the Command Reference (Pandoc/Doxygen), into `docs/html/`. |
 | `run_all.ps1` | PowerShell | Build/test wrapper plus batch driver for one or more `configs/*.yml` experiments through `gsk_run` (defaults to `configs/smoke.yml`; seed policy and generator come from each config, falling back to `gsk_run`'s reference + threefry; pass `-SeedPolicy`/`-RandGenerator`, or `-NpInit`/`-MinPopSize` for the population sizes, only to override every config; use `-Full` for the full standard set). |
@@ -72,6 +74,20 @@ reference tables; missing data is reported rather than invented.
 - Tie-aware ranks come from a local `rank_with_ties` helper (not `tiedrank`),
   so the "Toolbox-free" claim above holds: no Statistics and Machine Learning
   Toolbox is needed.
+
+**Compare optimizers with each other (e.g. your variant vs GSK):**
+
+```matlab
+addpath('scripts')   % run from the gsk_family project root
+plot_convergence('suite','cec2017', 'optimizers',{'my-gsk','gsk'});
+compare_algorithms('suite','cec2017', 'optimizers',{'my-gsk','gsk'}, 'proposed','my-gsk');
+```
+
+Both read `results/_run_all/<optimizer>/<suite>/` by default (pass
+`'results_root','results'` for `gsk_run` output) and write to
+`results/analysis/convergence/<suite>/` and `results/analysis/compare/<suite>/`.
+Step-by-step guide, every option and how to read the output:
+[docs/research/comparing_algorithms.md](../docs/research/comparing_algorithms.md).
 
 **Compare two run sets (e.g. DT-GSK vs its imported reference runs):**
 

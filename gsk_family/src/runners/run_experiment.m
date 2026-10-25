@@ -759,6 +759,11 @@ function tf = uses_min_pop_size(optimizer)
 tf = any(strcmp(optimizer, {'agsk', 'apgsk', 'fdb-agsk', 'dt-gsk'}));
 end
 
+function tf = is_family_optimizer(optimizer)
+%IS_FAMILY_OPTIMIZER True for the seven GSK-family optimizers shipped here.
+tf = any(strcmp(optimizer, {'gsk', 'agsk', 'apgsk', 'fdb-agsk', 'atmals-gsk', 'egsk', 'dt-gsk'}));
+end
+
 function s = np_init_text(optimizer, np_init)
 %NP_INIT_TEXT Initial population size label; equal labels mean equal runs.
 if isempty(np_init) || (np_init == 100 && ~strcmp(optimizer, 'dt-gsk'))
@@ -1403,16 +1408,22 @@ function opts = optimizer_run_options(optimizer, suite, seed, rand_gen, np_init,
 % pick the matching protocol for its two published suites (CEC2011, CEC2017).
 % eGSK runs with use_fmincon = true. A non-empty np_init (checked at argument
 % parsing) is passed under each optimizer's own option name; a non-empty
-% min_pop_size only to the optimizers that read it.
+% min_pop_size only to the optimizers that read it. A user-added optimizer
+% (not one of the seven) gets np_init as both options.np and options.np_init,
+% and min_pop_size as given, so a copy of any family member reads them.
 opts = struct('seed', seed, 'rand_generator', rand_gen);
+user_added = ~is_family_optimizer(optimizer);
 if ~isempty(np_init)
     if any(strcmp(optimizer, {'gsk', 'egsk', 'atmals-gsk'}))
         opts.np = np_init;
+    elseif user_added
+        opts.np = np_init;
+        opts.np_init = np_init;
     else
         opts.np_init = np_init;
     end
 end
-if ~isempty(min_pop_size) && uses_min_pop_size(optimizer)
+if ~isempty(min_pop_size) && (uses_min_pop_size(optimizer) || user_added)
     opts.min_pop_size = min_pop_size;
 end
 if strcmp(optimizer, 'atmals-gsk')
@@ -2019,7 +2030,8 @@ switch optimizer
     case 'dt-gsk'
         stem = 'dt_gsk';
     otherwise
-        stem = optimizer;
+        % A user-added optimizer: 'my-gsk' -> my_gsk_optimize.
+        stem = strrep(optimizer, '-', '_');
 end
 end
 

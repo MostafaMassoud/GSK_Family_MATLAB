@@ -6,6 +6,22 @@ Keep a Changelog; this project uses semantic versioning.
 ## [Unreleased]
 
 ### Added
+- `scripts/plot_convergence.m`: convergence curves of several optimizers in
+  one figure per (function, dimension) plus a tiled overview per dimension,
+  for every suite and any optimizer (median-run traces or the mean over all
+  runs at the CEC checkpoints; PNG, PDF, EPS, FIG; light theme forced).
+- `scripts/compare_algorithms.m`: optimizer-vs-optimizer statistics for every
+  suite: Mean (SD) tables in CSV and LaTeX, per-function Wilcoxon rank-sum
+  signs (+/=/-) of a proposed optimizer against each competitor, the
+  multiple-problem Wilcoxon signed-rank test (R+, R-, p) and Friedman ranks.
+  Base MATLAB; p-values checked equal to `ranksum`, `signrank` and `friedman`.
+- `docs/research/comparing_algorithms.md` (new docs page) and RUNBOOK
+  section 6: add your own variant, run it, draw its curves with the family's,
+  and produce the tables.
+- `run_experiment` accepts a user-added optimizer without registration: a
+  hyphenated slug maps to its function stem (`my-gsk` -> `my_gsk_optimize`),
+  and `np_init` / `min_pop_size` are passed to it (`np_init` as both
+  `options.np` and `options.np_init`). The seven optimizers are unchanged.
 - `np_init` and `min_pop_size` in every CEC runner: config keys (`0` =
   default; every shipped config now lists both at `0`), `gsk_run --np-init` /
   `--min-pop-size`, and `scripts/run_all.ps1 -NpInit` / `-MinPopSize`. The

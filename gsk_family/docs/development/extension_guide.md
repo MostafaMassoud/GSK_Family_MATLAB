@@ -43,10 +43,15 @@ is a starting point that honors the structs in
 8. Stop at `problem.max_nfes` (and at `problem.target_error` only if the
    reference algorithm does).
 9. Return the `result` struct with exactly the documented fields.
-10. Register the slug: add it to `optimizer_function_stem` (and the underscore
-    alias to `canonical_optimizer_id`) in `src/runners/run_experiment.m` if the
-    slug-to-stem mapping is non-trivial (hyphen-to-underscore), and to the
-    reference-mode seed/RNG switches there.
+10. For MATLAB runs nothing needs registering: the runner adds every folder
+    under `src/optimizers/` to the path and maps a hyphenated slug to its
+    function stem (`my-gsk` -> `my_gsk_optimize`). A new optimizer runs under
+    the unified seed schedule and gets the runner's shared X0; `np_init` is
+    passed as both `options.np` and `options.np_init`, and `min_pop_size` as
+    given. Register it in `src/runners/run_experiment.m` only for
+    reference-mode seeding (the seed/RNG switches there) or for the C++ CLI
+    (below). [Comparing Algorithms](../research/comparing_algorithms.md) is the
+    short version of this recipe for researchers.
 11. Add a smoke test `src/tests/test_<stem>_smoke.m`, and add a reference table
     under `benchmarks/cec_reference_results/` plus a page under `docs/`.
 
@@ -133,11 +138,12 @@ result = struct( ...
 end
 ```
 
-Register it (step 10) where the runner resolves the optimizer. The runner builds
-the function handle from the slug in `src/runners/run_experiment.m`
-(`optimize = str2func([optimizer_function_stem(a.optimizer) '_optimize'])`), so
-a hyphenated slug needs a `case` in the local function `optimizer_function_stem`
-of `src/runners/run_experiment.m`:
+The runner builds the function handle from the slug in
+`src/runners/run_experiment.m`
+(`optimize = str2func([optimizer_function_stem(a.optimizer) '_optimize'])`).
+The local function `optimizer_function_stem` replaces hyphens with
+underscores for any slug it does not list, so a new slug needs no `case`
+there:
 
 ```matlab
 function stem = optimizer_function_stem(optimizer)
@@ -148,10 +154,9 @@ switch optimizer
         stem = 'fdb_agsk';
     case 'dt-gsk'
         stem = 'dt_gsk';
-    case 'example-gsk'        % add a hyphenated slug here
-        stem = 'example_gsk';
     otherwise
-        stem = optimizer;     % slug already equals the function stem
+        % A user-added optimizer: 'my-gsk' -> my_gsk_optimize.
+        stem = strrep(optimizer, '-', '_');
 end
 end
 ```

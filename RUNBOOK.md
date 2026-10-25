@@ -201,7 +201,7 @@ experiment from a config file; see the
 | `summary\<algorithm>_<suite>_D<D>.csv` | one row per function: Best, Median, Mean, Worst, SD of the error |
 | `summary\per_run.csv` | every single run, with its seed |
 | `summary\<algorithm>_D<D>_log_*.txt` | the printed report |
-| `curves\`, `gen_logs\` | convergence data for plots |
+| `curves\`, `gen_logs\` | convergence data for plots (section 6) |
 
 The meaning of every column is in [Result Schema](gsk_family/docs/reference/result_schema.md).
 
@@ -272,7 +272,31 @@ jobs:
    same settings and `overwrite = false` (Run button or terminal command).
    The run continues where it stopped.
 
-## 6. Common problems
+## 6. Compare algorithms: convergence figures and tables
+
+To compare algorithms, for example GSK and your own variant, run them all
+with the same settings (list them in the launcher, e.g.
+`optimizers = {'gsk', 'my-gsk'}`). Then type in MATLAB, in the `gsk_family`
+folder:
+
+```matlab
+addpath('scripts');
+plot_convergence('suite','cec2017', 'optimizers',{'my-gsk','gsk'});
+compare_algorithms('suite','cec2017', 'optimizers',{'my-gsk','gsk'}, 'proposed','my-gsk');
+```
+
+- `plot_convergence` draws one figure per function and dimension with every
+  algorithm's convergence curve, plus one overview per dimension, as PNG and
+  PDF in `results\analysis\convergence\<suite>\`.
+- `compare_algorithms` writes Mean (SD) tables (CSV and LaTeX), the Wilcoxon
+  rank-sum test per function (+/=/-), the Wilcoxon signed-rank test (R+, R-,
+  p) and the Friedman ranks, in `results\analysis\compare\<suite>\`.
+
+Both work for every suite and every algorithm. How to add your own variant,
+all options, and how to read the results:
+[Comparing Algorithms](gsk_family/docs/research/comparing_algorithms.md).
+
+## 7. Common problems
 
 | Message or symptom | What to do |
 |---|---|
@@ -285,7 +309,7 @@ jobs:
 
 More cases: [Troubleshooting](gsk_family/docs/getting-started/troubleshooting.md).
 
-## 7. Build the HTML documentation
+## 8. Build the HTML documentation
 
 ```powershell
 cd C:\path\to\GSK_Family_MATLAB\gsk_family
@@ -296,12 +320,14 @@ Then open `gsk_family\docs\html\index.html` in a web browser. This runbook is
 the page `runbook.html` there. The same command also refreshes `RUNBOOK.html`
 next to this file, a single-page copy of this runbook for reading in a browser.
 
-## 8. Where to go next
+## 9. Where to go next
 
 - [Tutorial](gsk_family/docs/getting-started/tutorial.md): a guided first experiment.
 - [User Guide](gsk_family/docs/getting-started/user_guide.md): all the ways to run.
 - [Command Reference](gsk_family/docs/getting-started/command_reference.md): copy-paste
   commands for every algorithm.
+- [Comparing Algorithms](gsk_family/docs/research/comparing_algorithms.md): add your own
+  variant, convergence figures, Mean/SD tables and statistical tests.
 - Algorithm guides: [GSK](gsk_family/docs/algorithms/gsk.md), [AGSK](gsk_family/docs/algorithms/agsk.md),
   [APGSK](gsk_family/docs/algorithms/apgsk.md), [FDB-AGSK](gsk_family/docs/algorithms/fdb-agsk.md),
   [ATMALS-GSK](gsk_family/docs/algorithms/atmals-gsk.md), [eGSK](gsk_family/docs/algorithms/egsk.md),

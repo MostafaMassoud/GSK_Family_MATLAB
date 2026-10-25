@@ -70,22 +70,30 @@ cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release   # once
 cmake --build build -j; ctest --test-dir build                        # expect 13/13 C++ tests
 powershell -File scripts\build_mex_bridge.ps1                         # MEX bridge (close MATLAB first)
 matlab -batch "cd('src/tests'); run_matlab_smoke_tests"               # expect "All 13 test(s) passed."
-powershell -File scripts\build_docs.ps1 -Clean                        # 47 pages + ..\RUNBOOK.html
+powershell -File scripts\build_docs.ps1 -Clean                        # 48 pages + ..\RUNBOOK.html
 ```
 
 From Git Bash, give MATLAB Windows paths (`D:/...`), never `/d/...`. Run
 anything longer than a few minutes in the background, with logs in the
 session scratchpad, never in the repository.
 
-## Current state (2026-10-16)
+## Current state (2026-10-25)
 
-- `main` = `ca66fa0`, pushed to origin. The local branch
-  `docs/share-ready-runbook` also points at `ca66fa0` and can be deleted with
-  the owner's OK.
-- This `CLAUDE.md`, `.claude/skills/gsk-family/` and the matching
-  `gsk_family/SKILL.md` updates were added in commit `8a1f3eb` (branch
-  `docs/claude-handoff`; it reaches `main` when the owner fast-forwards it).
-- All 13 MATLAB and 13 C++ tests pass. The docs build gives 47 pages with no
+- `main` = `9e34136`. Since `ca66fa0` it added `np_init` and `min_pop_size`
+  for all seven optimizers, in the launchers, `run_experiment`, the YAML
+  configs, `gsk_run` and `run_all.ps1`. The local branches
+  `docs/share-ready-runbook` and `docs/claude-handoff` are merged and can be
+  deleted with the owner's OK.
+- **Uncommitted (2026-10-25), for researchers comparing their own variant
+  with the family:** `scripts/plot_convergence.m` (several optimizers' curves
+  in one figure per function), `scripts/compare_algorithms.m` (Mean/SD tables
+  in CSV and LaTeX, Wilcoxon rank-sum +/=/-, signed-rank R+/R-/p, Friedman),
+  the docs page `docs/research/comparing_algorithms.md`, RUNBOOK section 6,
+  and a runner change: a user-added optimizer needs no registration (a
+  hyphenated slug maps to its stem; `np_init`/`min_pop_size` reach it). Tested
+  on all five suites and all seven optimizers plus a copy of GSK (which
+  reproduces GSK exactly); the p-values equal the Statistics Toolbox's.
+- All 13 MATLAB and 13 C++ tests pass. The docs build gives 48 pages with no
   broken links. After the comment rewrite and helper renames, DT-GSK was
   re-checked with the owner's local oracle: bit-identical on 23 of 25 fixed
   cases. Cases 18 and 22 (the full-budget D50 and D100 cells) were not rerun.

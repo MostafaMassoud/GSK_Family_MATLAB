@@ -22,6 +22,7 @@ Not sure where to start? Pick the goal that fits:
 
 - **Just run it.** [Runbook](../../RUNBOOK.md) -> [Tutorial](getting-started/tutorial.md) -> [User Guide](getting-started/user_guide.md) -> [Command Reference](getting-started/command_reference.md).
 - **Understand the algorithms.** [Explainer](getting-started/explainer.md) -> [GSK](algorithms/gsk.md) -> the variants ([AGSK](algorithms/agsk.md), [APGSK](algorithms/apgsk.md), [FDB-AGSK](algorithms/fdb-agsk.md), [ATMALS-GSK](algorithms/atmals-gsk.md), [eGSK](algorithms/egsk.md), [DT-GSK](algorithms/dt-gsk.md)) -> [Numerical Examples](research/numerical_examples.md).
+- **Compare your own algorithm with the GSK family.** [Comparing Algorithms](research/comparing_algorithms.md): add a variant, run it, draw convergence curves of several algorithms per function, and produce Mean/SD tables and Wilcoxon/Friedman tests.
 - **Reproduce or validate results.** [Researcher Handbook](research/researcher_handbook.md) -> [Reproducibility](research/reproducibility.md) -> [Validation Report](research/validation_report.md).
 - **Contribute code.** [Code Reading Guide](development/code_reading_guide.md) -> [Developer Guide](development/developer_guide.md) -> [Extension Guide](development/extension_guide.md) -> [Contributor Guide](development/contributor_guide.md).
 - **Look something up.** [Configuration](getting-started/configuration.md), [MATLAB Optimizer Interface](reference/matlab_interface.md), [Result Schema](reference/result_schema.md), [Glossary](reference/glossary.md), [Diagrams](reference/diagrams.md), [C++ API (Doxygen)](api/index.html) (in the built site).
@@ -87,6 +88,7 @@ Copy-paste LLM prompts for reviewing and maintaining the repository (each is a s
 ## Research - `research/`
 
 - [Researcher Handbook](research/researcher_handbook.md): reproducible experiment procedure and interpretation.
+- [Comparing Algorithms](research/comparing_algorithms.md): your own variant against the family on any suite - convergence figures, tables and statistical tests.
 - [Reproducibility](research/reproducibility.md): environment, seeds, deterministic settings, and the serial/parallel baseline.
 - [Performance](research/performance.md): parallel execution, native MEX, profiling, and measurement status.
 - [Validation Report](research/validation_report.md): current parity evidence and remaining validation work.

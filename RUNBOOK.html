@@ -64,12 +64,15 @@ steps</a></li>
 <li><a href="#5-running-in-parallel-in-matlab"
 id="toc-5-running-in-parallel-in-matlab">5. Running in parallel in
 MATLAB</a></li>
-<li><a href="#6-common-problems" id="toc-6-common-problems">6. Common
+<li><a href="#6-compare-algorithms-convergence-figures-and-tables"
+id="toc-6-compare-algorithms-convergence-figures-and-tables">6. Compare
+algorithms: convergence figures and tables</a></li>
+<li><a href="#7-common-problems" id="toc-7-common-problems">7. Common
 problems</a></li>
-<li><a href="#7-build-the-html-documentation"
-id="toc-7-build-the-html-documentation">7. Build the HTML
+<li><a href="#8-build-the-html-documentation"
+id="toc-8-build-the-html-documentation">8. Build the HTML
 documentation</a></li>
-<li><a href="#8-where-to-go-next" id="toc-8-where-to-go-next">8. Where
+<li><a href="#9-where-to-go-next" id="toc-9-where-to-go-next">9. Where
 to go next</a></li>
 </ul>
 </nav>
@@ -297,7 +300,7 @@ error</td>
 </tr>
 <tr>
 <td><code>curves\</code>, <code>gen_logs\</code></td>
-<td>convergence data for plots</td>
+<td>convergence data for plots (section 6)</td>
 </tr>
 </tbody>
 </table>
@@ -375,7 +378,30 @@ restarting MATLAB in between to free memory.</li>
 the same settings and <code>overwrite = false</code> (Run button or
 terminal command). The run continues where it stopped.</li>
 </ol>
-<h1 id="6-common-problems">6. Common problems</h1>
+<h1 id="6-compare-algorithms-convergence-figures-and-tables">6. Compare
+algorithms: convergence figures and tables</h1>
+<p>To compare algorithms, for example GSK and your own variant, run them
+all with the same settings (list them in the launcher, e.g.
+<code>optimizers = {'gsk', 'my-gsk'}</code>). Then type in MATLAB, in
+the <code>gsk_family</code> folder:</p>
+<pre class="matlab"><code>addpath(&#39;scripts&#39;);
+plot_convergence(&#39;suite&#39;,&#39;cec2017&#39;, &#39;optimizers&#39;,{&#39;my-gsk&#39;,&#39;gsk&#39;});
+compare_algorithms(&#39;suite&#39;,&#39;cec2017&#39;, &#39;optimizers&#39;,{&#39;my-gsk&#39;,&#39;gsk&#39;}, &#39;proposed&#39;,&#39;my-gsk&#39;);</code></pre>
+<ul>
+<li><code>plot_convergence</code> draws one figure per function and
+dimension with every algorithm's convergence curve, plus one overview
+per dimension, as PNG and PDF in
+<code>results\analysis\convergence\&lt;suite&gt;\</code>.</li>
+<li><code>compare_algorithms</code> writes Mean (SD) tables (CSV and
+LaTeX), the Wilcoxon rank-sum test per function (+/=/-), the Wilcoxon
+signed-rank test (R+, R-, p) and the Friedman ranks, in
+<code>results\analysis\compare\&lt;suite&gt;\</code>.</li>
+</ul>
+<p>Both work for every suite and every algorithm. How to add your own
+variant, all options, and how to read the results: <a
+href="gsk_family/docs/research/comparing_algorithms.md">Comparing
+Algorithms</a>.</p>
+<h1 id="7-common-problems">7. Common problems</h1>
 <table>
 <thead>
 <tr>
@@ -418,7 +444,7 @@ faster.</td>
 </table>
 <p>More cases: <a
 href="gsk_family/docs/getting-started/troubleshooting.md">Troubleshooting</a>.</p>
-<h1 id="7-build-the-html-documentation">7. Build the HTML
+<h1 id="8-build-the-html-documentation">8. Build the HTML
 documentation</h1>
 <pre class="powershell"><code>cd C:\path\to\GSK_Family_MATLAB\gsk_family
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_docs.ps1 -Clean</code></pre>
@@ -426,7 +452,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_docs.ps1 -Clea
 browser. This runbook is the page <code>runbook.html</code> there. The
 same command also refreshes <code>RUNBOOK.html</code> next to this file,
 a single-page copy of this runbook for reading in a browser.</p>
-<h1 id="8-where-to-go-next">8. Where to go next</h1>
+<h1 id="9-where-to-go-next">9. Where to go next</h1>
 <ul>
 <li><a href="gsk_family/docs/getting-started/tutorial.md">Tutorial</a>:
 a guided first experiment.</li>
@@ -435,6 +461,9 @@ Guide</a>: all the ways to run.</li>
 <li><a
 href="gsk_family/docs/getting-started/command_reference.md">Command
 Reference</a>: copy-paste commands for every algorithm.</li>
+<li><a href="gsk_family/docs/research/comparing_algorithms.md">Comparing
+Algorithms</a>: add your own variant, convergence figures, Mean/SD
+tables and statistical tests.</li>
 <li>Algorithm guides: <a
 href="gsk_family/docs/algorithms/gsk.md">GSK</a>, <a
 href="gsk_family/docs/algorithms/agsk.md">AGSK</a>, <a

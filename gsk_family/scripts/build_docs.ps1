@@ -121,6 +121,7 @@ $pages = @(
     @{ Src = "docs/prompts/llm_review_prompt.md";            Out = "prompts_llm_review_prompt.html";            Title = "Legacy LLM Review Prompt";      Group = "Prompts" },
 
     @{ Src = "docs/research/researcher_handbook.md"; Out = "research_researcher_handbook.html"; Title = "Researcher Handbook"; Group = "Research" },
+    @{ Src = "docs/research/comparing_algorithms.md"; Out = "research_comparing_algorithms.html"; Title = "Comparing Algorithms"; Group = "Research" },
     @{ Src = "docs/research/reproducibility.md";     Out = "research_reproducibility.html";     Title = "Reproducibility";     Group = "Research" },
     @{ Src = "docs/research/performance.md";         Out = "research_performance.html";         Title = "Performance";         Group = "Research" },
     @{ Src = "docs/research/validation_report.md";   Out = "research_validation_report.html";   Title = "Validation Report";   Group = "Research" },

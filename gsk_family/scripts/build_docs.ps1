@@ -7,9 +7,12 @@
 # Mermaid diagrams render in the browser with mermaid.js.
 #
 # Sources: the tracked Markdown files under docs/ (the source of truth),
-# LICENSES.md, and RUNBOOK.md in the repository root (one level above
-# gsk_family). Pages whose source is missing are skipped with a warning.
-# Output:  docs/html/ (generated; gitignored). Rebuild with one command:
+# LICENSES.md, and RUNBOOK.md and NEW_VARIANT_GUIDE.md in the repository root
+# (one level above gsk_family). Pages whose source is missing are skipped with
+# a warning.
+# Output:  docs/html/ (generated; gitignored), plus RUNBOOK.html and
+#          NEW_VARIANT_GUIDE.html next to their Markdown (tracked; commit
+#          each with its .md). Rebuild with one command:
 #
 #   powershell -File scripts\build_docs.ps1
 #
@@ -75,6 +78,7 @@ $pages = @(
     @{ Src = "docs/index.md"; Out = "index.html"; Title = "Home"; Group = "" },
 
     @{ Src = "../RUNBOOK.md";                           Out = "runbook.html";                         Title = "Runbook";         Group = "Getting Started" },
+    @{ Src = "../NEW_VARIANT_GUIDE.md";                 Out = "new_variant_guide.html";               Title = "New Variant Guide"; Group = "Getting Started" },
     @{ Src = "docs/getting-started/explainer.md";       Out = "getting-started_explainer.html";       Title = "Explainer";       Group = "Getting Started" },
     @{ Src = "docs/getting-started/tutorial.md";        Out = "getting-started_tutorial.html";        Title = "Tutorial";        Group = "Getting Started" },
     @{ Src = "docs/getting-started/user_guide.md";      Out = "getting-started_user_guide.html";      Title = "User Guide";      Group = "Getting Started" },
@@ -498,78 +502,229 @@ foreach ($p in $pages) {
     $built++
 }
 
-# ---- Standalone RUNBOOK.html next to RUNBOOK.md (repository root) ----
-# One simple, self-contained page (no sidebar, no external files) that a
-# newcomer can open straight from the repository. Links to Markdown files stay
-# as they are, so they work in any checkout. The first heading becomes the
-# page title; a small script adds copy buttons and moves the contents list
-# below the introduction.
-$runbookSrc = [System.IO.Path]::GetFullPath((Join-Path $projectRoot "../RUNBOOK.md"))
-$runbookBuilt = ""
-if (Test-Path $runbookSrc) {
-    $runbookOut = [System.IO.Path]::ChangeExtension($runbookSrc, ".html")
-    $runbookTemplate = @'
+# ---- Standalone guide pages next to their Markdown (repository root) ----
+# RUNBOOK.md -> RUNBOOK.html and NEW_VARIANT_GUIDE.md -> NEW_VARIANT_GUIDE.html:
+# self-contained pages (no external files, work offline) that a newcomer can
+# open straight from the repository. The first heading becomes the page
+# title. A small script adds the contents sidebar highlight, step numbers,
+# copy buttons, a reading-progress bar and a light/dark switch. Links between
+# the root guides point to their .html files; links to other Markdown files
+# stay as they are, so they work in any checkout.
+$rootPages = @(
+    @{ Src = "../RUNBOOK.md"; Eyebrow = "Step-by-step guide";
+       Subtitle = "Set up the project, run the seven GSK optimizers on the CEC benchmark suites, and turn the results into convergence figures and statistical tables. No prior knowledge of the code is needed.";
+       Chips = @("MATLAB + C++", "5 CEC suites", "7 GSK optimizers", "Figures and statistics") },
+    @{ Src = "../NEW_VARIANT_GUIDE.md"; Eyebrow = "Researcher guide";
+       Subtitle = "Create your own GSK variant in this project, check it, run it on the CEC suites next to the family, and produce the figures and tables for your manuscript.";
+       Chips = @("One command to start", "Fair same-seed comparison", "Any CEC suite", "Paper-ready output") }
+)
+$rootNav = @(
+    @{ Href = "RUNBOOK.html"; Title = "Runbook" },
+    @{ Href = "NEW_VARIANT_GUIDE.html"; Title = "New Variant Guide" }
+)
+$rootTemplate = @'
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>$title$ - GSK Family</title>
+<script>
+(function () { var t = null; try { t = localStorage.getItem('gsk-theme'); } catch (e) {}
+  if (t === 'light' || t === 'dark') { document.documentElement.setAttribute('data-theme', t); } })();
+</script>
 <style>
-:root{--bg:#ffffff;--fg:#1f2328;--muted:#59636e;--border:#d8dee4;--soft:#f6f8fa;--accent:#0969da;--code:#eff1f3;color-scheme:light}
-@media (prefers-color-scheme: dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--border:#30363d;--soft:#161b22;--accent:#4493f8;--code:#1f242c;color-scheme:dark}}
+:root{
+  --bg:#f6f7fb;--card:#ffffff;--fg:#1a1f2b;--muted:#5a6375;--border:#e2e6ee;--soft:#f1f3f8;
+  --accent:#4f46e5;--accent-2:#0891b2;--accent-soft:#eef0ff;--code:#eceff5;--pre:#0f172a;--pre-fg:#e2e8f0;
+  --note:#2563eb;--tip:#059669;--important:#7c3aed;--warning:#d97706;--caution:#dc2626;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 6px 24px rgba(16,24,40,.06);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0b0f19;--card:#121826;--fg:#e6e9f2;--muted:#9aa3b5;--border:#242c3d;--soft:#171e2e;
+  --accent:#8b93ff;--accent-2:#22d3ee;--accent-soft:#1c2140;--code:#1d2435;--pre:#0a0e17;--pre-fg:#e2e8f0;
+  --note:#60a5fa;--tip:#34d399;--important:#a78bfa;--warning:#fbbf24;--caution:#f87171;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.35);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0b0f19;--card:#121826;--fg:#e6e9f2;--muted:#9aa3b5;--border:#242c3d;--soft:#171e2e;
+  --accent:#8b93ff;--accent-2:#22d3ee;--accent-soft:#1c2140;--code:#1d2435;--pre:#0a0e17;--pre-fg:#e2e8f0;
+  --note:#60a5fa;--tip:#34d399;--important:#a78bfa;--warning:#fbbf24;--caution:#f87171;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.35);color-scheme:dark}
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-main{max-width:820px;margin:0 auto;padding:48px 20px 72px}
-h1.title{font-size:2.2rem;line-height:1.2;margin:0 0 .4em;letter-spacing:-.01em}
-h1:not(.title){font-size:1.5rem;line-height:1.3;margin:2.4em 0 .7em;padding-top:1em;border-top:1px solid var(--border)}
-h2{font-size:1.2rem;margin:1.8em 0 .5em}
-p,ul,ol{margin:.7em 0}
-li{margin:.25em 0}
+html{scroll-behavior:smooth;scroll-padding-top:76px}
+body{margin:0;background:var(--bg);color:var(--fg);font:16.5px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
-strong{font-weight:650}
-code{font:.88em/1.45 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;background:var(--code);padding:.12em .38em;border-radius:5px}
-pre{position:relative;background:var(--soft);border:1px solid var(--border);border-radius:8px;padding:14px 72px 14px 16px;overflow-x:auto;margin:1em 0}
-pre code{background:none;padding:0;font-size:.85em;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));z-index:60}
+.topbar{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:saturate(1.6) blur(10px);-webkit-backdrop-filter:saturate(1.6) blur(10px);border-bottom:1px solid var(--border)}
+.topbar .wrap{display:flex;align-items:center;gap:18px;height:58px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--fg);letter-spacing:-.01em}
+.brand:hover{text-decoration:none}
+.logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center;color:#fff;font-size:13px;font-weight:800}
+.links{display:flex;gap:4px;margin-left:auto}
+.links a{color:var(--muted);font-size:.92rem;font-weight:550;padding:6px 12px;border-radius:8px}
+.links a:hover{background:var(--soft);color:var(--fg);text-decoration:none}
+.links a.here{color:var(--accent);background:var(--accent-soft)}
+#theme{border:1px solid var(--border);background:var(--card);color:var(--fg);width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:16px;display:grid;place-items:center}
+#theme:hover{border-color:var(--accent)}
+.hero{position:relative;overflow:hidden;color:#fff;background:radial-gradient(1200px 400px at 85% -10%,rgba(255,255,255,.18),transparent 60%),radial-gradient(800px 300px at 0% 120%,rgba(34,211,238,.35),transparent 60%),linear-gradient(135deg,#3730a3 0%,#4f46e5 45%,#0e7490 100%)}
+.hero .wrap{padding-top:64px;padding-bottom:58px}
+.hero::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px);background-size:32px 32px;mask-image:linear-gradient(180deg,rgba(0,0,0,.7),transparent);-webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,.7),transparent);pointer-events:none}
+.eyebrow{display:inline-block;margin:0 0 14px;padding:4px 12px;border-radius:999px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);font-size:.8rem;font-weight:650;letter-spacing:.06em;text-transform:uppercase}
+h1.title{font-size:clamp(2.1rem,4.6vw,3.2rem);line-height:1.1;margin:0 0 14px;letter-spacing:-.025em;font-weight:800}
+.subtitle{max-width:760px;font-size:1.15rem;line-height:1.6;margin:0;color:rgba(255,255,255,.9)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}
+.chips span{font-size:.85rem;font-weight:600;padding:6px 12px;border-radius:999px;background:rgba(15,23,42,.28);border:1px solid rgba(255,255,255,.22)}
+.layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:40px;padding-top:36px;padding-bottom:80px}
+.sidebar{position:relative}
+#TOC{position:sticky;top:82px;max-height:calc(100vh - 100px);overflow:auto;padding:4px 4px 12px 0;font-size:.9rem}
+.toc-title{margin:0 0 8px;font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+#TOC ul{list-style:none;margin:0;padding:0}
+#TOC>ul>li{margin:2px 0}
+#TOC li ul{margin:2px 0 6px 14px;border-left:1px solid var(--border)}
+#TOC li ul a{font-size:.85rem;padding:3px 10px}
+#TOC a{display:block;color:var(--muted);padding:5px 10px;border-radius:8px;line-height:1.35}
+#TOC a:hover{color:var(--fg);background:var(--soft);text-decoration:none}
+#TOC a.active{color:var(--accent);background:var(--accent-soft);font-weight:650}
+#TOC .num{display:inline-grid;place-items:center;min-width:20px;height:20px;margin-right:7px;border-radius:6px;background:var(--soft);font-size:.72rem;font-weight:700;color:var(--muted)}
+#TOC a.active .num{background:var(--accent);color:#fff}
+.toc-toggle{display:none}
+main{min-width:0}
+.lead{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px 28px;box-shadow:var(--shadow);margin-bottom:28px;font-size:1.04rem}
+.lead>:first-child{margin-top:0}.lead>:last-child{margin-bottom:0}
+section.level1{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:8px 32px 26px;margin:0 0 28px;box-shadow:var(--shadow)}
+section.level1>h1{display:flex;align-items:center;gap:14px;font-size:1.55rem;line-height:1.25;margin:22px 0 14px;letter-spacing:-.015em}
+h1 .num{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-size:1.05rem;font-weight:800;box-shadow:0 4px 14px color-mix(in srgb,var(--accent) 35%,transparent)}
+h2{font-size:1.18rem;margin:1.8em 0 .5em;letter-spacing:-.01em}
+h3{font-size:1.02rem;margin:1.5em 0 .4em}
+p,ul,ol{margin:.75em 0}
+li{margin:.3em 0}
+li>p{margin:.3em 0}
+strong{font-weight:680}
+code{font:.86em/1.5 ui-monospace,"Cascadia Code","SFMono-Regular",Consolas,"Liberation Mono",monospace;background:var(--code);padding:.14em .42em;border-radius:6px}
 :not(pre)>code{overflow-wrap:anywhere}
-table{border-collapse:collapse;display:block;overflow-x:auto;margin:1.1em 0;font-size:.94em}
-th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;vertical-align:top}
-th{background:var(--soft);font-weight:650}
+pre{position:relative;background:var(--pre);color:var(--pre-fg);border-radius:12px;padding:40px 18px 16px;overflow-x:auto;margin:1.1em 0;border:1px solid rgba(148,163,184,.18)}
+pre code{background:none;padding:0;color:inherit;font-size:.86em;line-height:1.6}
+pre .lang{position:absolute;top:10px;left:16px;font:700 .68rem/1 -apple-system,"Segoe UI",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8}
+.copy{position:absolute;top:7px;right:8px;font:600 12px/1 -apple-system,"Segoe UI",sans-serif;padding:6px 10px;border:1px solid rgba(148,163,184,.3);border-radius:8px;background:rgba(148,163,184,.12);color:#cbd5e1;cursor:pointer}
+.copy:hover{background:rgba(148,163,184,.25);color:#fff}
+.copy.done{color:#86efac;border-color:#86efac}
+table{border-collapse:separate;border-spacing:0;display:block;overflow-x:auto;margin:1.2em 0;font-size:.93em;border:1px solid var(--border);border-radius:12px}
+th,td{padding:10px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:0}
+th{background:var(--soft);font-weight:680;white-space:nowrap}
+tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--soft) 55%,transparent)}
 hr{border:0;border-top:1px solid var(--border);margin:2em 0}
-nav#TOC{background:var(--soft);border:1px solid var(--border);border-radius:8px;padding:14px 22px;margin:1.6em 0 0}
-nav#TOC strong{display:block;margin-bottom:.3em}
-nav#TOC ul{margin:0;padding-left:1.1em}
-nav#TOC li{margin:.15em 0}
-.copy{position:absolute;top:8px;right:8px;font:12px/1 -apple-system,"Segoe UI",sans-serif;padding:5px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--muted);cursor:pointer}
-.copy:hover{color:var(--fg)}
-footer{color:var(--muted);font-size:.85em;margin-top:3.5em;border-top:1px solid var(--border);padding-top:1em}
-@media (max-width:600px){body{font-size:16px}main{padding:28px 16px 56px}h1.title{font-size:1.8rem}}
-@media print{.copy{display:none}body{font-size:11pt}main{max-width:none;padding:0}pre{white-space:pre-wrap}}
+blockquote{margin:1.1em 0;padding:4px 18px;border-left:4px solid var(--border);color:var(--muted)}
+div.note,div.tip,div.important,div.warning,div.caution{--c:var(--note);margin:1.2em 0;padding:12px 18px 12px 18px;border:1px solid color-mix(in srgb,var(--c) 35%,var(--border));border-left:4px solid var(--c);border-radius:12px;background:color-mix(in srgb,var(--c) 8%,var(--card))}
+div.tip{--c:var(--tip)}div.important{--c:var(--important)}div.warning{--c:var(--warning)}div.caution{--c:var(--caution)}
+div.title p{margin:0 0 4px;font-weight:750;font-size:.82rem;letter-spacing:.06em;text-transform:uppercase;color:var(--c)}
+div.note>:last-child,div.tip>:last-child,div.important>:last-child,div.warning>:last-child,div.caution>:last-child{margin-bottom:0}
+div.flow ol{list-style:none;counter-reset:flow;display:flex;flex-wrap:wrap;gap:10px;padding:0;margin:1.2em 0}
+div.flow li{counter-increment:flow;position:relative;flex:1 1 150px;margin:0;padding:14px 14px 14px 52px;background:var(--soft);border:1px solid var(--border);border-radius:12px;font-size:.92rem;line-height:1.45}
+div.flow li::before{content:counter(flow);position:absolute;left:14px;top:13px;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-weight:800;font-size:.8rem}
+div.flow li strong{display:block;color:var(--fg)}
+div.cards ul{list-style:none;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:1.2em 0}
+div.cards li{margin:0;padding:16px 18px;background:var(--soft);border:1px solid var(--border);border-radius:12px;font-size:.93rem;line-height:1.5}
+div.cards li strong{display:block;font-size:1rem;margin-bottom:2px}
+details{margin:1.1em 0;padding:4px 18px;border:1px solid var(--border);border-radius:12px;background:var(--soft)}
+details[open]{padding-bottom:10px}
+summary{cursor:pointer;font-weight:650;padding:8px 0}
+footer.page{color:var(--muted);font-size:.85rem;margin-top:40px;padding-top:18px;border-top:1px solid var(--border)}
+#totop{position:fixed;right:22px;bottom:22px;width:44px;height:44px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--fg);box-shadow:var(--shadow);cursor:pointer;font-size:18px;opacity:0;pointer-events:none;transition:opacity .2s}
+#totop.show{opacity:1;pointer-events:auto}
+@media (max-width:1000px){
+  .layout{grid-template-columns:1fr;gap:0;padding-top:20px}
+  .sidebar{margin-bottom:18px}
+  .toc-toggle{display:flex;width:100%;justify-content:space-between;align-items:center;padding:12px 16px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--fg);font:650 .95rem/1 inherit;cursor:pointer;box-shadow:var(--shadow)}
+  #TOC{position:static;max-height:none;display:none;margin-top:8px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:12px}
+  #TOC.open{display:block}
+  .toc-title{display:none}
+  .links{display:none}}
+@media (max-width:640px){
+  body{font-size:16px}.wrap{padding:0 16px}
+  .hero .wrap{padding-top:40px;padding-bottom:40px}
+  section.level1{padding:4px 18px 18px;border-radius:14px}
+  .lead{padding:16px 18px}
+  section.level1>h1{font-size:1.3rem}
+  td code{white-space:nowrap;overflow-wrap:normal}
+  h1 .num{width:34px;height:34px}}
+@media print{
+  .topbar,#progress,#totop,.sidebar,.copy{display:none!important}
+  .hero{background:none;color:#000}.hero::after{display:none}.subtitle{color:#333}.eyebrow,.chips span{border-color:#999;background:none}
+  .layout{display:block}section.level1,.lead{box-shadow:none;break-inside:auto}
+  pre{white-space:pre-wrap;background:#f4f4f4;color:#000}body{font-size:11pt;background:#fff}}
 </style>
 </head>
 <body>
-<main>
-<h1 class="title">$title$</h1>
+<div id="progress" aria-hidden="true"></div>
+<header class="topbar"><div class="wrap">
+  <a class="brand" href="#top"><span class="logo">G</span>GSK Family</a>
+  <nav class="links" aria-label="Guides">$for(nav)$<a href="$nav.href$">$nav.title$</a>$endfor$</nav>
+  <button id="theme" type="button" aria-label="Switch light or dark theme" title="Light / dark">&#9680;</button>
+</div></header>
+<section class="hero" id="top"><div class="wrap">
+  <p class="eyebrow">$eyebrow$</p>
+  <h1 class="title">$title$</h1>
+  <p class="subtitle">$subtitle$</p>
+  <div class="chips">$for(chip)$<span>$chip$</span>$endfor$</div>
+</div></section>
+<div class="layout wrap">
+<aside class="sidebar">
 $if(toc)$
-<nav id="TOC" aria-label="Contents"><strong>Contents</strong>
+<nav id="TOC" aria-label="Contents"><p class="toc-title">On this page</p>
 $table-of-contents$
 </nav>
 $endif$
+</aside>
+<main id="content">
 $body$
-<footer>This page is generated from RUNBOOK.md by gsk_family/scripts/build_docs.ps1. To change it, edit RUNBOOK.md and rebuild.</footer>
+<footer class="page">This page is generated from $source$ by gsk_family/scripts/build_docs.ps1. To change it, edit $source$ and rebuild.</footer>
 </main>
+</div>
+<button id="totop" type="button" aria-label="Back to top">&#8593;</button>
 <script>
 (function () {
-  var toc = document.getElementById('TOC'), hr = document.querySelector('main > hr');
-  if (toc && hr) { hr.parentNode.insertBefore(toc, hr); hr.parentNode.removeChild(hr); }
+  var main = document.getElementById('content');
+  // Intro text before the first section becomes one lead card (a Markdown
+  // horizontal rule there is only a separator).
+  var first = main.querySelector('section.level1');
+  if (first) {
+    var lead = document.createElement('div'); lead.className = 'lead';
+    while (main.firstChild && main.firstChild !== first) {
+      var n = main.firstChild;
+      if (n.nodeType === 1 && n.tagName === 'HR') { main.removeChild(n); continue; }
+      lead.appendChild(n);
+    }
+    if (lead.textContent.trim()) { main.insertBefore(lead, first); }
+  }
+  // "6. Title" headings and contents entries get a number badge.
+  function badge(el, cls) {
+    var m = /^(\d+)\.\s+/.exec(el.textContent);
+    if (!m || !el.firstChild || el.firstChild.nodeType !== 3) { return; }
+    el.firstChild.nodeValue = el.firstChild.nodeValue.replace(/^\s*\d+\.\s+/, '');
+    var s = document.createElement('span'); s.className = cls; s.textContent = m[1];
+    el.insertBefore(s, el.firstChild);
+  }
+  document.querySelectorAll('section.level1 > h1').forEach(function (h) { badge(h, 'num'); });
+  document.querySelectorAll('#TOC > ul > li > a').forEach(function (a) { badge(a, 'num'); });
+  // Mark the current guide in the top bar.
+  var page = location.pathname.split('/').pop();
+  document.querySelectorAll('.links a').forEach(function (a) {
+    if (a.getAttribute('href') === page) { a.classList.add('here'); }
+  });
+  // Code blocks: language label and copy button.
+  var names = {matlab: 'MATLAB', powershell: 'PowerShell', bash: 'Bash', sh: 'Shell', text: 'Text', latex: 'LaTeX', tex: 'LaTeX'};
   document.querySelectorAll('pre').forEach(function (pre) {
+    var lang = (pre.className || '').split(/\s+/)[0];
+    var l = document.createElement('span'); l.className = 'lang';
+    l.textContent = names[lang] || (lang ? lang : 'Code'); pre.appendChild(l);
     var b = document.createElement('button');
     b.className = 'copy'; b.type = 'button'; b.textContent = 'Copy';
     b.addEventListener('click', function () {
       var code = pre.querySelector('code'), text = (code || pre).innerText;
-      var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500); };
+      var done = function () { b.textContent = 'Copied'; b.classList.add('done');
+        setTimeout(function () { b.textContent = 'Copy'; b.classList.remove('done'); }, 1500); };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(done, function () { selectText(code || pre); });
       } else { selectText(code || pre); }
@@ -580,25 +735,83 @@ $body$
     var r = document.createRange(); r.selectNodeContents(el);
     var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
   }
+  // Contents: collapsible on narrow screens, current section highlighted.
+  var toc = document.getElementById('TOC');
+  if (toc) {
+    var t = document.createElement('button'); t.className = 'toc-toggle'; t.type = 'button';
+    t.innerHTML = '<span>Contents</span><span>&#9662;</span>';
+    t.addEventListener('click', function () { toc.classList.toggle('open'); });
+    toc.parentNode.insertBefore(t, toc);
+    toc.addEventListener('click', function (e) { if (e.target.closest('a')) { toc.classList.remove('open'); } });
+    var links = Array.prototype.slice.call(toc.querySelectorAll('a'));
+    var targets = links.map(function (a) { return document.getElementById(decodeURIComponent(a.getAttribute('href').slice(1))); });
+    var spy = function () {
+      var y = window.scrollY + 100, cur = -1;
+      targets.forEach(function (el, i) { if (el && el.getBoundingClientRect().top + window.scrollY <= y) { cur = i; } });
+      links.forEach(function (a, i) { a.classList.toggle('active', i === cur); });
+    };
+    window.addEventListener('scroll', spy, {passive: true});
+    window.addEventListener('load', spy); window.addEventListener('hashchange', spy);
+    spy(); setTimeout(spy, 250);   // after a jump to #section on opening
+  }
+  // Reading progress and back-to-top.
+  var bar = document.getElementById('progress'), up = document.getElementById('totop');
+  var onScroll = function () {
+    var h = document.documentElement, max = h.scrollHeight - h.clientHeight;
+    bar.style.width = (max > 0 ? 100 * h.scrollTop / max : 0) + '%';
+    up.classList.toggle('show', h.scrollTop > 600);
+  };
+  window.addEventListener('scroll', onScroll, {passive: true}); onScroll();
+  up.addEventListener('click', function () { window.scrollTo({top: 0, behavior: 'smooth'}); });
+  // Light / dark switch (remembered in this browser when storage is allowed).
+  document.getElementById('theme').addEventListener('click', function () {
+    var root = document.documentElement, cur = root.getAttribute('data-theme');
+    if (!cur) { cur = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+    var next = cur === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('gsk-theme', next); } catch (e) {}
+  });
 })();
 </script>
 </body>
 </html>
 '@
+$rootBuilt = @()
+foreach ($rp in $rootPages) {
+    $rpSrc = [System.IO.Path]::GetFullPath((Join-Path $projectRoot $rp.Src))
+    if (-not (Test-Path $rpSrc)) { continue }
+    $rpOut = [System.IO.Path]::ChangeExtension($rpSrc, ".html")
+    $rpName = [System.IO.Path]::GetFileName($rpSrc)
     if ($pandocExe -ne "") {
-        $rbTemplatePath = Join-Path $env:TEMP "gskcec_runbook_template.html"
-        [System.IO.File]::WriteAllText($rbTemplatePath, $runbookTemplate, $utf8NoBom)
-        & $pandocExe $runbookSrc -f gfm -t html5 -s --syntax-highlighting=none --template $rbTemplatePath `
-            --shift-heading-level-by=-1 --toc --toc-depth=2 -o $runbookOut
-        if ($LASTEXITCODE -ne 0) { throw "pandoc failed on RUNBOOK.md" }
+        $rpTemplatePath = Join-Path $env:TEMP "gskcec_root_page_template.html"
+        [System.IO.File]::WriteAllText($rpTemplatePath, $rootTemplate, $utf8NoBom)
+        $rpMeta = Join-Path $env:TEMP "gskcec_root_page_meta.json"
+        $meta = @{ eyebrow = $rp.Eyebrow; subtitle = $rp.Subtitle; chip = $rp.Chips; source = $rpName;
+                   nav = @($rootNav | ForEach-Object { @{ href = $_.Href; title = $_.Title } }) }
+        # Variables go in as JSON metadata (Pandoc escapes them as plain text).
+        [System.IO.File]::WriteAllText($rpMeta, ($meta | ConvertTo-Json -Depth 4), $utf8NoBom)
+        & $pandocExe $rpSrc -f gfm -t html5 -s --syntax-highlighting=none --template $rpTemplatePath `
+            --metadata-file=$rpMeta --section-divs --shift-heading-level-by=-1 --toc --toc-depth=2 -o $rpOut
+        if ($LASTEXITCODE -ne 0) { throw "pandoc failed on $rpName" }
     } else {
-        $md = [System.IO.File]::ReadAllText($runbookSrc, [System.Text.Encoding]::UTF8)
+        $md = [System.IO.File]::ReadAllText($rpSrc, [System.Text.Encoding]::UTF8)
+        $rpTitle = ([regex]::Match($md, '^#\s+([^\r\n]*)')).Groups[1].Value
         $md = [regex]::Replace($md, '^#\s+[^\r\n]*\r?\n', '')   # the title is printed by the template
-        $page = $runbookTemplate.Replace('$title$', 'Runbook').Replace('$body$', (Convert-MarkdownFallback $md))
+        $page = $rootTemplate.Replace('$title$', $rpTitle).Replace('$eyebrow$', $rp.Eyebrow).
+            Replace('$subtitle$', $rp.Subtitle).Replace('$source$', $rpName).Replace('$body$', (Convert-MarkdownFallback $md))
         $page = [regex]::Replace($page, '(?s)\$if\(toc\)\$.*?\$endif\$', '')
-        [System.IO.File]::WriteAllText($runbookOut, $page, $utf8NoBom)
+        $page = [regex]::Replace($page, '(?s)\$for\(chip\)\$.*?\$endfor\$', (($rp.Chips | ForEach-Object { "<span>$_</span>" }) -join ''))
+        $page = [regex]::Replace($page, '(?s)\$for\(nav\)\$.*?\$endfor\$', (($rootNav | ForEach-Object { "<a href=""$($_.Href)"">$($_.Title)</a>" }) -join ''))
+        [System.IO.File]::WriteAllText($rpOut, $page, $utf8NoBom)
     }
-    $runbookBuilt = $runbookOut
+    # Links between the root guides open their HTML pages.
+    $html = [System.IO.File]::ReadAllText($rpOut, [System.Text.Encoding]::UTF8)
+    foreach ($nv in $rootNav) {
+        $mdName = [System.IO.Path]::ChangeExtension($nv.Href, ".md")
+        $html = $html.Replace("href=""$mdName""", "href=""$($nv.Href)""").Replace("href=""$mdName#", "href=""$($nv.Href)#")
+    }
+    [System.IO.File]::WriteAllText($rpOut, $html, $utf8NoBom)
+    $rootBuilt += $rpOut
 }
 
 # ---- Doxygen C++ API into docs/html/api ----
@@ -634,7 +847,7 @@ if ($doxygenExe -ne "" -and (Test-Path (Join-Path $docsDir "Doxyfile"))) {
 }
 
 Write-Host ("build_docs: {0} page(s) -> {1}" -f $built, $outDir)
-if ($runbookBuilt -ne "") { Write-Host ("build_docs: standalone runbook -> {0}" -f $runbookBuilt) }
+foreach ($rb in $rootBuilt) { Write-Host ("build_docs: standalone page -> {0}" -f $rb) }
 if ($pandocRejected -ne "") { Write-Warning "$pandocRejected; used the minimal fallback renderer (upgrade Pandoc for full fidelity)." }
 elseif ($pandocExe -eq "") { Write-Warning "Pandoc not found; used the minimal fallback renderer (install Pandoc for full fidelity)." }
 if (-not $apiBuilt) { Write-Warning "C++ API (Doxygen) not generated; the API link will 404 until 'doxygen docs/Doxyfile' is available." }

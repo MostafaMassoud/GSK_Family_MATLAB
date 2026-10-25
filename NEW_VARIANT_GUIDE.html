@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Variant Guide - GSK Family</title>
+<script>
+(function () { var t = null; try { t = localStorage.getItem('gsk-theme'); } catch (e) {}
+  if (t === 'light' || t === 'dark') { document.documentElement.setAttribute('data-theme', t); } })();
+</script>
+<style>
+:root{
+  --bg:#f6f7fb;--card:#ffffff;--fg:#1a1f2b;--muted:#5a6375;--border:#e2e6ee;--soft:#f1f3f8;
+  --accent:#4f46e5;--accent-2:#0891b2;--accent-soft:#eef0ff;--code:#eceff5;--pre:#0f172a;--pre-fg:#e2e8f0;
+  --note:#2563eb;--tip:#059669;--important:#7c3aed;--warning:#d97706;--caution:#dc2626;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 6px 24px rgba(16,24,40,.06);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0b0f19;--card:#121826;--fg:#e6e9f2;--muted:#9aa3b5;--border:#242c3d;--soft:#171e2e;
+  --accent:#8b93ff;--accent-2:#22d3ee;--accent-soft:#1c2140;--code:#1d2435;--pre:#0a0e17;--pre-fg:#e2e8f0;
+  --note:#60a5fa;--tip:#34d399;--important:#a78bfa;--warning:#fbbf24;--caution:#f87171;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.35);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0b0f19;--card:#121826;--fg:#e6e9f2;--muted:#9aa3b5;--border:#242c3d;--soft:#171e2e;
+  --accent:#8b93ff;--accent-2:#22d3ee;--accent-soft:#1c2140;--code:#1d2435;--pre:#0a0e17;--pre-fg:#e2e8f0;
+  --note:#60a5fa;--tip:#34d399;--important:#a78bfa;--warning:#fbbf24;--caution:#f87171;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.35);color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:76px}
+body{margin:0;background:var(--bg);color:var(--fg);font:16.5px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));z-index:60}
+.topbar{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:saturate(1.6) blur(10px);-webkit-backdrop-filter:saturate(1.6) blur(10px);border-bottom:1px solid var(--border)}
+.topbar .wrap{display:flex;align-items:center;gap:18px;height:58px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--fg);letter-spacing:-.01em}
+.brand:hover{text-decoration:none}
+.logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center;color:#fff;font-size:13px;font-weight:800}
+.links{display:flex;gap:4px;margin-left:auto}
+.links a{color:var(--muted);font-size:.92rem;font-weight:550;padding:6px 12px;border-radius:8px}
+.links a:hover{background:var(--soft);color:var(--fg);text-decoration:none}
+.links a.here{color:var(--accent);background:var(--accent-soft)}
+#theme{border:1px solid var(--border);background:var(--card);color:var(--fg);width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:16px;display:grid;place-items:center}
+#theme:hover{border-color:var(--accent)}
+.hero{position:relative;overflow:hidden;color:#fff;background:radial-gradient(1200px 400px at 85% -10%,rgba(255,255,255,.18),transparent 60%),radial-gradient(800px 300px at 0% 120%,rgba(34,211,238,.35),transparent 60%),linear-gradient(135deg,#3730a3 0%,#4f46e5 45%,#0e7490 100%)}
+.hero .wrap{padding-top:64px;padding-bottom:58px}
+.hero::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px);background-size:32px 32px;mask-image:linear-gradient(180deg,rgba(0,0,0,.7),transparent);-webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,.7),transparent);pointer-events:none}
+.eyebrow{display:inline-block;margin:0 0 14px;padding:4px 12px;border-radius:999px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);font-size:.8rem;font-weight:650;letter-spacing:.06em;text-transform:uppercase}
+h1.title{font-size:clamp(2.1rem,4.6vw,3.2rem);line-height:1.1;margin:0 0 14px;letter-spacing:-.025em;font-weight:800}
+.subtitle{max-width:760px;font-size:1.15rem;line-height:1.6;margin:0;color:rgba(255,255,255,.9)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}
+.chips span{font-size:.85rem;font-weight:600;padding:6px 12px;border-radius:999px;background:rgba(15,23,42,.28);border:1px solid rgba(255,255,255,.22)}
+.layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:40px;padding-top:36px;padding-bottom:80px}
+.sidebar{position:relative}
+#TOC{position:sticky;top:82px;max-height:calc(100vh - 100px);overflow:auto;padding:4px 4px 12px 0;font-size:.9rem}
+.toc-title{margin:0 0 8px;font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+#TOC ul{list-style:none;margin:0;padding:0}
+#TOC>ul>li{margin:2px 0}
+#TOC li ul{margin:2px 0 6px 14px;border-left:1px solid var(--border)}
+#TOC li ul a{font-size:.85rem;padding:3px 10px}
+#TOC a{display:block;color:var(--muted);padding:5px 10px;border-radius:8px;line-height:1.35}
+#TOC a:hover{color:var(--fg);background:var(--soft);text-decoration:none}
+#TOC a.active{color:var(--accent);background:var(--accent-soft);font-weight:650}
+#TOC .num{display:inline-grid;place-items:center;min-width:20px;height:20px;margin-right:7px;border-radius:6px;background:var(--soft);font-size:.72rem;font-weight:700;color:var(--muted)}
+#TOC a.active .num{background:var(--accent);color:#fff}
+.toc-toggle{display:none}
+main{min-width:0}
+.lead{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px 28px;box-shadow:var(--shadow);margin-bottom:28px;font-size:1.04rem}
+.lead>:first-child{margin-top:0}.lead>:last-child{margin-bottom:0}
+section.level1{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:8px 32px 26px;margin:0 0 28px;box-shadow:var(--shadow)}
+section.level1>h1{display:flex;align-items:center;gap:14px;font-size:1.55rem;line-height:1.25;margin:22px 0 14px;letter-spacing:-.015em}
+h1 .num{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-size:1.05rem;font-weight:800;box-shadow:0 4px 14px color-mix(in srgb,var(--accent) 35%,transparent)}
+h2{font-size:1.18rem;margin:1.8em 0 .5em;letter-spacing:-.01em}
+h3{font-size:1.02rem;margin:1.5em 0 .4em}
+p,ul,ol{margin:.75em 0}
+li{margin:.3em 0}
+li>p{margin:.3em 0}
+strong{font-weight:680}
+code{font:.86em/1.5 ui-monospace,"Cascadia Code","SFMono-Regular",Consolas,"Liberation Mono",monospace;background:var(--code);padding:.14em .42em;border-radius:6px}
+:not(pre)>code{overflow-wrap:anywhere}
+pre{position:relative;background:var(--pre);color:var(--pre-fg);border-radius:12px;padding:40px 18px 16px;overflow-x:auto;margin:1.1em 0;border:1px solid rgba(148,163,184,.18)}
+pre code{background:none;padding:0;color:inherit;font-size:.86em;line-height:1.6}
+pre .lang{position:absolute;top:10px;left:16px;font:700 .68rem/1 -apple-system,"Segoe UI",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8}
+.copy{position:absolute;top:7px;right:8px;font:600 12px/1 -apple-system,"Segoe UI",sans-serif;padding:6px 10px;border:1px solid rgba(148,163,184,.3);border-radius:8px;background:rgba(148,163,184,.12);color:#cbd5e1;cursor:pointer}
+.copy:hover{background:rgba(148,163,184,.25);color:#fff}
+.copy.done{color:#86efac;border-color:#86efac}
+table{border-collapse:separate;border-spacing:0;display:block;overflow-x:auto;margin:1.2em 0;font-size:.93em;border:1px solid var(--border);border-radius:12px}
+th,td{padding:10px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:0}
+th{background:var(--soft);font-weight:680;white-space:nowrap}
+tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--soft) 55%,transparent)}
+hr{border:0;border-top:1px solid var(--border);margin:2em 0}
+blockquote{margin:1.1em 0;padding:4px 18px;border-left:4px solid var(--border);color:var(--muted)}
+div.note,div.tip,div.important,div.warning,div.caution{--c:var(--note);margin:1.2em 0;padding:12px 18px 12px 18px;border:1px solid color-mix(in srgb,var(--c) 35%,var(--border));border-left:4px solid var(--c);border-radius:12px;background:color-mix(in srgb,var(--c) 8%,var(--card))}
+div.tip{--c:var(--tip)}div.important{--c:var(--important)}div.warning{--c:var(--warning)}div.caution{--c:var(--caution)}
+div.title p{margin:0 0 4px;font-weight:750;font-size:.82rem;letter-spacing:.06em;text-transform:uppercase;color:var(--c)}
+div.note>:last-child,div.tip>:last-child,div.important>:last-child,div.warning>:last-child,div.caution>:last-child{margin-bottom:0}
+div.flow ol{list-style:none;counter-reset:flow;display:flex;flex-wrap:wrap;gap:10px;padding:0;margin:1.2em 0}
+div.flow li{counter-increment:flow;position:relative;flex:1 1 150px;margin:0;padding:14px 14px 14px 52px;background:var(--soft);border:1px solid var(--border);border-radius:12px;font-size:.92rem;line-height:1.45}
+div.flow li::before{content:counter(flow);position:absolute;left:14px;top:13px;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-weight:800;font-size:.8rem}
+div.flow li strong{display:block;color:var(--fg)}
+div.cards ul{list-style:none;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:1.2em 0}
+div.cards li{margin:0;padding:16px 18px;background:var(--soft);border:1px solid var(--border);border-radius:12px;font-size:.93rem;line-height:1.5}
+div.cards li strong{display:block;font-size:1rem;margin-bottom:2px}
+details{margin:1.1em 0;padding:4px 18px;border:1px solid var(--border);border-radius:12px;background:var(--soft)}
+details[open]{padding-bottom:10px}
+summary{cursor:pointer;font-weight:650;padding:8px 0}
+footer.page{color:var(--muted);font-size:.85rem;margin-top:40px;padding-top:18px;border-top:1px solid var(--border)}
+#totop{position:fixed;right:22px;bottom:22px;width:44px;height:44px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--fg);box-shadow:var(--shadow);cursor:pointer;font-size:18px;opacity:0;pointer-events:none;transition:opacity .2s}
+#totop.show{opacity:1;pointer-events:auto}
+@media (max-width:1000px){
+  .layout{grid-template-columns:1fr;gap:0;padding-top:20px}
+  .sidebar{margin-bottom:18px}
+  .toc-toggle{display:flex;width:100%;justify-content:space-between;align-items:center;padding:12px 16px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--fg);font:650 .95rem/1 inherit;cursor:pointer;box-shadow:var(--shadow)}
+  #TOC{position:static;max-height:none;display:none;margin-top:8px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:12px}
+  #TOC.open{display:block}
+  .toc-title{display:none}
+  .links{display:none}}
+@media (max-width:640px){
+  body{font-size:16px}.wrap{padding:0 16px}
+  .hero .wrap{padding-top:40px;padding-bottom:40px}
+  section.level1{padding:4px 18px 18px;border-radius:14px}
+  .lead{padding:16px 18px}
+  section.level1>h1{font-size:1.3rem}
+  td code{white-space:nowrap;overflow-wrap:normal}
+  h1 .num{width:34px;height:34px}}
+@media print{
+  .topbar,#progress,#totop,.sidebar,.copy{display:none!important}
+  .hero{background:none;color:#000}.hero::after{display:none}.subtitle{color:#333}.eyebrow,.chips span{border-color:#999;background:none}
+  .layout{display:block}section.level1,.lead{box-shadow:none;break-inside:auto}
+  pre{white-space:pre-wrap;background:#f4f4f4;color:#000}body{font-size:11pt;background:#fff}}
+</style>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+<header class="topbar"><div class="wrap">
+  <a class="brand" href="#top"><span class="logo">G</span>GSK Family</a>
+  <nav class="links" aria-label="Guides"><a href="RUNBOOK.html">Runbook</a><a href="NEW_VARIANT_GUIDE.html">New
+Variant Guide</a></nav>
+  <button id="theme" type="button" aria-label="Switch light or dark theme" title="Light / dark">&#9680;</button>
+</div></header>
+<section class="hero" id="top"><div class="wrap">
+  <p class="eyebrow">Researcher guide</p>
+  <h1 class="title">New Variant Guide</h1>
+  <p class="subtitle">Create your own GSK variant in this project, check
+it, run it on the CEC suites next to the family, and produce the figures
+and tables for your manuscript.</p>
+  <div class="chips"><span>One command to start</span><span>Fair
+same-seed comparison</span><span>Any CEC suite</span><span>Paper-ready
+output</span></div>
+</div></section>
+<div class="layout wrap">
+<aside class="sidebar">
+<nav id="TOC" aria-label="Contents"><p class="toc-title">On this page</p>
+<ul>
+<li><a href="#1-what-you-will-create" id="toc-1-what-you-will-create">1.
+What you will create</a></li>
+<li><a href="#2-choose-a-base-algorithm"
+id="toc-2-choose-a-base-algorithm">2. Choose a base algorithm</a></li>
+<li><a href="#3-create-your-variant" id="toc-3-create-your-variant">3.
+Create your variant</a></li>
+<li><a href="#4-make-your-change" id="toc-4-make-your-change">4. Make
+your change</a></li>
+<li><a href="#5-check-it" id="toc-5-check-it">5. Check it</a></li>
+<li><a href="#6-run-the-experiments" id="toc-6-run-the-experiments">6.
+Run the experiments</a></li>
+<li><a href="#7-convergence-figures-and-statistics"
+id="toc-7-convergence-figures-and-statistics">7. Convergence figures and
+statistics</a></li>
+<li><a href="#8-put-it-in-the-manuscript"
+id="toc-8-put-it-in-the-manuscript">8. Put it in the manuscript</a></li>
+<li><a href="#9-common-problems" id="toc-9-common-problems">9. Common
+problems</a></li>
+<li><a href="#10-where-to-go-next" id="toc-10-where-to-go-next">10.
+Where to go next</a></li>
+</ul>
+</nav>
+</aside>
+<main id="content">
+<p>How to build your own GSK variant in this project, check it, run it
+on the CEC benchmark suites next to the seven GSK-family optimizers, and
+get the convergence figures and statistical tables for a manuscript.
+Every step is one command or one small edit.</p>
+<div class="flow">
+
+<ol type="1">
+<li><strong>Create</strong> One command makes a renamed copy of a family
+member.</li>
+<li><strong>Edit</strong> Change the search in one MATLAB file.</li>
+<li><strong>Check</strong> A 10-second test run; an untouched copy
+reproduces its base exactly.</li>
+<li><strong>Run</strong> Run your variant and the algorithms you compare
+against on the same benchmarks.</li>
+<li><strong>Analyze</strong> Press Run once for the figures and the
+tables.</li>
+</ol>
+</div>
+
+<div class="note">
+<div class="title">
+<p>Note</p>
+</div>
+<p>Do the one-time setup first: <a href="RUNBOOK.html">Runbook</a>
+sections 1 to 3 (install, build the MEX bridge, first run). This guide
+assumes the first run works.</p>
+</div>
+<hr />
+<section id="1-what-you-will-create" class="level1">
+<h1>1. What you will create</h1>
+<p>A GSK variant here is <strong>one MATLAB function in its own
+folder</strong>. The runner, the benchmarks, the seeds, the result files
+and the analysis tools are shared with the seven built-in optimizers, so
+your variant gets all of them for free.</p>
+<pre class="text"><code>GSK_Family_MATLAB\
+  run_all_cec2017.m          &lt;- launchers (one per suite)
+  run_all_cec2011.m
+  run_compare_algorithms.m   &lt;- figures and statistics
+  gsk_family\
+    src\optimizers\
+      gsk\                   &lt;- the seven built-in optimizers
+      ...
+      my-gsk\                &lt;- YOUR VARIANT (step 3)
+    scripts\
+      new_gsk_variant.m      &lt;- creates the copy
+      plot_convergence.m     &lt;- convergence figures
+      compare_algorithms.m   &lt;- tables and tests
+    results\_run_all\        &lt;- every run&#39;s results
+    results\analysis\        &lt;- figures and tables</code></pre>
+<div class="cards">
+
+<ul>
+<li><strong>Fair comparison built in</strong> Every algorithm gets the
+same seed and the same starting population in each run, so differences
+come from the algorithms.</li>
+<li><strong>No registration</strong> The runner finds the new folder by
+itself. You never edit the runner.</li>
+<li><strong>All suites</strong> CEC2011, CEC2013, CEC2013-LSGO, CEC2017
+and CEC2020 work the same way.</li>
+<li><strong>Paper-ready output</strong> Vector PDF figures, LaTeX
+tables, Wilcoxon and Friedman tests.</li>
+</ul>
+</div>
+
+</section>
+<section id="2-choose-a-base-algorithm" class="level1">
+<h1>2. Choose a base algorithm</h1>
+<p>Start from the family member closest to your idea. The copy keeps all
+of its behaviour, so you only write what is new.</p>
+<table>
+<thead>
+<tr>
+<th>Base</th>
+<th>Name to use</th>
+<th>What it is</th>
+<th>Starting population</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GSK</td>
+<td><code>gsk</code></td>
+<td>The original: junior and senior knowledge phases, fixed parameters
+(KF = 0.5, KR = 0.9, K = 10, p = 0.1)</td>
+<td>100, fixed</td>
+</tr>
+<tr>
+<td>AGSK</td>
+<td><code>agsk</code></td>
+<td>GSK with adaptive (KF, KR) pools and population reduction</td>
+<td>100, shrinks to 12</td>
+</tr>
+<tr>
+<td>APGSK</td>
+<td><code>apgsk</code></td>
+<td>AGSK-style adaptive parameters with a sign-switchable knowledge
+factor</td>
+<td>100, shrinks</td>
+</tr>
+<tr>
+<td>FDB-AGSK</td>
+<td><code>fdb-agsk</code></td>
+<td>AGSK with fitness-distance-balance choice of the donor vectors</td>
+<td>100, shrinks to 12</td>
+</tr>
+<tr>
+<td>ATMALS-GSK</td>
+<td><code>atmals-gsk</code></td>
+<td>GSK with adaptive parameter tuning, a memory and adaptive local
+search</td>
+<td>100, fixed</td>
+</tr>
+<tr>
+<td>eGSK</td>
+<td><code>egsk</code></td>
+<td>GSK with per-individual factors and a late <code>fmincon</code>
+local search (needs the Optimization Toolbox)</td>
+<td>100, fixed</td>
+</tr>
+<tr>
+<td>DT-GSK</td>
+<td><code>dt-gsk</code></td>
+<td>GSK with dimension-tiered control: adaptive parameters, restarts,
+refinement</td>
+<td>5 × D, shrinks</td>
+</tr>
+</tbody>
+</table>
+<div class="tip">
+<div class="title">
+<p>Tip</p>
+</div>
+<p>If your idea changes the junior or senior phase of GSK, start from
+<code>gsk</code>: it is the shortest file (about 200 lines) and the
+easiest to read. Each algorithm is described in
+<code>gsk_family/docs/algorithms/&lt;name&gt;.md</code>.</p>
+</div>
+</section>
+<section id="3-create-your-variant" class="level1">
+<h1>3. Create your variant</h1>
+<p>Open MATLAB, set the current folder to <code>gsk_family</code>, and
+type:</p>
+<pre class="matlab"><code>addpath(&#39;scripts&#39;);
+new_gsk_variant(&#39;my-gsk&#39;, &#39;base&#39;,&#39;gsk&#39;, &#39;description&#39;,&#39;GSK with my new step&#39;);</code></pre>
+<p>This creates <code>src\optimizers\my-gsk\my_gsk_optimize.m</code>: an
+exact copy of <code>gsk_optimize.m</code> with only the names changed
+(the function name, its help text, its error names and
+<code>result.optimizer = 'my-gsk'</code>). It prints the next steps,
+including a ready-made test command.</p>
+<p><strong>Name rules:</strong> lower-case letters, digits and hyphens,
+starting with a letter (<code>my-gsk</code>, <code>ogsk</code>,
+<code>gsk-ls2</code>). The file and the function use the same name with
+underscores (<code>my_gsk_optimize</code>). The seven built-in names are
+refused, and an existing folder is never overwritten.</p>
+<p>For another base, change <code>'base'</code>, for example
+<code>new_gsk_variant('my-agsk', 'base','agsk')</code>.</p>
+<div class="important">
+<div class="title">
+<p>Important</p>
+</div>
+<p>Some bases call small helper files that stay in the base's folder
+(for example <code>atmals_roulette_select.m</code> or
+<code>dt_gsk_config.m</code>). Your copy keeps calling them. To change a
+helper, copy it into your folder <strong>under a new name</strong> and
+call that new name from your copy; never edit the original.</p>
+</div>
+<details>
+<summary>Doing it by hand instead</summary>
+
+<ol type="1">
+<li>Create the folder <code>src\optimizers\my-gsk</code>.</li>
+<li>Copy <code>src\optimizers\gsk\gsk_optimize.m</code> into it as
+<code>my_gsk_optimize.m</code>.</li>
+<li>Change its first line to
+<code>function result = my_gsk_optimize(problem, options)</code>.</li>
+<li>Change <code>result.optimizer = 'gsk';</code> to
+<code>result.optimizer = 'my-gsk';</code>.</li>
+</ol>
+</details>
+
+</section>
+<section id="4-make-your-change" class="level1">
+<h1>4. Make your change</h1>
+<p>Open <code>my_gsk_optimize.m</code> and change the search. In a copy
+of GSK the main parts are easy to find by their comment lines:</p>
+<table>
+<thead>
+<tr>
+<th>Look for this comment</th>
+<th>What happens there</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>% ----- population initialization</code></td>
+<td>the starting population (from the runner) is evaluated</td>
+</tr>
+<tr>
+<td><code>% ----- main loop -----</code></td>
+<td>one generation per pass, until the budget is used</td>
+</tr>
+<tr>
+<td><code>% ----- junior gaining-sharing</code></td>
+<td>the junior phase builds <code>Gained_Shared_Junior</code></td>
+</tr>
+<tr>
+<td><code>% ----- senior gaining-sharing</code></td>
+<td>the senior phase builds <code>Gained_Shared_Senior</code></td>
+</tr>
+<tr>
+<td><code>% ----- bound constraints</code></td>
+<td>out-of-range values are repaired</td>
+</tr>
+<tr>
+<td><code>% ----- trial vector generation</code></td>
+<td>the two phases are mixed into the trial vectors <code>ui</code></td>
+</tr>
+<tr>
+<td><code>% ----- offspring evaluation</code></td>
+<td>the trial vectors are evaluated</td>
+</tr>
+<tr>
+<td><code>% ----- pairwise greedy selection</code></td>
+<td>each parent is replaced when its child is better</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Keep these rules</strong> so that the comparison stays fair
+and the runner can read your results (a copy already follows all of
+them):</p>
+<ol type="1">
+<li>Seed first: <code>gsk_set_rng(options)</code> stays before any
+random number.</li>
+<li>Start from the runner's population: keep the base's initialization
+code (in GSK it is the line with
+<code>gsk_initial_population_from_options</code>).</li>
+<li>Evaluate only through <code>problem.evaluate(X)</code> (rows are
+candidates).</li>
+<li>Keep every candidate inside <code>problem.lb</code> and
+<code>problem.ub</code>.</li>
+<li>Count every evaluation in <code>nfes</code> and stop at
+<code>problem.max_nfes</code>.</li>
+<li>Keep the <code>result</code> fields at the end of the file,
+including <code>result.convergence</code> (the curves are drawn from
+it).</li>
+</ol>
+<p><strong>New parameters:</strong> read them with a default, in the
+style of the file, so runs without the option keep working:</p>
+<pre class="matlab"><code>alpha = local_option(options, &#39;alpha&#39;, 0.2);   % my new parameter, default 0.2</code></pre>
+<p>The full contract of <code>problem</code>, <code>options</code> and
+<code>result</code> is in the <a
+href="gsk_family/docs/reference/matlab_interface.md">MATLAB
+interface</a>, and the <a
+href="gsk_family/docs/development/extension_guide.md">Extension
+Guide</a> explains it step by step.</p>
+</section>
+<section id="5-check-it" class="level1">
+<h1>5. Check it</h1>
+<p>Run two short runs (about 10 seconds) in the <code>gsk_family</code>
+folder:</p>
+<pre class="matlab"><code>addpath(&#39;src/runners&#39;);
+run_experiment(&#39;optimizer&#39;,&#39;my-gsk&#39;, &#39;suite&#39;,&#39;cec2017&#39;, &#39;functions&#39;,1, ...
+    &#39;dimensions&#39;,10, &#39;runs&#39;,2, &#39;max_nfes&#39;,3000, &#39;project_root&#39;,pwd, ...
+    &#39;output_dir&#39;,fullfile(tempdir,&#39;my_gsk_check&#39;), &#39;use_parallel&#39;,false);</code></pre>
+<p>It prints a results table for F1. An error message names the line to
+fix.</p>
+<div class="tip">
+<div class="title">
+<p>Tip</p>
+</div>
+<p><strong>The best first test:</strong> create the copy, change
+nothing, and run it next to its base with the same settings. With the
+default unified seeds the two give <strong>exactly</strong> the same
+numbers. This proves your setup is right before you change anything.
+Every one of the seven bases passes this test.</p>
+</div>
+<pre class="matlab"><code>for opt = {&#39;gsk&#39;, &#39;my-gsk&#39;}
+    run_experiment(&#39;optimizer&#39;,opt{1}, &#39;suite&#39;,&#39;cec2017&#39;, &#39;functions&#39;,1, ...
+        &#39;dimensions&#39;,10, &#39;runs&#39;,3, &#39;max_nfes&#39;,5000, &#39;project_root&#39;,pwd, ...
+        &#39;output_dir&#39;,fullfile(tempdir,&#39;same_check&#39;,opt{1}), &#39;use_parallel&#39;,false, &#39;verbose&#39;,false);
+end
+A = readtable(fullfile(tempdir,&#39;same_check&#39;,&#39;gsk&#39;,&#39;summary&#39;,&#39;per_run.csv&#39;));
+B = readtable(fullfile(tempdir,&#39;same_check&#39;,&#39;my-gsk&#39;,&#39;summary&#39;,&#39;per_run.csv&#39;));
+isequal(A.best_fitness, B.best_fitness)   % 1 = identical</code></pre>
+</section>
+<section id="6-run-the-experiments" class="level1">
+<h1>6. Run the experiments</h1>
+<p>Use the launchers next to the <code>gsk_family</code> folder. For
+CEC2017, open <code>run_all_cec2017.m</code>, set the CONFIG block, and
+press <strong>Run</strong>:</p>
+<pre class="matlab"><code>optimizers = {&#39;gsk&#39;, &#39;my-gsk&#39;};      % your variant and the algorithms to compare with
+functions  = 1:30;                   % F2 is dropped automatically
+dimensions = [10 30 50 100];
+runs       = 51;</code></pre>
+<p>For CEC2011, open <code>run_all_cec2011.m</code> and set the same
+<code>optimizers</code>, <code>functions = 1:22</code> and
+<code>dimensions = 0</code> (each problem at its own dimension).</p>
+<table>
+<thead>
+<tr>
+<th>Suite</th>
+<th>Functions</th>
+<th>Dimensions</th>
+<th>Budget per run</th>
+<th>Runs per algorithm</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CEC2017</td>
+<td><code>1:30</code></td>
+<td><code>[10 30 50 100]</code></td>
+<td>10,000 × D</td>
+<td>5,916</td>
+</tr>
+<tr>
+<td>CEC2011</td>
+<td><code>1:22</code></td>
+<td><code>0</code> (native)</td>
+<td>150,000</td>
+<td>1,122</td>
+</tr>
+<tr>
+<td>CEC2013</td>
+<td><code>1:28</code></td>
+<td><code>[10 30 50]</code></td>
+<td>10,000 × D</td>
+<td>4,284</td>
+</tr>
+<tr>
+<td>CEC2020</td>
+<td><code>1:10</code></td>
+<td><code>[5 10 15 20]</code></td>
+<td>50,000 to 10,000,000</td>
+<td>1,836 (F1 and F8 have no data at D5 and D15)</td>
+</tr>
+<tr>
+<td>CEC2013-LSGO</td>
+<td><code>1:15</code></td>
+<td><code>0</code> (1000; 905 for F13, F14)</td>
+<td>3,000,000</td>
+<td>765</td>
+</tr>
+</tbody>
+</table>
+<div class="warning">
+<div class="title">
+<p>Warning</p>
+</div>
+<p>A full CEC2017 campaign takes many hours per algorithm, mostly at D =
+100. Start with <code>dimensions = 10</code> to check everything. The
+launchers start with <code>overwrite = true</code>, which moves the
+earlier results of every listed algorithm to an archive folder. To add
+dimensions or algorithms later without losing finished runs, set
+<code>overwrite = false</code>: finished runs are reused.</p>
+</div>
+<p>For long campaigns, run several runs at once with
+<code>use_parallel = true</code> and choose the number of workers
+yourself; see <a href="RUNBOOK.html">Runbook</a> section 5.</p>
+</section>
+<section id="7-convergence-figures-and-statistics" class="level1">
+<h1>7. Convergence figures and statistics</h1>
+<p>Open <code>run_compare_algorithms.m</code> (next to the launchers),
+set its CONFIG block, and press <strong>Run</strong>:</p>
+<pre class="matlab"><code>suites     = {&#39;cec2017&#39;, &#39;cec2011&#39;};
+optimizers = {&#39;my-gsk&#39;, &#39;gsk&#39;};       % first = first in legends and tables
+labels     = {&#39;Proposed&#39;, &#39;GSK&#39;};     % names shown in the figures and tables
+proposed   = &#39;my-gsk&#39;;                % tested against every other algorithm</code></pre>
+<p>It reads the finished runs and writes, for each suite:</p>
+<table>
+<thead>
+<tr>
+<th>Output</th>
+<th>Where</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Convergence figures</td>
+<td><code>results\analysis\convergence\&lt;suite&gt;\</code></td>
+<td>one figure per function and dimension with every algorithm's curve
+(<code>&lt;suite&gt;_F&lt;f&gt;_D&lt;d&gt;.png</code> and
+<code>.pdf</code>), plus one overview with all functions per
+dimension</td>
+</tr>
+<tr>
+<td>LaTeX tables</td>
+<td><code>results\analysis\compare\&lt;suite&gt;\table_&lt;suite&gt;_D&lt;d&gt;.tex</code></td>
+<td>Mean (SD) per function, best mean in bold, +/=/− per competitor, a
++/=/− count row</td>
+</tr>
+<tr>
+<td>Spreadsheet tables</td>
+<td>same folder, <code>.csv</code></td>
+<td>the same numbers with every p-value;
+<code>statistics_&lt;suite&gt;.csv</code> adds Best, Median, Worst</td>
+</tr>
+<tr>
+<td>Wilcoxon signed-rank</td>
+<td><code>wilcoxon_&lt;suite&gt;.csv</code></td>
+<td>R+, R−, p-value and decision per dimension</td>
+</tr>
+<tr>
+<td>Friedman ranks</td>
+<td><code>friedman_&lt;suite&gt;.csv</code></td>
+<td>mean rank of every algorithm (1 = best) per dimension and
+overall</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Reading the results</strong> (two-sided tests, alpha =
+0.05):</p>
+<ul>
+<li><strong>+</strong> your algorithm is significantly better than that
+competitor on that function, <strong>−</strong> significantly worse,
+<strong>=</strong> no significant difference (Wilcoxon rank-sum over the
+51 runs).</li>
+<li><strong>R+</strong> sums the ranks of the functions where your
+algorithm has the lower mean, <strong>R−</strong> the others. A small
+p-value with R+ &gt; R− means it is better over the whole suite.</li>
+<li><strong>Friedman:</strong> the lower the mean rank, the better.</li>
+</ul>
+<p>The curves show the error f(x) − f(x*) on a log axis for CEC2013,
+CEC2017 and CEC2020, and the objective value for CEC2011 and
+CEC2013-LSGO (which have no known optimum; linear axis when values are
+negative). By default each algorithm's <strong>median run</strong> is
+drawn; set <code>curve = 'mean'</code> for the mean of all runs at the
+14 CEC checkpoints.</p>
+<div class="tip">
+<div class="title">
+<p>Tip</p>
+</div>
+<p>The p-values need no toolbox and equal those of MATLAB's
+<code>ranksum</code>, <code>signrank</code> and <code>friedman</code>.
+Run <code>run_compare_algorithms.m</code> again at any time, also on a
+partial campaign: it only reads results and overwrites its own
+output.</p>
+</div>
+</section>
+<section id="8-put-it-in-the-manuscript" class="level1">
+<h1>8. Put it in the manuscript</h1>
+<ul>
+<li><strong>Figures:</strong> use the PDF files (vector graphics). Say
+in the caption which curve is shown: "median run" or "mean of 51
+runs".</li>
+<li><strong>Tables:</strong> <code>\input{table_cec2017_D10.tex}</code>
+inside a <code>table</code> environment. The comment lines at the top of
+each file state the +/=/− convention; check that it matches the paper
+you follow.</li>
+<li><strong>Protocol to report:</strong> 51 independent runs, the budget
+of the suite (table in step 6), the same seed and starting population
+for every algorithm in each run (unified seed policy), and your
+variant's parameter values.</li>
+<li><strong>Environment:</strong> <code>summary\environment.json</code>
+in each result folder records the MATLAB version, seeds and settings of
+the run.</li>
+<li><strong>Keep</strong> <code>results\_run_all\</code> until the paper
+is accepted: every number in the tables can be traced to a single run in
+<code>summary\per_run.csv</code>.</li>
+</ul>
+</section>
+<section id="9-common-problems" class="level1">
+<h1>9. Common problems</h1>
+<table>
+<thead>
+<tr>
+<th>Message or symptom</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Unrecognized function or variable 'my_gsk_optimize'</code></td>
+<td>The folder, file and function names do not match step 3 (folder
+<code>my-gsk</code>, file and function
+<code>my_gsk_optimize</code>).</td>
+</tr>
+<tr>
+<td><code>new_gsk_variant:exists</code></td>
+<td>The folder exists already; nothing was changed. Choose another name
+or delete that folder yourself.</td>
+</tr>
+<tr>
+<td><code>no results for my-gsk on cec2017</code></td>
+<td>The runs are not finished or not in
+<code>results\_run_all\my-gsk\cec2017\</code>.</td>
+</tr>
+<tr>
+<td>A figure lacks one algorithm</td>
+<td>That algorithm has no curve for this function yet; it is listed as
+<code>incomplete</code>.</td>
+</tr>
+<tr>
+<td>A function is missing from the tables</td>
+<td>Only functions that every listed algorithm has finished are
+compared; the others are listed as <code>skipped</code>.</td>
+</tr>
+<tr>
+<td><code>gskcec:mexMissingPrerequisite</code></td>
+<td>Build the MEX bridge (<a href="RUNBOOK.html">Runbook</a> section
+3).</td>
+</tr>
+<tr>
+<td>Out of memory during a parallel run</td>
+<td>Use fewer workers and continue with <code>overwrite = false</code>
+(<a href="RUNBOOK.html">Runbook</a> section 5).</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="10-where-to-go-next" class="level1">
+<h1>10. Where to go next</h1>
+<ul>
+<li><a href="RUNBOOK.html">Runbook</a>: setup, all launchers, parallel
+runs.</li>
+<li><a href="gsk_family/docs/research/comparing_algorithms.md">Comparing
+Algorithms</a>: every option of the figure and table tools.</li>
+<li><a href="gsk_family/docs/development/extension_guide.md">Extension
+Guide</a>: the full optimizer contract and how to add a suite.</li>
+<li><a href="gsk_family/docs/reference/seed_policy.md">Seed Policy</a>:
+how seeds and starting populations are shared.</li>
+<li>Algorithm guides in <code>gsk_family/docs/algorithms/</code>: how
+each family member works.</li>
+</ul>
+</section>
+<footer class="page">This page is generated from NEW_VARIANT_GUIDE.md by gsk_family/scripts/build_docs.ps1. To change it, edit NEW_VARIANT_GUIDE.md and rebuild.</footer>
+</main>
+</div>
+<button id="totop" type="button" aria-label="Back to top">&#8593;</button>
+<script>
+(function () {
+  var main = document.getElementById('content');
+  // Intro text before the first section becomes one lead card (a Markdown
+  // horizontal rule there is only a separator).
+  var first = main.querySelector('section.level1');
+  if (first) {
+    var lead = document.createElement('div'); lead.className = 'lead';
+    while (main.firstChild && main.firstChild !== first) {
+      var n = main.firstChild;
+      if (n.nodeType === 1 && n.tagName === 'HR') { main.removeChild(n); continue; }
+      lead.appendChild(n);
+    }
+    if (lead.textContent.trim()) { main.insertBefore(lead, first); }
+  }
+  // "6. Title" headings and contents entries get a number badge.
+  function badge(el, cls) {
+    var m = /^(\d+)\.\s+/.exec(el.textContent);
+    if (!m || !el.firstChild || el.firstChild.nodeType !== 3) { return; }
+    el.firstChild.nodeValue = el.firstChild.nodeValue.replace(/^\s*\d+\.\s+/, '');
+    var s = document.createElement('span'); s.className = cls; s.textContent = m[1];
+    el.insertBefore(s, el.firstChild);
+  }
+  document.querySelectorAll('section.level1 > h1').forEach(function (h) { badge(h, 'num'); });
+  document.querySelectorAll('#TOC > ul > li > a').forEach(function (a) { badge(a, 'num'); });
+  // Mark the current guide in the top bar.
+  var page = location.pathname.split('/').pop();
+  document.querySelectorAll('.links a').forEach(function (a) {
+    if (a.getAttribute('href') === page) { a.classList.add('here'); }
+  });
+  // Code blocks: language label and copy button.
+  var names = {matlab: 'MATLAB', powershell: 'PowerShell', bash: 'Bash', sh: 'Shell', text: 'Text', latex: 'LaTeX', tex: 'LaTeX'};
+  document.querySelectorAll('pre').forEach(function (pre) {
+    var lang = (pre.className || '').split(/\s+/)[0];
+    var l = document.createElement('span'); l.className = 'lang';
+    l.textContent = names[lang] || (lang ? lang : 'Code'); pre.appendChild(l);
+    var b = document.createElement('button');
+    b.className = 'copy'; b.type = 'button'; b.textContent = 'Copy';
+    b.addEventListener('click', function () {
+      var code = pre.querySelector('code'), text = (code || pre).innerText;
+      var done = function () { b.textContent = 'Copied'; b.classList.add('done');
+        setTimeout(function () { b.textContent = 'Copy'; b.classList.remove('done'); }, 1500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { selectText(code || pre); });
+      } else { selectText(code || pre); }
+    });
+    pre.appendChild(b);
+  });
+  function selectText(el) {
+    var r = document.createRange(); r.selectNodeContents(el);
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  }
+  // Contents: collapsible on narrow screens, current section highlighted.
+  var toc = document.getElementById('TOC');
+  if (toc) {
+    var t = document.createElement('button'); t.className = 'toc-toggle'; t.type = 'button';
+    t.innerHTML = '<span>Contents</span><span>&#9662;</span>';
+    t.addEventListener('click', function () { toc.classList.toggle('open'); });
+    toc.parentNode.insertBefore(t, toc);
+    toc.addEventListener('click', function (e) { if (e.target.closest('a')) { toc.classList.remove('open'); } });
+    var links = Array.prototype.slice.call(toc.querySelectorAll('a'));
+    var targets = links.map(function (a) { return document.getElementById(decodeURIComponent(a.getAttribute('href').slice(1))); });
+    var spy = function () {
+      var y = window.scrollY + 100, cur = -1;
+      targets.forEach(function (el, i) { if (el && el.getBoundingClientRect().top + window.scrollY <= y) { cur = i; } });
+      links.forEach(function (a, i) { a.classList.toggle('active', i === cur); });
+    };
+    window.addEventListener('scroll', spy, {passive: true});
+    window.addEventListener('load', spy); window.addEventListener('hashchange', spy);
+    spy(); setTimeout(spy, 250);   // after a jump to #section on opening
+  }
+  // Reading progress and back-to-top.
+  var bar = document.getElementById('progress'), up = document.getElementById('totop');
+  var onScroll = function () {
+    var h = document.documentElement, max = h.scrollHeight - h.clientHeight;
+    bar.style.width = (max > 0 ? 100 * h.scrollTop / max : 0) + '%';
+    up.classList.toggle('show', h.scrollTop > 600);
+  };
+  window.addEventListener('scroll', onScroll, {passive: true}); onScroll();
+  up.addEventListener('click', function () { window.scrollTo({top: 0, behavior: 'smooth'}); });
+  // Light / dark switch (remembered in this browser when storage is allowed).
+  document.getElementById('theme').addEventListener('click', function () {
+    var root = document.documentElement, cur = root.getAttribute('data-theme');
+    if (!cur) { cur = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+    var next = cur === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('gsk-theme', next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

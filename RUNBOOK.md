@@ -1,14 +1,30 @@
 # Runbook
 
-How to set up the project and run your first experiment, step by step. No prior
-knowledge of the code is needed. For every option of every algorithm, see the
+How to set up the project, run experiments and analyze the results, step by
+step. No prior knowledge of the code is needed. For every option of every
+algorithm, see the
 [Command Reference](gsk_family/docs/getting-started/command_reference.md).
 
 **What the project does:** it runs seven optimization algorithms (GSK, AGSK,
 APGSK, FDB-AGSK, ATMALS-GSK, eGSK, DT-GSK) on the standard CEC benchmark suites
-(CEC2011, CEC2013, CEC2013-LSGO, CEC2017, CEC2020) and saves tables of results.
-The algorithms are written in MATLAB. The benchmark functions are written in C++
+(CEC2011, CEC2013, CEC2013-LSGO, CEC2017, CEC2020), saves the results of every
+run, and turns them into convergence figures and statistical tables. The
+algorithms are written in MATLAB. The benchmark functions are written in C++
 and are called from MATLAB through a small compiled bridge (a "MEX file").
+
+<div class="flow">
+
+1. **Install** MATLAB, a C++ compiler and CMake (section 1).
+2. **Build** The C++ tools and the MEX bridge, once (section 3).
+3. **Run** Open a launcher, choose the algorithms, press Run (sections 4 and 5).
+4. **Analyze** Convergence figures and statistics with one click (section 6).
+
+</div>
+
+> [!TIP]
+> Building your **own GSK variant** and comparing it with the family? Follow
+> the [New Variant Guide](NEW_VARIANT_GUIDE.md) after the setup in sections 1
+> to 3.
 
 ---
 
@@ -27,7 +43,7 @@ MATLAB toolboxes:
 |---|---|---|
 | Parallel Computing Toolbox | running many runs at the same time (section 5) | runs go one at a time; results are the same |
 | Optimization Toolbox | eGSK (it calls `fmincon`) | eGSK stops with `egsk:fminconUnavailable`; the other six algorithms work |
-| Statistics and Machine Learning Toolbox | only `gsk_family/scripts/compare_reference_runs.m` | that one script stops; everything else works |
+| Statistics and Machine Learning Toolbox | only `gsk_family/scripts/compare_reference_runs.m` | that one script stops; everything else works, including the figures and statistics of section 6 |
 
 Optional, only for the HTML documentation: Pandoc 3.8 or newer and Doxygen.
 
@@ -54,11 +70,13 @@ reference results.
 GSK_Family_MATLAB\              <- repository root
   README.md                     <- short overview
   RUNBOOK.md, RUNBOOK.html      <- this runbook (Markdown and web page)
+  NEW_VARIANT_GUIDE.md, .html   <- how to build and compare your own GSK variant
   run_all_cec2011.m             <- launchers: open one in MATLAB and press Run
   run_all_cec2013.m
   run_all_cec2013lsgo.m
   run_all_cec2017.m
   run_all_cec2020.m
+  run_compare_algorithms.m      <- figures and statistics of finished runs (section 6)
   gsk_family\                   <- the project
     src\                        <- MATLAB code (algorithms, runner, tests)
     benchmarks\                 <- C++ benchmark suites, their data, reference results
@@ -104,8 +122,13 @@ or g++, pass them: `-MatlabRoot "C:\Program Files\MATLAB\R2025b"` and
 matlab -batch "cd('src/tests'); run_matlab_smoke_tests"
 ```
 
-Every test should print `PASS`. You only repeat steps 1-3 after changing C++
-code (steps 1 and 2) or to re-check the setup.
+Every test should print `PASS`, and the last line reads
+`All 13 test(s) passed.`
+
+> [!NOTE]
+> You only repeat steps 1 to 3 after changing C++ code (steps 1 and 2) or to
+> re-check the setup. Changing MATLAB code, including your own algorithm,
+> needs no rebuild.
 
 ## 4. Your first run
 
@@ -183,15 +206,32 @@ If PowerShell says `matlab` is not recognized, use its full path, for example
 The command ends with exit code 0 when the run succeeds and a non-zero code on
 an error, so it also works in scripts. To stop a run, press **Ctrl+C**.
 
-### 4.3 Next steps
+### 4.3 Run everything: the full protocols
 
-When the small test works, raise the settings. The standard CEC2017 protocol
-is `functions = 1:30`, `dimensions = [10 30 50 100]`, `runs = 51`. A full
-campaign for one algorithm can take many hours, so read section 5 first. The
-other launchers (`run_all_cec2011.m`, `run_all_cec2013.m`,
-`run_all_cec2013lsgo.m`, `run_all_cec2020.m`) work the same way for their
-suites. There is also a C++ command-line tool, `gsk_run`, that runs an
-experiment from a config file; see the
+When the small test works, raise the settings. Each suite has its own
+launcher, and they all work the same way. List several algorithms to run them
+one after the other, for example
+`optimizers = {'gsk', 'agsk', 'apgsk', 'fdb-agsk', 'atmals-gsk', 'egsk', 'dt-gsk'}`.
+The standard settings are:
+
+| Launcher | `functions` | `dimensions` | Budget per run (`max_nfes = 0`) | Runs per algorithm (`runs = 51`) |
+|---|---|---|---|---|
+| `run_all_cec2017.m` | `1:30` (F2 is dropped automatically) | `[10 30 50 100]` | 10,000 × D | 5,916 |
+| `run_all_cec2011.m` | `1:22` | `0` (each problem's own dimension) | 150,000 | 1,122 |
+| `run_all_cec2013.m` | `1:28` | `[10 30 50]` | 10,000 × D | 4,284 |
+| `run_all_cec2020.m` | `1:10` | `[5 10 15 20]` | 50,000 to 10,000,000 | 1,836 (F1 and F8 have no data at D5 and D15) |
+| `run_all_cec2013lsgo.m` | `1:15` | `0` (1000; 905 for F13, F14) | 3,000,000 | 765 |
+
+> [!WARNING]
+> A full campaign for one algorithm can take many hours (CEC2017 D = 100
+> and CEC2013-LSGO are the slowest), so read section 5 first. The launchers
+> start with `overwrite = true`, which moves the earlier results of every
+> listed algorithm to an archive folder. To continue an interrupted campaign,
+> or to add dimensions or algorithms without losing finished runs, set
+> `overwrite = false`.
+
+There is also a C++ command-line tool, `gsk_run`, that runs an experiment from
+a config file; see the
 [Command Reference](gsk_family/docs/getting-started/command_reference.md).
 
 **Where the results go:** `gsk_family\results\_run_all\<algorithm>\<suite>\`
@@ -272,29 +312,52 @@ jobs:
    same settings and `overwrite = false` (Run button or terminal command).
    The run continues where it stopped.
 
-## 6. Compare algorithms: convergence figures and tables
+## 6. Convergence figures and statistical analysis
 
-To compare algorithms, for example GSK and your own variant, run them all
-with the same settings (list them in the launcher, e.g.
-`optimizers = {'gsk', 'my-gsk'}`). Then type in MATLAB, in the `gsk_family`
-folder:
+When the runs are finished, one more file turns them into figures and tables
+for a report or a paper. First run every algorithm you want to compare with
+the **same** functions, dimensions and runs (section 4.3).
+
+**Step 1.** Open `run_compare_algorithms.m` (in the repository root, next to
+the launchers) and set its CONFIG block, for example:
 
 ```matlab
-addpath('scripts');
-plot_convergence('suite','cec2017', 'optimizers',{'my-gsk','gsk'});
-compare_algorithms('suite','cec2017', 'optimizers',{'my-gsk','gsk'}, 'proposed','my-gsk');
+suites     = {'cec2017', 'cec2011'};   % which suites to analyze
+optimizers = {'agsk', 'gsk'};          % {} = every algorithm with results
+labels     = {};                       % {} = GSK, AGSK, ...; or your own names
+proposed   = 'agsk';                   % tested against every other algorithm
 ```
 
-- `plot_convergence` draws one figure per function and dimension with every
-  algorithm's convergence curve, plus one overview per dimension, as PNG and
-  PDF in `results\analysis\convergence\<suite>\`.
-- `compare_algorithms` writes Mean (SD) tables (CSV and LaTeX), the Wilcoxon
-  rank-sum test per function (+/=/-), the Wilcoxon signed-rank test (R+, R-,
-  p) and the Friedman ranks, in `results\analysis\compare\<suite>\`.
+**Step 2.** Press **Run** (or type `run_compare_algorithms` in the
+**Command Window**). It only reads finished results, so you can run it again at
+any time, also during a campaign.
 
-Both work for every suite and every algorithm. How to add your own variant,
-all options, and how to read the results:
-[Comparing Algorithms](gsk_family/docs/research/comparing_algorithms.md).
+**Step 3.** Open the results in `gsk_family\results\analysis\`:
+
+| Output | File | What it shows |
+|---|---|---|
+| Convergence figures | `convergence\<suite>\<suite>_F<f>_D<d>.png` and `.pdf` | every algorithm's curve in one figure, for each function and dimension |
+| Overview figures | `convergence\<suite>\<suite>_D<d>_overview.png` | all functions of one dimension at a glance |
+| Result tables | `compare\<suite>\table_<suite>_D<d>.tex` and `.csv` | Mean (SD) of every algorithm per function, best in bold, +/=/− signs |
+| Wilcoxon rank-sum | `compare\<suite>\ranksum_<suite>.csv` | per function: is the difference between two algorithms significant? |
+| Wilcoxon signed-rank | `compare\<suite>\wilcoxon_<suite>.csv` | over the whole suite: R+, R−, p-value |
+| Friedman ranks | `compare\<suite>\friedman_<suite>.csv` | the mean rank of every algorithm (1 = best) |
+
+**How to read it.** In the tables, **+** means the proposed algorithm is
+significantly better than that competitor on that function, **−** that it is
+significantly worse, and **=** that the difference is not significant
+(two-sided test at the 5% level). In the Friedman table, a lower mean rank is
+better.
+
+> [!NOTE]
+> The curves show the error f(x) − f(x\*) on a log scale for CEC2013, CEC2017
+> and CEC2020. CEC2011 and CEC2013-LSGO have no known optimum, so their
+> curves show the objective value. By default each algorithm's median run is
+> drawn; set `curve = 'mean'` for the mean of all runs. No toolbox is needed.
+
+Every option, and how to call the two tools directly from your own scripts:
+[Comparing Algorithms](gsk_family/docs/research/comparing_algorithms.md). To
+add your own algorithm to the comparison: [New Variant Guide](NEW_VARIANT_GUIDE.md).
 
 ## 7. Common problems
 
@@ -318,10 +381,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_docs.ps1 -Clea
 
 Then open `gsk_family\docs\html\index.html` in a web browser. This runbook is
 the page `runbook.html` there. The same command also refreshes `RUNBOOK.html`
-next to this file, a single-page copy of this runbook for reading in a browser.
+and `NEW_VARIANT_GUIDE.html` next to this file: single-page copies of the two
+guides for reading in a browser.
 
 ## 9. Where to go next
 
+- [New Variant Guide](NEW_VARIANT_GUIDE.md): build your own GSK variant and compare it
+  with the family.
 - [Tutorial](gsk_family/docs/getting-started/tutorial.md): a guided first experiment.
 - [User Guide](gsk_family/docs/getting-started/user_guide.md): all the ways to run.
 - [Command Reference](gsk_family/docs/getting-started/command_reference.md): copy-paste

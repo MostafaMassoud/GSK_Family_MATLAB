@@ -154,7 +154,7 @@ T = r.table;  % dim, func, best/median/mean_gen/_ref, best_ok, median_ok, mean_o
 cmake --build build -j; ctest --test-dir build            # 13/13
 powershell -File scripts\build_mex_bridge.ps1             # after C++ suite or MEX changes
 matlab -batch "cd('src/tests'); run_matlab_smoke_tests"   # "All 13 test(s) passed."
-powershell -File scripts\build_docs.ps1 -Clean            # 48 pages + ..\RUNBOOK.html
+powershell -File scripts\build_docs.ps1 -Clean            # 49 pages + the two root guides
 ```
 
 Link check after a docs build. It must print nothing:

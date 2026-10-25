@@ -20,21 +20,35 @@
 | 3 | `plot_convergence` | one figure per function with every algorithm's curve |
 | 4 | `compare_algorithms` | Mean/SD tables (CSV and LaTeX), Wilcoxon and Friedman tests |
 
+Steps 3 and 4 together are one click: open `run_compare_algorithms.m` in the
+repository root, set its CONFIG block (suites, algorithms, proposed
+algorithm) and press Run. The sections below show the two commands it calls,
+for use in your own scripts. The [New Variant Guide](../../../NEW_VARIANT_GUIDE.md)
+walks through the whole path for a new variant.
+
 All commands below are typed in MATLAB, with the current folder set to
 `gsk_family` (the folder that holds `src`, `scripts` and `results`).
 
 ## Step 1: Add your variant
 
 Your variant is one MATLAB function in its own folder. The easiest start is
-a copy of the algorithm it modifies. For a variant of GSK called `my-gsk`:
+a copy of the algorithm it modifies. One command makes it; for a variant of
+GSK called `my-gsk`:
 
-1. Copy the folder `src/optimizers/gsk` to `src/optimizers/my-gsk`.
-2. In the copy, rename `gsk_optimize.m` to `my_gsk_optimize.m`.
-3. Change its first line to
-   `function result = my_gsk_optimize(problem, options)`.
-4. Near the end, change `result.optimizer = 'gsk';` to
-   `result.optimizer = 'my-gsk';`.
-5. Make your changes to the algorithm.
+```matlab
+addpath('scripts');
+new_gsk_variant('my-gsk', 'base','gsk');   % base: any of the seven
+```
+
+It creates `src/optimizers/my-gsk/my_gsk_optimize.m`, a copy of
+`gsk_optimize.m` with only the names changed (function name, help text, error
+ids and `result.optimizer = 'my-gsk'`). Then make your changes to the
+algorithm. Helper files of the base stay in the base's folder and are shared;
+to change one, copy it into your folder under a new name.
+
+By hand: create `src/optimizers/my-gsk`, copy only `gsk_optimize.m` into it
+as `my_gsk_optimize.m`, and rename the function on its first line and the
+`result.optimizer` value.
 
 Name rules: use lower-case letters, digits and hyphens for the name
 (`my-gsk`). The file and function names use the same name with underscores
@@ -74,7 +88,7 @@ Run every algorithm with the same settings. The standard protocols are:
 | CEC2017 | `1:30` (F2 is dropped automatically) | `[10 30 50 100]` | 10000 × D | 29 × 4 × 51 = 5,916 |
 | CEC2011 | `1:22` | `0` (each problem's own dimension) | 150,000 | 22 × 51 = 1,122 |
 | CEC2013 | `1:28` | `[10 30 50]` | 10000 × D | 28 × 3 × 51 = 4,284 |
-| CEC2020 | `1:10` | `[5 10 15 20]` | 50,000 to 10,000,000 | 10 × 4 × 51 = 2,040 |
+| CEC2020 | `1:10` | `[5 10 15 20]` | 50,000 to 10,000,000 | 1,836 (F1 and F8 have no data at D5 and D15) |
 | CEC2013-LSGO | `1:15` | `0` (1000; 905 for F13, F14) | 3,000,000 | 15 × 51 = 765 |
 
 **Option A: a launcher.** Open `run_all_cec2017.m` (next to the `gsk_family`

@@ -6,6 +6,20 @@ Keep a Changelog; this project uses semantic versioning.
 ## [Unreleased]
 
 ### Added
+- `scripts/new_gsk_variant.m`: one command creates a new optimizer as a
+  renamed copy of any of the seven; an untouched copy reproduces its base
+  bit for bit (checked for all seven, and ATMALS-GSK also on CEC2011).
+- `run_compare_algorithms.m` (repository root): press-Run file with a CONFIG
+  block that draws the convergence figures and writes the tables and tests
+  for the listed suites.
+- `NEW_VARIANT_GUIDE.md` / `.html` (repository root): build, check, run and
+  analyze your own GSK variant. RUNBOOK section 4.3 lists the full protocol of
+  every suite and section 6 covers the figures and statistics.
+- `build_docs.ps1` builds both root guides with a new self-contained page
+  design (contents sidebar with the current section, step cards, note boxes,
+  copy buttons, light/dark switch).
+- `run_experiment` passes the CEC2011/CEC2017 `protocol` to user-added
+  optimizers too, so a copy of ATMALS-GSK keeps its CEC2011 driver.
 - `scripts/plot_convergence.m`: convergence curves of several optimizers in
   one figure per (function, dimension) plus a tiled overview per dimension,
   for every suite and any optimizer (median-run traces or the mean over all

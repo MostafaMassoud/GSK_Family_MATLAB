@@ -1426,7 +1426,9 @@ end
 if ~isempty(min_pop_size) && (uses_min_pop_size(optimizer) || user_added)
     opts.min_pop_size = min_pop_size;
 end
-if strcmp(optimizer, 'atmals-gsk')
+% A user-added optimizer also gets the protocol, so a copy of ATMALS-GSK
+% keeps its CEC2011 driver; an optimizer that does not read it ignores it.
+if strcmp(optimizer, 'atmals-gsk') || user_added
     if strcmp(suite, 'cec2011')
         opts.protocol = 'cec2011';
     elseif strcmp(suite, 'cec2017')
@@ -1473,7 +1475,7 @@ end
 function meta = optimizer_options_metadata(optimizer, suite)
 %OPTIMIZER_OPTIONS_METADATA Options the runner adds beyond seed/generator.
 meta = struct();
-if strcmp(optimizer, 'atmals-gsk')
+if strcmp(optimizer, 'atmals-gsk') || ~is_family_optimizer(optimizer)
     if strcmp(suite, 'cec2011')
         meta.protocol = 'cec2011';
     elseif strcmp(suite, 'cec2017')

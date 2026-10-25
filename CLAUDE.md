@@ -53,8 +53,9 @@ print a comparison table; run `gsk_validate --verify` for the verdict.
   `cec20_func.cpp`, and the external DT-GSK reference implementation v2.46
   (github.com/MostafaMassoud/DT-GSK; local copy noted in the owner's memory).
 - **No new folder structures**; work in the existing layout. Never hand-edit
-  `docs/html/` or `RUNBOOK.html`; regenerate them with `build_docs.ps1`.
-  Commit `RUNBOOK.md` and `RUNBOOK.html` together.
+  `docs/html/`, `RUNBOOK.html` or `NEW_VARIANT_GUIDE.html`; regenerate them
+  with `build_docs.ps1` (the root pages' design is the `$rootTemplate` in
+  that script). Commit each root `.md` with its `.html`.
 - **Git:** commit only when asked. On `main`, create a branch
   (`docs/<topic>`, `fix/<topic>` or `feat/<topic>`), commit there, and
   fast-forward `main` only when the owner says so. Never push (the owner
@@ -70,7 +71,7 @@ cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release   # once
 cmake --build build -j; ctest --test-dir build                        # expect 13/13 C++ tests
 powershell -File scripts\build_mex_bridge.ps1                         # MEX bridge (close MATLAB first)
 matlab -batch "cd('src/tests'); run_matlab_smoke_tests"               # expect "All 13 test(s) passed."
-powershell -File scripts\build_docs.ps1 -Clean                        # 48 pages + ..\RUNBOOK.html
+powershell -File scripts\build_docs.ps1 -Clean                        # 49 pages + the two root guides
 ```
 
 From Git Bash, give MATLAB Windows paths (`D:/...`), never `/d/...`. Run
@@ -79,12 +80,20 @@ session scratchpad, never in the repository.
 
 ## Current state (2026-10-25)
 
-- `main` = `9e34136`. Since `ca66fa0` it added `np_init` and `min_pop_size`
-  for all seven optimizers, in the launchers, `run_experiment`, the YAML
-  configs, `gsk_run` and `run_all.ps1`. The local branches
-  `docs/share-ready-runbook` and `docs/claude-handoff` are merged and can be
-  deleted with the owner's OK.
-- **Uncommitted (2026-10-25), for researchers comparing their own variant
+- `main` = `7d42135` (not yet pushed when written). Since `ca66fa0` it added
+  `np_init` and `min_pop_size` for all seven optimizers (launchers,
+  `run_experiment`, YAML configs, `gsk_run`, `run_all.ps1`) and the
+  compare-algorithms tools below. The local branches
+  `docs/share-ready-runbook`, `docs/claude-handoff` and
+  `feat/compare-algorithms` are merged and can be deleted with the owner's OK.
+- **Uncommitted (2026-10-25):** `scripts/new_gsk_variant.m` (one command
+  creates a renamed copy of any of the seven; all seven copies verified bit
+  identical to their base), `run_compare_algorithms.m` (root, press-Run
+  figures and tables), root `NEW_VARIANT_GUIDE.md`/`.html`, a clearer
+  RUNBOOK (flow, full protocols in 4.3, section 6 rewritten), the new root
+  page design in `build_docs.ps1`, and `run_experiment` passing `protocol`
+  to user-added optimizers.
+- **In `7d42135`, for researchers comparing their own variant
   with the family:** `scripts/plot_convergence.m` (several optimizers' curves
   in one figure per function), `scripts/compare_algorithms.m` (Mean/SD tables
   in CSV and LaTeX, Wilcoxon rank-sum +/=/-, signed-rank R+/R-/p, Friedman),
@@ -93,7 +102,7 @@ session scratchpad, never in the repository.
   hyphenated slug maps to its stem; `np_init`/`min_pop_size` reach it). Tested
   on all five suites and all seven optimizers plus a copy of GSK (which
   reproduces GSK exactly); the p-values equal the Statistics Toolbox's.
-- All 13 MATLAB and 13 C++ tests pass. The docs build gives 48 pages with no
+- All 13 MATLAB and 13 C++ tests pass. The docs build gives 49 pages with no
   broken links. After the comment rewrite and helper renames, DT-GSK was
   re-checked with the owner's local oracle: bit-identical on 23 of 25 fixed
   cases. Cases 18 and 22 (the full-budget D50 and D100 cells) were not rerun.

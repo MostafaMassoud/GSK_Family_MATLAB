@@ -63,6 +63,14 @@ print a comparison table; run `gsk_validate --verify` for the verdict.
   file).
 - Comment-only edits must leave code identical outside comments: check it
   (skill) and run the tests.
+- **Authorship and licensing.** Copyright notices cover only the framework's own
+  work. Never claim the algorithms or benchmark suites, never remove a
+  third-party attribution, and never name or change a licence without the
+  owner's explicit review (licensing lives in `LICENSES.md`).
+- **Before merging** a change to an optimizer, run the MATLAB tests, the
+  owner's 25-case DT-GSK oracle, the trace-on/trace-off identity check and
+  the evaluation-budget check (skill, "Change optimizer code without changing
+  results"). Report any failure; never bypass it.
 
 ## Commands (PowerShell, from `gsk_family/` unless noted)
 
@@ -80,78 +88,82 @@ session scratchpad, never in the repository.
 
 ## Current state (2026-10-26)
 
-- `main` = `84b3742` (group C + authorship, fast-forwarded before the owner's
-  merge gates were set; not pushed). `feat/q1-group-c` adds `the gate commit`
-  (DT-GSK DOI 10.3390/a19090769; licence-neutral copyright notices that claim
-  no ownership of the algorithms; licensing unchanged). Gates 2026-10-26: 16
-  MATLAB tests pass, 42/42 cases identical trace off and on, owner's DT-GSK
-  oracle 25/25 IDENTICAL (cases 18 and 22 included), docs 49 pages no broken
-  links. Budget: 38/40 within `max_nfes`; the 2 eGSK overshoots (4032/4000,
-  6001/6000) are the documented fmincon quirk and predate group C.
-  Since `ca66fa0` it added `np_init`/`min_pop_size` for all seven optimizers,
-  the compare-algorithms tools, the variant guide, `my-gsk` and aliases
-  (below). Merged local branches that can be deleted with the owner's OK:
+- `main` = `0867d00`, the owner's latest fast-forward. Origin has everything up
+  to `84b3742`; `0867d00` was not pushed when this was written (the owner
+  pushes). Merged local branches that can be deleted with the owner's OK:
   `docs/share-ready-runbook`, `docs/claude-handoff`, `feat/compare-algorithms`,
-  `feat/variant-guide`, `feat/my-gsk`, `feat/algorithm-aliases`.
-- **Q1 analyses, group C (2026-10-26, uncommitted when written; owner
-  approved the optimizer edits):** opt-in `options.log_trace` in all seven
-  optimizers and `my-gsk` (record-only lines; helpers
-  `src/common/gsk_trace_*.m`), runner `'log_trace'`/`'trace_rows'` writing
-  `trace/Dynamics_*.csv`, launchers' commented `log_trace` line, and
-  `scripts/plot_dynamics.m`. Proof: 42 fixed cases bit-identical before and
-  after (trace off and on); `test_dynamics_trace.m` (16 MATLAB tests). Any
-  later edit of an optimizer must keep the trace lines record-only. The
-  owner's DT-GSK oracle (25 cases) was not rerun after this edit; the
-  42-case baseline and the DT-GSK smoke golden values were.
-- **Q1 analyses, group B (committed `3c2ce91`):** runtime
-  table/chart, `plot_performance.m` (success rate, ERT, ECDF),
-  `make_study_aliases.m` + `plot_sensitivity.m` + `plot_ablation.m`, and the
-  runner's opt-in `trace_points` (`gen_logs/BestTrace_*.csv`; launchers read
-  it only when added to CONFIG, a commented line is there). Group C
-  (diversity, exploration/exploitation, parameter trajectories) is not built:
-  it needs opt-in logging inside the seven optimizers and the owner's OK.
-- **Q1 statistics, group A (committed `3e5831a`):**
-  `compare_algorithms` adds post-hoc tests (Bonferroni-Dunn, Holm, Hochberg,
-  Finner), Iman-Davenport, the Nemenyi CD, Holm-adjusted rank-sum p-values
-  and effect sizes (A12, Cliff's delta); `plot_statistics.m` (CD diagram, box
-  plots with every run shown, rank charts; violins opt-in with >= 20 runs);
-  IQR bands in `plot_convergence`; `cec_complexity.m` (CEC2017 complexity
-  table). The owner approved the box-plot style (light fill, coloured edge,
-  median line, every run as a dot, no top/right border). Groups B (except the
-  complexity table) and C of the Q1 list are not built: B = runtime,
-  parameter sensitivity, ablation, ERT/ECDF; C = diversity and parameter
-  trajectories (needs opt-in logging in the optimizers, owner approval).
-- **Algorithm aliases (2026-10-26):** `algorithms.ini` (root; all examples
-  commented) names an optimizer plus its own settings; launchers,
-  `run_experiment` and `run_compare_algorithms` take the alias like an
-  optimizer. Runner: `resolve_alias` and `alias_setting_names` in
-  `run_experiment.m`, parser `src/runners/read_algorithm_aliases.m`. The base
-  decides code, seeds and options; the alias names files and results.
-  `compare_algorithms` writes `settings_<suite>.csv/.tex`. Plain runs of the
-  seven verified bit-identical to before (140 CEC2017 runs). New test
-  `test_algorithm_aliases.m`. `gsk_run`/YAML do not read aliases (owner's
-  choice, may come later).
-- `gsk_family/src/optimizers/my-gsk/` (commit `faf0567`) is an unedited copy
-  of GSK made for a researcher to edit; it reproduces GSK exactly.
-- **`3269d00`:** `scripts/new_gsk_variant.m` (renamed copy of any of the
-  seven; all seven copies bit-identical to their base),
-  `run_compare_algorithms.m` (root, press-Run figures and tables), root
-  `NEW_VARIANT_GUIDE.md`/`.html`, a clearer RUNBOOK, the root page design
-  (`$rootTemplate` in `build_docs.ps1`), and `protocol` passed to user-added
-  optimizers.
-- **In `7d42135`, for researchers comparing their own variant
-  with the family:** `scripts/plot_convergence.m` (several optimizers' curves
-  in one figure per function), `scripts/compare_algorithms.m` (Mean/SD tables
-  in CSV and LaTeX, Wilcoxon rank-sum +/=/-, signed-rank R+/R-/p, Friedman),
-  the docs page `docs/research/comparing_algorithms.md`, RUNBOOK section 6,
-  and a runner change: a user-added optimizer needs no registration (a
-  hyphenated slug maps to its stem; `np_init`/`min_pop_size` reach it). Tested
-  on all five suites and all seven optimizers plus a copy of GSK (which
-  reproduces GSK exactly); the p-values equal the Statistics Toolbox's.
-- All 16 MATLAB and 13 C++ tests pass. The docs build gives 49 pages with no
-  broken links. After the comment rewrite and helper renames, DT-GSK was
-  re-checked with the owner's local oracle: bit-identical on 23 of 25 fixed
-  cases. Cases 18 and 22 (the full-budget D50 and D100 cells) were not rerun.
+  `feat/variant-guide`, `feat/my-gsk`, `feat/algorithm-aliases`,
+  `feat/q1-statistics`, `feat/q1-group-b`, `feat/q1-group-c`.
+- **Checks, 2026-10-26 on `0867d00`:**
+  - all 16 MATLAB tests pass;
+  - the owner's DT-GSK oracle gives 25/25 IDENTICAL (cases 18 and 22
+    included);
+  - 42 fixed cases (all optimizers and `my-gsk`) are bit-identical to before
+    group C, with the trace off and on;
+  - the docs build gives 49 pages and the two root guides, with no broken
+    links.
+  - The C++ tests (13) were not rerun this session; no C++ changed.
+- **Evaluation budget:** every optimizer stays within `max_nfes` except eGSK.
+  Its `fmincon` refinement can overshoot slightly (4032/4000 and 6001/6000 in
+  the gate). This is the reference's documented behaviour
+  (`docs/algorithms/egsk.md`), not a bug; do not "fix" it.
+- **Authorship (`84b3742`, `0867d00`):**
+  - Mostafa Elsayed Ahmed Masoud, ORCID 0009-0003-8415-2158, Cairo University.
+    The name appears in `CITATION.cff`, `codemeta.json`, `LICENSES.md`, both
+    READMEs, RUNBOOK section 10, NEW_VARIANT_GUIDE section 12 and the docs
+    footers.
+  - DT-GSK is cited as *Algorithms* 19(9), 769 (2026), DOI
+    10.3390/a19090769 (verified by the owner).
+  - The framework's `.m` files end their help text with a 3-line copyright
+    comment: the launchers, `run_compare_algorithms`, `run_experiment`,
+    `read_algorithm_aliases` and `scripts/*.m`.
+  - Notices cover only the framework's own work. Each algorithm and
+    benchmark suite stays with its original authors, file headers name no
+    licence, and the licensing in `LICENSES.md` is unchanged (see Rules).
+- **Q1 analyses, group C (`5e287f8`; the owner approved the optimizer edits):**
+  - opt-in `options.log_trace` in all seven optimizers and `my-gsk`
+    (record-only lines; helpers `src/common/gsk_trace_*.m`);
+  - runner options `'log_trace'` and `'trace_rows'`, which write
+    `trace/Dynamics_*.csv`;
+  - a commented `log_trace` line in the launchers;
+  - `scripts/plot_dynamics.m` (diversity, exploration/exploitation,
+    population size, parameters), and `dynamics` in
+    `run_compare_algorithms.m`;
+  - the test `test_dynamics_trace.m`.
+  - Any later edit of an optimizer must keep the trace lines record-only.
+- **Q1 analyses, group B (`3c2ce91`):**
+  - runtime table and chart;
+  - `plot_performance.m` (success rate, ERT, ECDF);
+  - `make_study_aliases.m`, `plot_sensitivity.m` and `plot_ablation.m`;
+  - the runner's opt-in `trace_points` (`gen_logs/BestTrace_*.csv`).
+- **Q1 statistics, group A (`3e5831a`):**
+  - `compare_algorithms` gains post-hoc tests (Bonferroni-Dunn, Holm,
+    Hochberg, Finner), Iman-Davenport, the Nemenyi CD, Holm-adjusted rank-sum
+    p and effect sizes (A12, Cliff's delta);
+  - `plot_statistics.m`: CD diagram, box plots, rank charts; violins are
+    opt-in with >= 20 runs;
+  - IQR bands in `plot_convergence`;
+  - `cec_complexity.m`.
+  - The owner approved the box-plot style; use it for new charts: light fill,
+    coloured edge, median line, every run as a dot, no top/right border,
+    light theme. They rejected the violin look.
+- **Algorithm aliases (`e7e78ce`):**
+  - `algorithms.ini` (root; examples commented) names an optimizer plus its
+    own settings.
+  - Launchers, `run_experiment` and `run_compare_algorithms` take an alias
+    like an optimizer. The base decides code, seeds and options; the alias
+    names files and results.
+  - `compare_algorithms` writes `settings_<suite>.csv/.tex`.
+  - `gsk_run`/YAML do not read aliases (owner's choice).
+- **Researcher tools:**
+  - `my-gsk` (`faf0567`): an unedited GSK copy that reproduces GSK exactly.
+  - `3269d00`: `scripts/new_gsk_variant.m`, the root
+    `run_compare_algorithms.m`, the root `NEW_VARIANT_GUIDE.md`/`.html` and
+    the root page design.
+  - `7d42135`: `plot_convergence.m`, `compare_algorithms.m`,
+    `docs/research/comparing_algorithms.md`, and user-added optimizers that
+    need no registration.
+  - The p-values equal the Statistics Toolbox's.
 - **DT-GSK CEC2017 validation:** D10, D30 and D50 are complete (4,437 runs:
   51 per function, unified seeds, Threefry, full budget).
   - 85 of 87 functions match the reference runs (rank-sum p >= 0.05; Best,
@@ -160,41 +172,35 @@ session scratchpad, never in the repository.
   - `gsk_validate --verify` reported CONSISTENT.
   - The numbers are recorded in the DT-GSK README. **D100 has not been run.**
 - **The owner cleared `gsk_family/results/` on purpose** (2026-10-16). Keep
-  it empty unless asked. The DT-GSK D10–D50 numbers are recorded in the README,
-  and a private backup of their `per_run.csv` exists (owner's memory:
-  gsk-local-tools). Restoring it to
-  `results/_run_all/dt-gsk/cec2017/summary/per_run.csv` would let the runner
-  reuse all 4,437 runs; re-running them would cost about 51 CPU hours.
-- Latest commit `ca66fa0` (share-ready pass):
-  - comments rewritten in plain language (comment-only);
-  - `RUNBOOK.md` and `RUNBOOK.html` added; `docs/getting-started/runbook.md`
-    renamed to `command_reference.md`;
-  - `run_experiment` writes each dimension's summary table when that
-    dimension finishes, and its in-run comparison table falls back to
-    per-dimension reference tables for native-dimension suites (DT-GSK
-    CEC2013-LSGO);
-  - `compare_reference_runs.m` rounds to 11 significant digits and checks
-    Best, Median and Mean;
-  - DT-GSK helpers renamed `pairwise_sum`, `pairwise_rowsum`,
-    `linear_quantile`;
-  - root `README.md` and `.gitignore` added.
+  it empty unless asked; tests and checks write to the session scratchpad.
+  - A private backup of the D10–D50 `per_run.csv` exists (owner's memory:
+    gsk-local-tools).
+  - Restoring it to `results/_run_all/dt-gsk/cec2017/summary/per_run.csv`
+    would let the runner reuse all 4,437 runs. Re-running them would cost
+    about 51 CPU hours.
 
 ## Next steps
 
 1. **Finish DT-GSK CEC2017 D100** (1,479 runs, about 7 to 13 hours on 8
-   workers), but only when the owner asks. First ask: restore the D10–D50
-   backup so the final pass and the comparison cover all 116 functions, or
-   run and compare D100 alone (29 functions, final pass with
-   `'dimensions',100` only). Use the chunk plan, the exact commands and the
-   completion checks in the skill, "Run or resume a campaign". The reference
-   evidence covers D10 to D100, 5,916 runs. Update the DT-GSK
-   README table, the one-line summaries in `docs/research/validation_report.md`
-   and `docs/algorithms/dt-gsk.md`, a CHANGELOG line, and this file. Rerun
-   oracle cases 18 and 22 when convenient.
+   workers), but only when the owner asks.
+   - First ask: restore the D10–D50 backup, so the final pass and the
+     comparison cover all 116 functions? Or run and compare D100 alone (29
+     functions, final pass with `'dimensions',100` only)?
+   - Use the chunk plan, the exact commands and the completion checks in the
+     skill, "Run or resume a campaign". The reference evidence covers D10 to
+     D100, 5,916 runs.
+   - Afterwards, update the DT-GSK README table, the one-line summaries in
+     `docs/research/validation_report.md` and `docs/algorithms/dt-gsk.md`, a
+     CHANGELOG line, and this file.
 2. **Owner decisions still open** (present the options, do not decide):
-   - **License text:** `LICENSES.md` calls GPL-3.0-or-later "pending
-     confirmation", and the project rule says no root `LICENSE` file. Options:
-     confirm and keep, or add the license text.
+   - **License:** `LICENSES.md` calls GPL-3.0-or-later "pending
+     confirmation" (the CEC2013 suite's GPL (>= 3) is the binding
+     constraint), and the project rule says no root `LICENSE` file. Any
+     licensing change needs the owner's separate, explicit review.
+   - **Email:** the files use `moustafa.masoud@gmail.com`; git commits use
+     `dr.moustafa.masoud@gmail.com`.
+   - **Copyright comments in the optimizer ports:** not added, because the
+     ports are of other authors' algorithms. Add them only if the owner asks.
    - **CI:** `gsk_family/.github/workflows/ci.yml` never runs, because the git
      root is the parent folder. Options: move it to `.github/workflows/` with
      `working-directory: gsk_family`, or keep running the checks locally.

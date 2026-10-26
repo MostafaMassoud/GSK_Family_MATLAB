@@ -324,7 +324,11 @@ docs mirrored with the sibling project's docs (the reusable
 `docs/research/researcher_handbook.md` synchronized with algorithm/seed/protocol
 behavior, and keep all review prompts under `docs/prompts/` (never as root-level
 files). Keep license and provenance in `LICENSES.md`; do not reintroduce a
-separate root `LICENSE` file.
+separate root `LICENSE` file. Copyright notices (author: Mostafa Elsayed Ahmed
+Masoud, ORCID 0009-0003-8415-2158) cover only the framework's own work. Each
+algorithm and benchmark suite stays with its original authors; keep every
+third-party attribution and change no licensing without the owner's explicit
+review. Cite DT-GSK as *Algorithms* 19(9), 769 (2026), DOI 10.3390/a19090769.
 
 ## Before editing
 

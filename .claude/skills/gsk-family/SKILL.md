@@ -149,6 +149,15 @@ the bit-identity check (`test_dynamics_trace.m` compares on and off).
    refactors, renames and comment edits.
 3. Run the MATLAB tests. `test_dt_gsk_smoke` checks the reference sphere
    golden values (seed 12345, 3,000 evaluations).
+   - **Budget check:** on the same cases with `log_trace` on, require
+     `result.nfes <= max_nfes`, `max(result.convergence.nfes) <= max_nfes`
+     and nondecreasing `result.trace.rows(:,1)`. eGSK alone may overshoot
+     slightly (its `fmincon` refinement; documented in
+     `docs/algorithms/egsk.md`); its `nfes` must still equal the run before
+     the edit.
+   - **Before merging,** all of these must pass: the tests, the 25-case oracle
+     (all IDENTICAL), trace off and on identical to the saved baseline, and
+     the budget check. Report a failure; do not merge around it.
 4. A numeric change to a port needs a note in
    `docs/reference/porting_notes.md` and the owner's approval.
 
@@ -164,7 +173,7 @@ powershell -File scripts\build_docs.ps1 -Clean            # 49 pages + the two r
 Link check after a docs build. It must print nothing:
 
 ```powershell
-Get-ChildItem docs\html\*.html, ..\RUNBOOK.html | ForEach-Object {
+Get-ChildItem docs\html\*.html, ..\RUNBOOK.html, ..\NEW_VARIANT_GUIDE.html | ForEach-Object {
   $f = $_; $html = Get-Content $f.FullName -Raw
   foreach ($m in [regex]::Matches($html, 'href="([^"#:]+)(#[^"]*)?"')) {
     if (-not (Test-Path (Join-Path $f.DirectoryName $m.Groups[1].Value))) { "$($f.Name): $($m.Groups[1].Value)" } } }
@@ -186,6 +195,25 @@ The third check skips `.github/`: the CI contract check there names `*.py`
 on purpose. The only other expected hit is this skill file, which holds the
 word list (`rg` skips hidden folders by default; the Grep tool does not). Then follow the git rule in `CLAUDE.md`: branch, commit, and
 fast-forward only on the owner's word.
+
+**Authorship and licence check** (a change that touches notices, citations or
+`LICENSES.md`):
+- Copyright notices cover only the framework's own work. They state that
+  each algorithm and benchmark suite stays with its original authors, and
+  they name no licence. Every third-party author, DOI and licence row stays.
+- Licensing changes (the GPL "pending confirmation" text, a licence name in
+  a header, new redistribution terms) need the owner's separate approval.
+- The framework `.m` files end their help text with this 3-line block (keep it
+  exact; it is comment-only):
+
+  ```text
+  % Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud (ORCID 0009-0003-8415-2158),
+  % Cairo University: this framework code only; each algorithm belongs to its
+  % original authors. Licensing: gsk_family/LICENSES.md. Cite gsk_family/CITATION.cff.
+  ```
+
+- DT-GSK citation: *Algorithms* 19(9), 769 (2026), DOI 10.3390/a19090769.
+  `codemeta.json` must still parse after edits.
 
 ## Run an optimizer with changed settings (aliases)
 

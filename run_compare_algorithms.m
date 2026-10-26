@@ -65,6 +65,10 @@
 %   - Options of the commands it calls: help plot_convergence,
 %     help compare_algorithms, help plot_statistics, help cec_complexity
 %     (in gsk_family/scripts).
+%
+% Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud (ORCID 0009-0003-8415-2158),
+% Cairo University. GPL-3.0-or-later; see gsk_family/LICENSES.md and cite
+% gsk_family/CITATION.cff.
 
 %% ------------------------------ CONFIG ----------------------------------
 

@@ -93,6 +93,10 @@ function run_experiment(varargin)
 %   native/derived -> diagnostic hashed schedules that include optimizer and
 %                suite identity: reproducible, but not same-seed comparisons.
 % DT-GSK always uses the unified seed and threefry and draws its own X0.
+%
+% Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud (ORCID 0009-0003-8415-2158),
+% Cairo University. GPL-3.0-or-later; see gsk_family/LICENSES.md and cite
+% gsk_family/CITATION.cff.
 
 % Default base_seed for direct calls and the root run_all_cec*.m launchers:
 % a stable, date-like project seed. Changing it starts a new reproducible

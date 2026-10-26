@@ -189,6 +189,8 @@ id="toc-8-build-the-html-documentation">8. Build the HTML
 documentation</a></li>
 <li><a href="#9-where-to-go-next" id="toc-9-where-to-go-next">9. Where
 to go next</a></li>
+<li><a href="#10-author-and-how-to-cite"
+id="toc-10-author-and-how-to-cite">10. Author and how to cite</a></li>
 </ul>
 </nav>
 </aside>
@@ -350,7 +352,7 @@ cannot find MATLAB or g++, pass them:
 <p><strong>Step 3 - check MATLAB.</strong></p>
 <pre class="powershell"><code>matlab -batch &quot;cd(&#39;src/tests&#39;); run_matlab_smoke_tests&quot;</code></pre>
 <p>Every test should print <code>PASS</code>, and the last line reads
-<code>All 15 test(s) passed.</code></p>
+<code>All 16 test(s) passed.</code></p>
 <div class="note">
 <div class="title">
 <p>Note</p>
@@ -731,6 +733,15 @@ function</td>
 <td>how often and how fast each algorithm reaches target errors</td>
 </tr>
 <tr>
+<td>Population dynamics</td>
+<td><code>dynamics\&lt;suite&gt;\diversity_*</code>,
+<code>xplxpt_*</code>, <code>population_*</code>,
+<code>parameters_*</code></td>
+<td>diversity, exploration/exploitation, population size and adaptive
+parameters over the run (needs <code>log_trace = true</code> when
+running)</td>
+</tr>
+<tr>
 <td>Wilcoxon signed-rank</td>
 <td><code>compare\&lt;suite&gt;\wilcoxon_&lt;suite&gt;.csv</code></td>
 <td>over the whole suite: R+, R−, p-value</td>
@@ -771,6 +782,12 @@ records its best value only at the 14 CEC checkpoints. Add
 <code>trace_points = 50;</code> to a launcher's CONFIG block before
 running (a commented line is already there) to also log it at 50
 budgets; the runs themselves do not change.</p>
+<p><strong>Population dynamics.</strong> Add
+<code>log_trace = true;</code> to a launcher's CONFIG block (a commented
+line is there) before running, and set <code>dynamics = true</code> in
+<code>run_compare_algorithms.m</code>. You get diversity,
+exploration/exploitation, population-size and parameter figures. The
+runs do not change.</p>
 <p><strong>Sensitivity and ablation studies.</strong>
 <code>make_study_aliases</code> writes the aliases for a parameter grid
 (<code>make_study_aliases('sensitivity','gsk',{'kf',[0.3 0.5 0.7]})</code>)
@@ -883,7 +900,27 @@ href="gsk_family/docs/algorithms/egsk.md">eGSK</a>, <a
 href="gsk_family/docs/algorithms/dt-gsk.md">DT-GSK</a>.</li>
 </ul>
 </section>
-<footer class="page">This page is generated from RUNBOOK.md by gsk_family/scripts/build_docs.ps1. To change it, edit RUNBOOK.md and rebuild.</footer>
+<section id="10-author-and-how-to-cite" class="level1">
+<h1>10. Author and how to cite</h1>
+<p>This framework was designed and built by <strong>Mostafa Elsayed
+Ahmed Masoud</strong>, PhD Candidate in Operations Research, Department
+of Operations Research, Faculty of Graduate Studies for Statistical
+Research, Cairo University, Giza 12613, Egypt (ORCID <a
+href="https://orcid.org/0009-0003-8415-2158">0009-0003-8415-2158</a>, <a
+href="mailto:moustafa.masoud@gmail.com">moustafa.masoud@gmail.com</a>).</p>
+<p>Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud. Keep this notice and
+the author attribution in copies and derivative works.</p>
+<div class="important">
+<div class="title">
+<p>Important</p>
+</div>
+<p>If you use this framework in a paper or thesis, please cite it
+(<code>gsk_family/CITATION.cff</code>) and the paper of every algorithm
+you use (<a
+href="gsk_family/LICENSES.md">gsk_family/LICENSES.md</a>).</p>
+</div>
+</section>
+<footer class="page"><strong>&copy; 2026 Mostafa Elsayed Ahmed Masoud</strong>, PhD Candidate in Operations Research, Department of Operations Research, Faculty of Graduate Studies for Statistical Research, Cairo University, Giza 12613, Egypt &middot; <a href="https://orcid.org/0009-0003-8415-2158">ORCID 0009-0003-8415-2158</a> &middot; <a href="mailto:moustafa.masoud@gmail.com">moustafa.masoud@gmail.com</a><br>If you use this framework, please cite it and the papers of the algorithms you use (gsk_family/CITATION.cff, gsk_family/LICENSES.md).<br>This page is generated from RUNBOOK.md by gsk_family/scripts/build_docs.ps1. To change it, edit RUNBOOK.md and rebuild.</footer>
 </main>
 </div>
 <button id="totop" type="button" aria-label="Back to top">&#8593;</button>

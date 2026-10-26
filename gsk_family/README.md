@@ -37,9 +37,16 @@ pitfalls in one place, read
 
 ## Code Author And Algorithm References
 
-**Code Author:** Mostafa Masoud
+**Code Author:** Mostafa Elsayed Ahmed Masoud, PhD Candidate in Operations
+Research, Department of Operations Research, Faculty of Graduate Studies for
+Statistical Research, Cairo University, Giza 12613, Egypt
 
-**Email:** <moustafa.masoud@gmail.com>
+**ORCID:** <https://orcid.org/0009-0003-8415-2158> · **Email:**
+<moustafa.masoud@gmail.com>
+
+Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud. Keep this notice and the
+author attribution in copies and derivative works (details in
+[LICENSES.md](LICENSES.md)).
 
 This repository is a MATLAB/C++ implementation and reproducibility toolkit. If
 you use an optimizer in a paper, thesis, benchmark study, or derivative
@@ -56,7 +63,7 @@ in [CITATION.cff](CITATION.cff) and [codemeta.json](codemeta.json).
 | ATMALS-GSK | Alfadli, N. M.; Oun, E. M.; Mohamed, A. W. "Auto-Tuning Memory-Based Adaptive Local Search Gaining-Sharing Knowledge-Based Algorithm for Solving Optimization Problems." *Algorithms*, 18(7), 398, 2025. DOI: [10.3390/a18070398](https://doi.org/10.3390/a18070398). |
 | eGSK | Jawad, M. A.; Roshdy, H. S. M.; Mohamed, A. W. "Enhanced Gaining-Sharing Knowledge-based algorithm." *Results in Control and Optimization*, 19, 100542, 2025. DOI: [10.1016/j.rico.2025.100542](https://doi.org/10.1016/j.rico.2025.100542). |
 | FDB-AGSK | Bakir, H.; Duman, S.; Guvenc, U.; Kahraman, H. T. "Improved adaptive gaining-sharing knowledge algorithm with FDB-based guiding mechanism for optimization of optimal reactive power flow problem." *Electrical Engineering*, 105, 3121-3160, 2023. DOI: [10.1007/s00202-023-01803-9](https://doi.org/10.1007/s00202-023-01803-9). |
-| DT-GSK | Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm." *Algorithms* (MDPI), 2026 (accepted, in production; DOI pending). Reference implementation: DT-GSK v2.46 (MIT license), <https://github.com/MostafaMassoud/DT-GSK>. |
+| DT-GSK | Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm." *Algorithms* (MDPI), 19(9), 769, 2026. Reference implementation: DT-GSK v2.46 (MIT license), <https://github.com/MostafaMassoud/DT-GSK>. |
 
 FDB-AGSK also depends conceptually on the Fitness-Distance Balance selection
 idea: Kahraman, H. T.; Aras, S.; Gedikli, E. "Fitness-distance balance (FDB): a

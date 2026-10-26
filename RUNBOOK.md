@@ -124,7 +124,7 @@ matlab -batch "cd('src/tests'); run_matlab_smoke_tests"
 ```
 
 Every test should print `PASS`, and the last line reads
-`All 15 test(s) passed.`
+`All 16 test(s) passed.`
 
 > [!NOTE]
 > You only repeat steps 1 to 3 after changing C++ code (steps 1 and 2) or to
@@ -379,6 +379,7 @@ any time, also during a campaign.
 | Rank charts | `statistics\<suite>\ranks_<suite>_bars.png` | Friedman mean ranks per dimension and overall |
 | Runtime | `compare\<suite>\runtime_<suite>.tex`, `statistics\<suite>\runtime_<suite>.png` | seconds per run of every algorithm |
 | ERT and ECDF | `performance\<suite>\ert_<suite>_D<d>.tex`, `ecdf_<suite>_D<d>.png` | how often and how fast each algorithm reaches target errors |
+| Population dynamics | `dynamics\<suite>\diversity_*`, `xplxpt_*`, `population_*`, `parameters_*` | diversity, exploration/exploitation, population size and adaptive parameters over the run (needs `log_trace = true` when running) |
 | Wilcoxon signed-rank | `compare\<suite>\wilcoxon_<suite>.csv` | over the whole suite: R+, R−, p-value |
 | Friedman ranks | `compare\<suite>\friedman_<suite>.csv` | the mean rank of every algorithm (1 = best) |
 | Settings table | `compare\<suite>\settings_<suite>.tex` and `.csv` | each algorithm's code, population sizes and changed settings ("original" = published value) |
@@ -400,6 +401,11 @@ better.
 only at the 14 CEC checkpoints. Add `trace_points = 50;` to a launcher's
 CONFIG block before running (a commented line is already there) to also log
 it at 50 budgets; the runs themselves do not change.
+
+**Population dynamics.** Add `log_trace = true;` to a launcher's CONFIG block
+(a commented line is there) before running, and set `dynamics = true` in
+`run_compare_algorithms.m`. You get diversity, exploration/exploitation,
+population-size and parameter figures. The runs do not change.
 
 **Sensitivity and ablation studies.** `make_study_aliases` writes the aliases
 for a parameter grid (`make_study_aliases('sensitivity','gsk',{'kf',[0.3 0.5 0.7]})`)
@@ -460,3 +466,19 @@ guides for reading in a browser.
   [APGSK](gsk_family/docs/algorithms/apgsk.md), [FDB-AGSK](gsk_family/docs/algorithms/fdb-agsk.md),
   [ATMALS-GSK](gsk_family/docs/algorithms/atmals-gsk.md), [eGSK](gsk_family/docs/algorithms/egsk.md),
   [DT-GSK](gsk_family/docs/algorithms/dt-gsk.md).
+
+## 10. Author and how to cite
+
+This framework was designed and built by **Mostafa Elsayed Ahmed Masoud**, PhD
+Candidate in Operations Research, Department of Operations Research, Faculty
+of Graduate Studies for Statistical Research, Cairo University, Giza 12613,
+Egypt (ORCID [0009-0003-8415-2158](https://orcid.org/0009-0003-8415-2158),
+<moustafa.masoud@gmail.com>).
+
+Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud. Keep this notice and the
+author attribution in copies and derivative works.
+
+> [!IMPORTANT]
+> If you use this framework in a paper or thesis, please cite it
+> (`gsk_family/CITATION.cff`) and the paper of every
+> algorithm you use ([gsk_family/LICENSES.md](gsk_family/LICENSES.md)).

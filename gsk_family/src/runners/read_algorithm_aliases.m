@@ -21,6 +21,10 @@ function aliases = read_algorithm_aliases(path)
 % range (0.2:0.1:0.8 or 8:30), true or false. Nothing in the file is
 % evaluated as MATLAB code. Errors (read_algorithm_aliases:file) name the
 % file and the line.
+%
+% Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud (ORCID 0009-0003-8415-2158),
+% Cairo University. GPL-3.0-or-later; see gsk_family/LICENSES.md and cite
+% gsk_family/CITATION.cff.
 
 aliases = containers.Map('KeyType', 'char', 'ValueType', 'any');
 if ~isfile(path)

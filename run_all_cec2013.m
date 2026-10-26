@@ -20,6 +20,10 @@
 %     DT-GSK included; min_pop_size sets the final size of the four that
 %     shrink their population. [] keeps each default.
 %   - Edit the CONFIG block as needed.
+%
+% Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud (ORCID 0009-0003-8415-2158),
+% Cairo University. GPL-3.0-or-later; see gsk_family/LICENSES.md and cite
+% gsk_family/CITATION.cff.
 
 %% ------------------------------ CONFIG ----------------------------------
 optimizers  = {'gsk'};

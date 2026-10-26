@@ -40,6 +40,10 @@ function report = compare_reference_runs(generated, reference, varargin)
 % Requires the Statistics and Machine Learning Toolbox (ranksum, signrank).
 % Errors: compare_reference_runs:toolbox (no ranksum), :missing (no
 % per_run.csv found), :schema (a required column is missing).
+%
+% Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud (ORCID 0009-0003-8415-2158),
+% Cairo University. GPL-3.0-or-later; see gsk_family/LICENSES.md and cite
+% gsk_family/CITATION.cff.
 
 p = inputParser;
 p.addParameter('alpha', 0.05, @(x) isnumeric(x) && isscalar(x) && x > 0 && x < 1);

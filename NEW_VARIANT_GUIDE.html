@@ -176,6 +176,8 @@ id="toc-9-put-it-in-the-manuscript">9. Put it in the manuscript</a></li>
 problems</a></li>
 <li><a href="#11-where-to-go-next" id="toc-11-where-to-go-next">11.
 Where to go next</a></li>
+<li><a href="#12-author-and-how-to-cite"
+id="toc-12-author-and-how-to-cite">12. Author and how to cite</a></li>
 </ul>
 </nav>
 </aside>
@@ -430,6 +432,16 @@ it).</li>
 <p><strong>New parameters:</strong> read them with a default, in the
 style of the file, so runs without the option keep working:</p>
 <pre class="matlab"><code>alpha = local_option(options, &#39;alpha&#39;, 0.2);   % my new parameter, default 0.2</code></pre>
+<p><strong>Recording your own values for the dynamics figures.</strong>
+A copy made with <code>new_gsk_variant</code> already records diversity
+and population size when runs use <code>log_trace</code>. To add your
+own values, give both <code>gsk_trace_add</code> calls in your file the
+same names, with your values in the loop and <code>NaN</code> at
+initialization, for example:</p>
+<pre class="matlab"><code>if tr.on; tr = gsk_trace_add(tr, nfes, popold, lb, ub, {&#39;alpha&#39;}, NaN); end     % after initialization
+if tr.on; tr = gsk_trace_add(tr, nfes, popold, lb, ub, {&#39;alpha&#39;}, alpha); end   % in the loop</code></pre>
+<p>These lines only record: they draw no random numbers and change
+nothing.</p>
 <p>A parameter read this way can then be changed without editing the
 file, from an alias in <code>algorithms.ini</code> (step 7), for example
 <code>alpha = 0.5</code>.</p>
@@ -668,6 +680,13 @@ Cliff's delta per function</td>
 curves (smooth with <code>trace_points = 50</code> in the launcher)</td>
 </tr>
 <tr>
+<td>Population dynamics</td>
+<td><code>results\analysis\dynamics\&lt;suite&gt;\</code></td>
+<td>diversity, exploration/exploitation %, population size and parameter
+trajectories (<code>dynamics = true</code>; run with
+<code>log_trace = true</code> in the launcher)</td>
+</tr>
+<tr>
 <td>Complexity table (optional)</td>
 <td><code>results\analysis\complexity\cec2017\</code></td>
 <td>T0, T1, T̂2, (T̂2 − T1)/T0; set <code>complexity = true</code> (it
@@ -757,6 +776,9 @@ otherwise idle computer.</li>
 <code>runtime_&lt;suite&gt;.tex</code> (seconds per run),
 <code>ert_&lt;suite&gt;_D&lt;d&gt;.tex</code> and the ECDF figures (how
 often and how fast each algorithm reaches each target error).</li>
+<li><strong>Search behaviour:</strong> the diversity and
+exploration/exploitation figures, and your variant's parameter
+trajectories, when the paper explains how it searches.</li>
 <li><strong>Robustness:</strong> the sensitivity chart or heatmap and
 the ablation table, when the paper claims a parameter is robust or a
 component helps.</li>
@@ -844,7 +866,29 @@ how seeds and starting populations are shared.</li>
 each family member works.</li>
 </ul>
 </section>
-<footer class="page">This page is generated from NEW_VARIANT_GUIDE.md by gsk_family/scripts/build_docs.ps1. To change it, edit NEW_VARIANT_GUIDE.md and rebuild.</footer>
+<section id="12-author-and-how-to-cite" class="level1">
+<h1>12. Author and how to cite</h1>
+<p>This framework was designed and built by <strong>Mostafa Elsayed
+Ahmed Masoud</strong>, PhD Candidate in Operations Research, Department
+of Operations Research, Faculty of Graduate Studies for Statistical
+Research, Cairo University, Giza 12613, Egypt (ORCID <a
+href="https://orcid.org/0009-0003-8415-2158">0009-0003-8415-2158</a>, <a
+href="mailto:moustafa.masoud@gmail.com">moustafa.masoud@gmail.com</a>).</p>
+<p>Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud. Keep this notice and
+the author attribution in copies and derivative works.</p>
+<div class="important">
+<div class="title">
+<p>Important</p>
+</div>
+<p>A paper that uses this framework should cite it
+(<code>gsk_family/CITATION.cff</code>) and the paper of every algorithm
+it compares (<a
+href="gsk_family/LICENSES.md">gsk_family/LICENSES.md</a>). A paper on
+your own variant should also cite the algorithm it is based on, for
+example the original GSK paper (Mohamed, Hadi and Mohamed, 2020).</p>
+</div>
+</section>
+<footer class="page"><strong>&copy; 2026 Mostafa Elsayed Ahmed Masoud</strong>, PhD Candidate in Operations Research, Department of Operations Research, Faculty of Graduate Studies for Statistical Research, Cairo University, Giza 12613, Egypt &middot; <a href="https://orcid.org/0009-0003-8415-2158">ORCID 0009-0003-8415-2158</a> &middot; <a href="mailto:moustafa.masoud@gmail.com">moustafa.masoud@gmail.com</a><br>If you use this framework, please cite it and the papers of the algorithms you use (gsk_family/CITATION.cff, gsk_family/LICENSES.md).<br>This page is generated from NEW_VARIANT_GUIDE.md by gsk_family/scripts/build_docs.ps1. To change it, edit NEW_VARIANT_GUIDE.md and rebuild.</footer>
 </main>
 </div>
 <button id="totop" type="button" aria-label="Back to top">&#8593;</button>

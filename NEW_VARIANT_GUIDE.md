@@ -149,6 +149,19 @@ runs without the option keep working:
 alpha = local_option(options, 'alpha', 0.2);   % my new parameter, default 0.2
 ```
 
+**Recording your own values for the dynamics figures.** A copy made with
+`new_gsk_variant` already records diversity and population size when runs
+use `log_trace`. To add your own values, give both `gsk_trace_add` calls in
+your file the same names, with your values in the loop and `NaN` at
+initialization, for example:
+
+```matlab
+if tr.on; tr = gsk_trace_add(tr, nfes, popold, lb, ub, {'alpha'}, NaN); end     % after initialization
+if tr.on; tr = gsk_trace_add(tr, nfes, popold, lb, ub, {'alpha'}, alpha); end   % in the loop
+```
+
+These lines only record: they draw no random numbers and change nothing.
+
 A parameter read this way can then be changed without editing the file, from
 an alias in `algorithms.ini` (step 7), for example `alpha = 0.5`.
 
@@ -291,6 +304,7 @@ It reads the finished runs and writes, for each suite:
 | Post-hoc and effect sizes | `posthoc_<suite>.csv`, `ranksum_<suite>.csv` | Holm/Hochberg/Finner-corrected Friedman post-hoc tests; A12 and Cliff's delta per function |
 | CD diagram, box plots, rank and runtime charts | `results\analysis\statistics\<suite>\` | `cd_*`, `box_*` (every run as a dot), `ranks_*`, `runtime_*` |
 | ERT and ECDF data profiles | `results\analysis\performance\<suite>\` | success rate and ERT per function and target, `ecdf_*` curves (smooth with `trace_points = 50` in the launcher) |
+| Population dynamics | `results\analysis\dynamics\<suite>\` | diversity, exploration/exploitation %, population size and parameter trajectories (`dynamics = true`; run with `log_trace = true` in the launcher) |
 | Complexity table (optional) | `results\analysis\complexity\cec2017\` | T0, T1, T̂2, (T̂2 − T1)/T0; set `complexity = true` (it times extra runs) |
 
 **Reading the results** (two-sided tests, alpha = 0.05):
@@ -363,6 +377,9 @@ a few functions or D10 are often enough. Details:
 - **Speed and reliability:** `runtime_<suite>.tex` (seconds per run),
   `ert_<suite>_D<d>.tex` and the ECDF figures (how often and how fast each
   algorithm reaches each target error).
+- **Search behaviour:** the diversity and exploration/exploitation figures,
+  and your variant's parameter trajectories, when the paper explains how it
+  searches.
 - **Robustness:** the sensitivity chart or heatmap and the ablation table,
   when the paper claims a parameter is robust or a component helps.
 - **Environment:** `summary\environment.json` in each result folder records
@@ -391,3 +408,21 @@ a few functions or D10 are often enough. Details:
 - [Extension Guide](gsk_family/docs/development/extension_guide.md): the full optimizer contract and how to add a suite.
 - [Seed Policy](gsk_family/docs/reference/seed_policy.md): how seeds and starting populations are shared.
 - Algorithm guides in `gsk_family/docs/algorithms/`: how each family member works.
+
+## 12. Author and how to cite
+
+This framework was designed and built by **Mostafa Elsayed Ahmed Masoud**, PhD
+Candidate in Operations Research, Department of Operations Research, Faculty
+of Graduate Studies for Statistical Research, Cairo University, Giza 12613,
+Egypt (ORCID [0009-0003-8415-2158](https://orcid.org/0009-0003-8415-2158),
+<moustafa.masoud@gmail.com>).
+
+Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud. Keep this notice and the
+author attribution in copies and derivative works.
+
+> [!IMPORTANT]
+> A paper that uses this framework should cite it
+> (`gsk_family/CITATION.cff`) and the paper of every
+> algorithm it compares ([gsk_family/LICENSES.md](gsk_family/LICENSES.md)).
+> A paper on your own variant should also cite the algorithm it is based on,
+> for example the original GSK paper (Mohamed, Hadi and Mohamed, 2020).

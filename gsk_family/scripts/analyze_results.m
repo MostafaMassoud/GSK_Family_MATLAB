@@ -37,6 +37,10 @@ function analyze_results(varargin)
 %
 % Lower error is better. Analyzes whatever optimizers/suites are present;
 % missing data is reported, never invented.
+%
+% Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud (ORCID 0009-0003-8415-2158),
+% Cairo University. GPL-3.0-or-later; see gsk_family/LICENSES.md and cite
+% gsk_family/CITATION.cff.
 
 p = inputParser;
 p.addParameter('project_root', pwd, @ischar);

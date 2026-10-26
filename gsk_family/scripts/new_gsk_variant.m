@@ -33,6 +33,10 @@ function path = new_gsk_variant(name, varargin)
 % dt_gsk_config.m) are not copied: the copy keeps calling the base's helpers,
 % which stay on the path. To change a helper, copy it into the new folder
 % under a new name and call that name from the copy.
+%
+% Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud (ORCID 0009-0003-8415-2158),
+% Cairo University. GPL-3.0-or-later; see gsk_family/LICENSES.md and cite
+% gsk_family/CITATION.cff.
 
 p = inputParser;
 p.addRequired('name', @(x) ischar(x) || isstring(x));

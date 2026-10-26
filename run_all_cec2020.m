@@ -19,6 +19,10 @@
 %   - np_init (CONFIG) sets the initial population size of every optimizer,
 %     DT-GSK included; min_pop_size sets the final size of the four that
 %     shrink their population. [] keeps each default.
+%
+% Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud (ORCID 0009-0003-8415-2158),
+% Cairo University. GPL-3.0-or-later; see gsk_family/LICENSES.md and cite
+% gsk_family/CITATION.cff.
 
 %% ------------------------------ CONFIG ----------------------------------
 optimizers  = {'gsk'};       % set to {'agsk'} or {'dt-gsk'} to get the reference comparison

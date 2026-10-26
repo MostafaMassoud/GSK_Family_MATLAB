@@ -39,4 +39,22 @@ benchmark code and the reference algorithms) keep their own terms; the full
 record is in [gsk_family/LICENSES.md](gsk_family/LICENSES.md). To cite the
 project, use [gsk_family/CITATION.cff](gsk_family/CITATION.cff).
 
-Code author: Mostafa Masoud.
+## Author
+
+**Mostafa Elsayed Ahmed Masoud**, PhD Candidate in Operations Research,
+Department of Operations Research, Faculty of Graduate Studies for Statistical
+Research, Cairo University, Giza 12613, Egypt.
+ORCID: <https://orcid.org/0009-0003-8415-2158> · Email:
+<moustafa.masoud@gmail.com>
+
+Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud. This framework (its design,
+code, tools and documentation) is the author's work. Keep this notice and the
+author attribution in copies and derivative works.
+
+**How to cite.** If you use this framework in a paper or thesis, please cite
+it (see [gsk_family/CITATION.cff](gsk_family/CITATION.cff)), together with
+the paper of every algorithm you use (listed in
+[gsk_family/LICENSES.md](gsk_family/LICENSES.md)). For DT-GSK: Masoud, M. E.
+A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK: Dimension-Tiered Adaptive
+Configuration Selection and Deterministic Refinement for Gaining-Sharing
+Knowledge-Based Optimization Algorithm." *Algorithms*, 19(9), 769, 2026.

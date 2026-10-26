@@ -42,6 +42,10 @@ function report = plot_statistics(varargin)
 % project_root (pwd); visible (false).
 %
 % Base MATLAB only (boxchart, polarplot, tiledlayout: R2020b or newer).
+%
+% Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud (ORCID 0009-0003-8415-2158),
+% Cairo University. GPL-3.0-or-later; see gsk_family/LICENSES.md and cite
+% gsk_family/CITATION.cff.
 
 p = inputParser;
 p.addParameter('suite', '', @(x) ischar(x) || isstring(x));

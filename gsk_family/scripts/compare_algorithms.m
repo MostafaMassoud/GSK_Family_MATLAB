@@ -85,6 +85,10 @@ function report = compare_algorithms(varargin)
 % adjusted p-values follow Derrac et al. (2011) and Garcia et al. (2010,
 % Inf. Sci. 180:2044-2064); the Nemenyi q_alpha is computed from the
 % studentized range distribution, as tabulated by Demsar (2006, JMLR 7:1-30).
+%
+% Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud (ORCID 0009-0003-8415-2158),
+% Cairo University. GPL-3.0-or-later; see gsk_family/LICENSES.md and cite
+% gsk_family/CITATION.cff.
 
 p = inputParser;
 p.addParameter('suite', '', @(x) ischar(x) || isstring(x));

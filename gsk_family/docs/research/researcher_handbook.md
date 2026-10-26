@@ -597,7 +597,7 @@ Research lineage:
 - DT-GSK: Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK:
   Dimension-Tiered Adaptive Configuration Selection and Deterministic
   Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm."
-  *Algorithms* (MDPI), 2026 (accepted, in production; DOI pending). A
+  *Algorithms* (MDPI), 19(9), 769, 2026. A
   line-by-line MATLAB port was verified against the unmodified reference implementation on
   identical random numbers in all four dimension tiers and reproduces the
   reference's golden values to `1e-13`; the compact three-file version shipped

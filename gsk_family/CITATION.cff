@@ -14,24 +14,30 @@ version: "1.0.0"
 date-released: "2026-06-13"
 license: GPL-3.0-or-later
 authors:
-  - given-names: "Mostafa Elsayed"
+  - given-names: "Mostafa Elsayed Ahmed"
     family-names: "Masoud"
+    orcid: "https://orcid.org/0009-0003-8415-2158"
     email: "moustafa.masoud@gmail.com"
+    affiliation: "Department of Operations Research, Faculty of Graduate Studies for Statistical Research, Cairo University, Giza 12613, Egypt"
   - given-names: "Ali Wagdy"
     family-names: "Mohamed"
     orcid: "https://orcid.org/0000-0002-5895-2632"
     email: "aliwagdy@gmail.com"
 contact:
-  - given-names: "Mostafa Elsayed"
+  - given-names: "Mostafa Elsayed Ahmed"
     family-names: "Masoud"
+    orcid: "https://orcid.org/0009-0003-8415-2158"
     email: "moustafa.masoud@gmail.com"
+    affiliation: "Department of Operations Research, Faculty of Graduate Studies for Statistical Research, Cairo University, Giza 12613, Egypt"
 preferred-citation:
   type: software
   title: "gsk_family: a verified hybrid C++/MATLAB toolkit for the Gaining-Sharing Knowledge optimizer family on CEC benchmark suites"
   authors:
-    - given-names: "Mostafa Elsayed"
+    - given-names: "Mostafa Elsayed Ahmed"
       family-names: "Masoud"
+      orcid: "https://orcid.org/0009-0003-8415-2158"
       email: "moustafa.masoud@gmail.com"
+      affiliation: "Department of Operations Research, Faculty of Graduate Studies for Statistical Research, Cairo University, Giza 12613, Egypt"
   version: "1.0.0"
   date-released: "2026-06-13"
 references:
@@ -151,7 +157,9 @@ references:
       - given-names: "Ali Wagdy"
         family-names: "Mohamed"
     journal: "Algorithms"
-    status: in-press
+    volume: "19"
+    issue: "9"
+    start: "769"
     year: 2026
   - type: software
     title: "DT-GSK: Dimension-Tiered Gaining-Sharing Knowledge Optimization"

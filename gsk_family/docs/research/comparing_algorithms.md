@@ -23,6 +23,7 @@
 | 6 | `plot_performance` | success rates, ERT tables, ECDF data profiles |
 | (7) | `make_study_aliases`, then `plot_sensitivity` / `plot_ablation` | parameter sensitivity and ablation studies (extra runs) |
 | (8) | `cec_complexity` | the CEC algorithm complexity table (runs the algorithms) |
+| (9) | `plot_dynamics` | diversity, exploration/exploitation, population size and parameter trajectories (runs made with `log_trace`) |
 
 Steps 3 to 6 together are one click: open `run_compare_algorithms.m` in the
 repository root, set its CONFIG block (suites, algorithms, proposed
@@ -375,6 +376,51 @@ Friedman mean rank, the +/=/− counts of the full variant against it, and the
 signed-rank p-value per dimension; the chart shows the mean ranks. A part
 helps when switching it off makes the rank worse and the full variant wins
 more functions than it loses.
+
+## Population dynamics: diversity, exploration and exploitation
+
+How does each algorithm search? These figures need one extra setting when
+the algorithms run.
+
+1. Add `log_trace = true;` to a launcher's CONFIG block (a commented line is
+   already there), or pass `'log_trace',true` to `run_experiment`. Every
+   optimizer then records, per generation, its evaluations, its population
+   size, the population diversity and its own adaptive parameters, in
+   `trace/Dynamics_<name>_F<f>_D<d>.csv` (at most 200 generations per run).
+   Tracing draws no random numbers and changes no value, so the runs are
+   exactly the same as without it (checked on all seven algorithms).
+2. Draw the figures:
+
+   ```matlab
+   plot_dynamics('suite','cec2017', 'optimizers',{'my-gsk','gsk','agsk'});
+   ```
+
+   or set `dynamics = true` in `run_compare_algorithms.m`.
+
+| File (in `results/analysis/dynamics/<suite>/`) | Contents |
+|---|---|
+| `diversity_<suite>_F<f>_D<d>` | population diversity against evaluations: median over all runs with a 25–75% band, one line per algorithm |
+| `xplxpt_<suite>_F<f>_D<d>` | exploration and exploitation percentages of each algorithm's median run, as stacked areas |
+| `xplxpt_<suite>.csv` | the mean exploration and exploitation percentages per function and algorithm |
+| `population_<suite>_D<d>` | population size against evaluations (shows the reduction schedules) |
+| `parameters_<suite>_<name>_D<d>` | each adaptive parameter of an algorithm over the run: one light line per function, the median over functions thick |
+
+**Diversity** (Hussain et al. 2019): for each dimension, the mean distance of
+the population from the dimension's median, divided by the dimension's
+range, averaged over the dimensions. **Exploration** of a run:
+XPL% = 100 · Div / max(Div); **exploitation**: XPT% = 100 − XPL%.
+
+The parameters recorded by each algorithm:
+
+| Algorithm | Parameters |
+|---|---|
+| GSK | none (fixed parameters) |
+| AGSK, FDB-AGSK | `kw1`..`kw4`: the probabilities of the four (KF, KR) pool settings |
+| APGSK | `kw1`..`kw4`, `kf_mean` (negative when the negative KF pool is used), `kr_mean`, `d_junior` |
+| ATMALS-GSK | `kf`, `kr`, `k`, `p`, `pls`: the values its adaptive tuning selected |
+| eGSK | `kf1_mean`, `kf2_mean`, `ip_refine` (1 when the `fmincon` refinement ran) |
+| DT-GSK | `kf_mean`, `kr_mean` (ACE draws), `acceptance` (share of accepted children), `restarts`, `polish_done`, `deep_restart` |
+| your variant | whatever it records (see the [New Variant Guide](../../../NEW_VARIANT_GUIDE.md)) |
 
 ## Algorithm complexity (CEC protocol)
 

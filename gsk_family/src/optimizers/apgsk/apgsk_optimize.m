@@ -114,6 +114,11 @@ conv_best = zeros(max_rows, 1);
 n_conv = 1;
 conv_nfes(n_conv) = nfes;
 conv_best(n_conv) = bsf_fit_var;
+% Opt-in dynamics trace (options.log_trace): one row per generation, with
+% KW_ind, the mean KF (negative when the negative pool is used), the mean
+% KR and the number of junior dimensions.
+tr = gsk_trace_start(options, max_rows);
+if tr.on; tr = gsk_trace_add(tr, nfes, popold, lb, ub, {'kw1', 'kw2', 'kw3', 'kw4', 'kf_mean', 'kr_mean', 'd_junior'}, nan(1, 7)); end
 
 g = 0;
 terminated_on_target = false;
@@ -297,6 +302,10 @@ while nfes < max_nfes
     n_conv = n_conv + 1;
     conv_nfes(n_conv) = nfes;
     conv_best(n_conv) = bsf_fit_var;
+    if tr.on
+        tr = gsk_trace_add(tr, nfes, popold, lb, ub, {'kw1', 'kw2', 'kw3', 'kw4', 'kf_mean', 'kr_mean', 'd_junior'}, ...
+                           [KW_ind, mean(KF), mean(KR), D_Gained_Shared_Junior]);
+    end
 
     % ----- reference target check: every generation, zero and stop -----
     % NaN handling follows docs/reference/matlab_interface.md.
@@ -342,6 +351,7 @@ result.params = struct('np_init', np_init, 'min_pop_size', min_pop_size, ...
     'kf_pool', kf_pool, 'kf_pool_negative', kf_pool_negative, ...
     'kr_pool', kr_pool, 'senior_p', senior_p);
 result.notes = '';
+if tr.on; result.trace = gsk_trace_finish(tr); end   % only with options.log_trace
 
 end
 

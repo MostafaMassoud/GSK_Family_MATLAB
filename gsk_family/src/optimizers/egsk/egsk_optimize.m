@@ -156,11 +156,16 @@ conv_fit = zeros(max_records, 1);
 n_rec = 1;
 conv_nfes(n_rec) = nfes;
 conv_fit(n_rec) = bsf_fit_var;
+% Opt-in dynamics trace (options.log_trace): one row per generation, with
+% the mean KF1 and KF2 and whether the IP (fmincon) refinement ran.
+tr = gsk_trace_start(options, max_records);
+if tr.on; tr = gsk_trace_add(tr, nfes, popold, lu(1, :), lu(2, :), {'kf1_mean', 'kf2_mean', 'ip_refine'}, [mean(KF1), mean(KF2), 0]); end
 
 g = 0;
 %% main loop
 while nfes < max_nfes
     g = g + 1;
+    ip_fired = 0;   % for the opt-in trace: 1 when the IP refinement runs this generation
     D_Gained_Shared_Junior = ceil((problem_size) * (1 - g / G_Max).^K); % scalar, since K is a scalar
 
     D_Gained_Shared_Senior = problem_size - D_Gained_Shared_Junior; %#ok<NASGU>
@@ -280,6 +285,7 @@ while nfes < max_nfes
             if q == 1
                 if use_fmincon
                     [bsf_solution, bsf_fit_var, nfes] = egsk_ip_refine(bsf_solution, bsf_fit_var, nfes, problem, max_nfes);
+                    ip_fired = 1;
                     popold(NO_i, :) = bsf_solution;
                     fitness(NO_i, :) = bsf_fit_var;
                 end
@@ -291,6 +297,7 @@ while nfes < max_nfes
     n_rec = n_rec + 1;
     conv_nfes(n_rec) = nfes;
     conv_fit(n_rec) = bsf_fit_var;
+    if tr.on; tr = gsk_trace_add(tr, nfes, popold, lu(1, :), lu(2, :), {'kf1_mean', 'kf2_mean', 'ip_refine'}, [mean(KF1), mean(KF2), ip_fired]); end
 end
 
 %% Result assembly (docs/reference/matlab_interface.md)
@@ -332,6 +339,7 @@ result.convergence = struct('nfes', conv_nfes(1:n_rec), 'best_fitness', conv_fit
 result.runtime_seconds = toc(start_time);
 result.params = params;
 result.notes = notes;
+if tr.on; result.trace = gsk_trace_finish(tr); end   % only with options.log_trace
 end
 
 function vi = boundConstraint(vi, pop, lu)

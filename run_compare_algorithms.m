@@ -40,6 +40,8 @@
 %       performance_<suite>.csv        success rate and ERT per function and target
 %       ert_<suite>_<D>.tex            ERT (success rate) table
 %       ecdf_<suite>_<D or overall>    ECDF data profiles
+%   gsk_family/results/analysis/dynamics/<suite>/     (dynamics = true)
+%       diversity_ / xplxpt_ / population_ / parameters_   population dynamics
 %   gsk_family/results/analysis/sensitivity/ and ablation/   (when set)
 %       plot_sensitivity / plot_ablation tables and figures
 %   gsk_family/results/analysis/complexity/<suite>/   (complexity = true)
@@ -91,6 +93,8 @@ correction = 'none';                   % 'holm' = table signs (+/=/-) from Holm-
 
 statistics_figures = {'cd', 'box', 'ranks', 'runtime'};   % {} = none; CD diagram, box plots, rank and runtime charts (add 'violin' for violins)
 performance = true;                    % success rates, ERT tables and ECDF data profiles (smooth with launcher trace_points)
+dynamics   = false;                 % true = diversity, exploration/exploitation, population and parameter
+                                       % figures; needs runs made with log_trace = true in the launcher
 
 complexity = false;                    % true = also measure the CEC complexity table (T0, T1, T2) for
                                        % cec2017; this RUNS each algorithm 5 x 200,000 evaluations
@@ -145,15 +149,22 @@ for s = 1:numel(suites)
             fprintf(2, 'FAIL  %s statistics figures: %s\n', upper(suite), err.message);
         end
     end
+    pf = {'suite', suite, 'results_root', results_root, 'project_root', root, ...
+          'functions', functions, 'dimensions', dimensions, 'formats', formats};
+    if ~isempty(optimizers); pf = [pf, {'optimizers', optimizers}]; end %#ok<AGROW>
+    if ~isempty(labels);     pf = [pf, {'labels', labels}];         end %#ok<AGROW>
     if performance
         try
-            pf = {'suite', suite, 'results_root', results_root, 'project_root', root, ...
-                  'functions', functions, 'dimensions', dimensions, 'formats', formats};
-            if ~isempty(optimizers); pf = [pf, {'optimizers', optimizers}]; end %#ok<AGROW>
-            if ~isempty(labels);     pf = [pf, {'labels', labels}];         end %#ok<AGROW>
             plot_performance(pf{:});
         catch err
             fprintf(2, 'FAIL  %s performance profiles: %s\n', upper(suite), err.message);
+        end
+    end
+    if dynamics
+        try
+            plot_dynamics(pf{:});
+        catch err
+            fprintf(2, 'FAIL  %s dynamics: %s\n', upper(suite), err.message);
         end
     end
     if ~isempty(sensitivity)
@@ -191,6 +202,7 @@ fprintf('Convergence figures under: %s\n', fullfile(root, 'results', 'analysis',
 fprintf('Tables under:              %s\n', fullfile(root, 'results', 'analysis', 'compare'));
 fprintf('Statistics figures under:  %s\n', fullfile(root, 'results', 'analysis', 'statistics'));
 if performance; fprintf('Performance profiles under: %s\n', fullfile(root, 'results', 'analysis', 'performance')); end
+if dynamics; fprintf('Dynamics figures under:    %s\n', fullfile(root, 'results', 'analysis', 'dynamics')); end
 if ~isempty(sensitivity); fprintf('Sensitivity under:         %s\n', fullfile(root, 'results', 'analysis', 'sensitivity')); end
 if ~isempty(ablation); fprintf('Ablation under:            %s\n', fullfile(root, 'results', 'analysis', 'ablation')); end
 if complexity; fprintf('Complexity table under:    %s\n', fullfile(root, 'results', 'analysis', 'complexity')); end

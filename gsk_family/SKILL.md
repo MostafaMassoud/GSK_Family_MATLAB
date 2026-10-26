@@ -254,7 +254,10 @@ under `src` or GSK code under `benchmarks`.
   complexity table; it runs the optimizers), `scripts/plot_performance.m`
   (success rate, ERT, ECDF; dense data with the runner's `trace_points`),
   and `scripts/make_study_aliases.m` with `plot_sensitivity.m` and
-  `plot_ablation.m`. `test_comparison_tools.m` covers them.
+  `plot_ablation.m`, and `scripts/plot_dynamics.m` (diversity, exploration/
+  exploitation, population, parameters; needs runs with the opt-in
+  `log_trace`, recorded by `src/common/gsk_trace_*.m` in every optimizer).
+  `test_comparison_tools.m` and `test_dynamics_trace.m` cover them.
 - Run-level comparison of two `per_run.csv` sets (e.g. a MATLAB DT-GSK campaign
   vs `benchmarks/cec_reference_results/cec2017/dt-gsk/evidence/per_run.csv`):
   `scripts/compare_reference_runs.m` (needs the Statistics and Machine Learning
@@ -357,7 +360,7 @@ ctest --test-dir build --output-on-failure
 # MEX bridge (required before any MATLAB CEC experiment):
 powershell -File scripts\build_mex_bridge.ps1
 
-# MATLAB smoke tests (15 tests, incl. test_dt_gsk_smoke; no MEX bridge needed):
+# MATLAB smoke tests (16 tests, incl. test_dt_gsk_smoke; no MEX bridge needed):
 matlab -batch "cd('src/tests'); run_matlab_smoke_tests"
 
 # Documentation site (also regenerates ../RUNBOOK.html):

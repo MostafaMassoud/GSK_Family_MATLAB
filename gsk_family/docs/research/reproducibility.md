@@ -154,7 +154,7 @@ a small run works, then commit to the full campaign, then validate and archive.
    ctest --test-dir build --output-on-failure
    ```
 
-3. **Run the MATLAB smoke tests** (15 tests) so the optimizers, runner, and
+3. **Run the MATLAB smoke tests** (16 tests) so the optimizers, runner, and
    bridge cross-check are green before you generate evidence.
 
    ```powershell

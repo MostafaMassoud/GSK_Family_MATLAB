@@ -82,6 +82,9 @@ conv_best = zeros(max_rows, 1);
 n_conv = 1;
 conv_nfes(n_conv) = nfes;
 conv_best(n_conv) = bsf_fit_var;
+% Opt-in dynamics trace (options.log_trace): one row per generation.
+tr = gsk_trace_start(options, max_rows);
+if tr.on; tr = gsk_trace_add(tr, nfes, popold, lb, ub); end
 
 g = 0;
 
@@ -178,6 +181,7 @@ while nfes < max_nfes
     n_conv = n_conv + 1;
     conv_nfes(n_conv) = nfes;
     conv_best(n_conv) = bsf_fit_var;
+    if tr.on; tr = gsk_trace_add(tr, nfes, popold, lb, ub); end
 end
 
 % ----- final error, reference target semantics -----
@@ -211,6 +215,7 @@ result.convergence = struct('nfes', conv_nfes(1:n_conv), ...
 result.runtime_seconds = toc(t_start);
 result.params = struct('np', np, 'kf', kf, 'kr', kr, 'k', k_rate, 'p', p_part);
 result.notes = '';
+if tr.on; result.trace = gsk_trace_finish(tr); end   % only with options.log_trace
 
 end
 

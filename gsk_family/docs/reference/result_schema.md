@@ -229,6 +229,17 @@ columns), taken from the same convergence records with the same clipping rule.
 `scripts/plot_performance.m` prefers it to the checkpoint file for ERT and
 ECDF. `environment.json` records `trace_points` (0 = off).
 
+## `trace/Dynamics_<optimizer>_F<func>_D<dim>.csv` (optional)
+
+Written only when the run uses `'log_trace',true` (a launcher's `log_trace`
+CONFIG entry). Columns: `Run`, `Gen` (the index of the recorded generation
+within the run, 0 = the first record; rows are thinned to at most
+`trace_rows`, default 200, evenly spaced, first and last kept), then the
+optimizer's trace columns: `nfes`, `np` (population size), `diversity`
+(dimension-wise, scaled to the bounds) and its own parameters (listed in
+`docs/reference/matlab_interface.md`, "Opt-in dynamics trace").
+`scripts/plot_dynamics.m` reads it. `environment.json` records `log_trace`.
+
 ## Benchmark-side curated curves and logs
 
 Generated experiment artifacts live under `results/<optimizer>/<suite>/`.
@@ -379,6 +390,11 @@ target), `ert_<suite>_<dimension>.tex` and the ECDF figures
 (`version, label, switched_off, mean_rank, full_wins, ties, full_losses,
 signed_rank_p_<group>...`), the `.tex` table and the chart. Both keep the full
 `compare_algorithms` tables of their runs in a `compare/` subfolder.
+
+`scripts/plot_dynamics.m` writes `results/analysis/dynamics/<suite>/`:
+`xplxpt_<suite>.csv` (`dimension, function, optimizer, runs,
+mean_xpl_percent, mean_xpt_percent`) and the figures `diversity_*`,
+`xplxpt_*`, `population_*` and `parameters_*`.
 
 `scripts/cec_complexity.m` writes `complexity_<suite>.csv` (`optimizer, label,
 dimension, function, evals, T0, T1, T2_hat, T2_runs, ratio`, seconds) and

@@ -49,6 +49,13 @@ function run_experiment(varargin)
 % (scripts/plot_performance.m). It reads the runs' own convergence records,
 % so the runs and every other file are unchanged.
 %
+% 'log_trace',true (default false) asks every optimizer for its opt-in
+% per-generation dynamics trace (options.log_trace: evaluations, population
+% size, population diversity and its own adaptive parameters) and writes
+% trace/Dynamics_<name>_F<f>_D<d>.csv, at most 'trace_rows' (200)
+% generations per run, for scripts/plot_dynamics.m. Tracing draws no random
+% numbers and changes no value, so the runs are exactly those without it.
+%
 % An existing output_dir is resumed by default. Generated CSVs are appended
 % where possible. A completed run id is skipped when its stored seed, cell
 % budget (max_nfes) and generator match the active run; otherwise it is re-run
@@ -112,6 +119,8 @@ p.addParameter('np_init', [], @isnumeric);
 p.addParameter('min_pop_size', [], @isnumeric);
 p.addParameter('aliases_file', '', @(x) ischar(x) || isstring(x));
 p.addParameter('trace_points', 0, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x == fix(x) && x ~= 1);
+p.addParameter('log_trace', false, @(x) islogical(x) || isnumeric(x));
+p.addParameter('trace_rows', 200, @(x) isnumeric(x) && isscalar(x) && x >= 2 && x == fix(x));
 p.parse(varargin{:});
 a = p.Results;
 a.optimizer = canonical_optimizer_id(a.optimizer);
@@ -380,6 +389,7 @@ for dim = a.dimensions(:)'
         chk_errors = zeros(nr_todo, numel(checkpoints));
         conv_nfes = cell(nr_todo, 1);
         conv_err = cell(nr_todo, 1);
+        dyn = cell(nr_todo, 1);         % opt-in dynamics traces (log_trace)
         run_best = zeros(nr_todo, 1);   % full per-run detail for the runs log
         run_errv = zeros(nr_todo, 1);
         run_nfes = zeros(nr_todo, 1);
@@ -415,6 +425,7 @@ for dim = a.dimensions(:)'
         min_pop_size = a.min_pop_size;
         run_label = a.name;                 % the alias for an algorithms.ini alias, else opt_name
         alias_settings = a.alias_settings;  % its other settings (plain numbers and logicals)
+        log_trace = logical(a.log_trace);   % opt-in per-generation dynamics trace
         mnf = a.max_nfes; nruns = a.runs; verbose = logical(a.verbose);
         optimum_local = problem.optimum;
         rand_gen = effective_rand_generator(a);   % reference/unified may differ from a.rand_generator
@@ -436,6 +447,7 @@ for dim = a.dimensions(:)'
                 run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, ...
                                                  np_init, min_pop_size);
                 run_opts = add_alias_settings(run_opts, alias_settings);
+                if log_trace; run_opts.log_trace = true; end
                 if use_unified_x0
                     [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen, np_init);
                     run_opts.initial_population = x0;
@@ -466,6 +478,7 @@ for dim = a.dimensions(:)'
                 run_rt(rr)   = result.runtime_seconds;
                 run_term{rr} = result.termination;
                 notes_c{rr} = result.notes;
+                if log_trace && isfield(result, 'trace'); dyn{rr} = result.trace; end
                 prun_rows{rr} = sprintf('%s,%s,%d,%d,%d,%s,%.17g,%.17g,%d,%s,%.6f,%d,%s\n', ...
                         run_label, suite_name, func_id, D, run_id, seed_to_text(seed), ...
                         result.best_fitness, err_out, result.nfes, ...
@@ -485,6 +498,7 @@ for dim = a.dimensions(:)'
                 run_opts = optimizer_run_options(opt_name, suite_name, scheduled_seed, rand_gen, ...
                                                  np_init, min_pop_size);
                 run_opts = add_alias_settings(run_opts, alias_settings);
+                if log_trace; run_opts.log_trace = true; end
                 if use_unified_x0
                     [x0, rng_after_x0] = make_unified_initial_population(wp, scheduled_seed, rand_gen, np_init);
                     run_opts.initial_population = x0;
@@ -513,6 +527,7 @@ for dim = a.dimensions(:)'
                 run_rt(rr)   = result.runtime_seconds;
                 run_term{rr} = result.termination;
                 notes_c{rr} = result.notes;
+                if log_trace && isfield(result, 'trace'); dyn{rr} = result.trace; end
                 prun_rows{rr} = sprintf('%s,%s,%d,%d,%d,%s,%.17g,%.17g,%d,%s,%.6f,%d,%s\n', ...
                         run_label, suite_name, func_id, D, run_id, seed_to_text(seed), ...
                         result.best_fitness, err_out, result.nfes, ...
@@ -534,6 +549,10 @@ for dim = a.dimensions(:)'
         end
 
         write_checkpoint_errors(genlogs_dir, a.name, func_id, D, checkpoints, runs_to_do, run_seeds, chk_errors, session_tag);
+        if a.log_trace
+            write_dynamics_trace(fullfile(a.output_dir, 'trace'), a.name, func_id, D, runs_to_do, ...
+                                 dyn, a.trace_rows, session_tag);
+        end
         if a.trace_points > 0
             % Optional dense trace for ERT/ECDF: best-so-far value at
             % trace_points log-spaced budgets, from the runs' own convergence
@@ -880,7 +899,7 @@ if isfield(s, 'min_pop_size')
     end
     a.min_pop_size = s.min_pop_size; s = rmfield(s, 'min_pop_size');
 end
-protected = {'seed', 'rand_generator', 'initial_population', 'rng_state_after_initialization', 'protocol'};
+protected = {'seed', 'rand_generator', 'initial_population', 'rng_state_after_initialization', 'protocol', 'log_trace'};
 allowed = alias_setting_names(base, root);
 for f = fieldnames(s)'
     k = f{1};
@@ -937,7 +956,7 @@ switch base
                                   cellfun(@(c) c{1}, t2, 'UniformOutput', false)]));
         end
         names = setdiff(names, {'np', 'np_init', 'min_pop_size', 'seed', 'rand_generator', ...
-                                'initial_population', 'rng_state_after_initialization', 'protocol'});
+                                'initial_population', 'rng_state_after_initialization', 'protocol', 'log_trace'});
 end
 end
 
@@ -1562,6 +1581,7 @@ env.report_zero_tol = report_zero_tol(a);
 env.optimizer_options = optimizer_options_metadata(a.optimizer, a.suite);
 env.checkpoint_fractions = fracs;
 env.trace_points = a.trace_points;   % 0 = no BestTrace_*.csv
+env.log_trace = logical(a.log_trace);   % true = trace/Dynamics_*.csv written
 env.data_root = fullfile(a.project_root, 'benchmarks', 'cec_suite_cpp', a.suite, 'input_data');
 env.reference_root = fullfile(a.project_root, 'benchmarks', 'cec_reference_results');
 env.output_dir = a.output_dir;
@@ -1706,6 +1726,38 @@ for c = 1:numel(checkpoints)
     if isempty(idx); idx = 1; end
     e(c) = conv_err(idx);
 end
+end
+
+function write_dynamics_trace(trace_dir, name, func_id, D, run_ids, dyn, max_rows, session_tag)
+% trace/Dynamics_<name>_F<f>_D<d>.csv: the opt-in per-generation trace of
+% every new run (Run, Gen, then the optimizer's trace columns: nfes, np,
+% diversity and its own parameters), thinned to at most max_rows evenly
+% spaced generations per run (the first and the last kept). Appends when the
+% header matches; otherwise archives the file and rewrites it.
+have = find(~cellfun('isempty', dyn));
+if isempty(have); return; end
+if ~exist(trace_dir, 'dir'); mkdir(trace_dir); end
+names = dyn{have(1)}.names;
+header = strjoin([{'Run', 'Gen'}, names], ',');
+path = fullfile(trace_dir, sprintf('Dynamics_%s_F%d_D%d.csv', name, func_id, D));
+mode = 'w';
+if isfile(path)
+    fid0 = fopen(path, 'r'); first = strtrim(fgetl(fid0)); fclose(fid0);
+    if strcmp(first, header); mode = 'a'; else; archive_existing_file(path, session_tag); end
+end
+f = fopen(path, mode);
+assert(f > 0, 'run_experiment:io', 'cannot open %s', path);
+if strcmp(mode, 'w'); fprintf(f, '%s\n', header); end
+for r = have(:)'
+    rows = dyn{r}.rows;
+    g = unique(round(linspace(1, size(rows, 1), min(size(rows, 1), max_rows))));
+    for k = g
+        fprintf(f, '%d,%d', run_ids(r), k - 1);
+        fprintf(f, ',%.10g', rows(k, :));
+        fprintf(f, '\n');
+    end
+end
+fclose(f);
 end
 
 function b = trace_budgets(max_nfes, n)

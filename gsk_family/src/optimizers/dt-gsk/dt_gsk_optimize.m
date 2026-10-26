@@ -214,6 +214,10 @@ prev_best = best_f;
 max_gen = ceil(max_nfes / min(cfg.n_min, NP_init)) + 1;
 conv_nfes = zeros(max_gen, 1);
 conv_fit = zeros(max_gen, 1);
+% Opt-in dynamics trace (options.log_trace): one row per generation, with
+% the mean ACE-drawn KF and KR, the share of accepted children, the BSE
+% partial restarts so far, the final polish flag and deep-stall restarts.
+tr = gsk_trace_start(options, max_gen);
 gen = 0;
 
 %% Main loop
@@ -693,6 +697,10 @@ while nfes < max_nfes
 
     conv_nfes(gen) = nfes;
     conv_fit(gen) = best_f;
+    if tr.on
+        tr = gsk_trace_add(tr, nfes, pop, lb, ub, {'kf_mean', 'kr_mean', 'acceptance', 'restarts', 'polish_done', 'deep_restart'}, ...
+                           [mean(KF), mean(KR), accepted / NP, restarts, fp_done, dsr_last == nfes]);
+    end
 end
 
 %% Result
@@ -736,6 +744,7 @@ end
 if nmin_override
     result.notes = sprintf('%s; min_pop_size = %d override (not the pub profile)', result.notes, cfg.n_min);
 end
+if tr.on; result.trace = gsk_trace_finish(tr); end   % only with options.log_trace
 end
 
 %% ------------------------------------------------------------------------

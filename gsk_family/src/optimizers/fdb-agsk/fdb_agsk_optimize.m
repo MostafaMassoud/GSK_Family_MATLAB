@@ -151,6 +151,10 @@ conv_fit = zeros(max_records, 1);
 n_rec = 1;
 conv_nfes(n_rec) = min(nfes, max_nfes);
 conv_fit(n_rec) = bsf_fit_var;
+% Opt-in dynamics trace (options.log_trace): one row per generation, with
+% the probabilities KW_ind of the four (KF, KR) pool settings.
+tr = gsk_trace_start(options, max_records);
+if tr.on; tr = gsk_trace_add(tr, nfes, popold, lu(1, :), lu(2, :), {'kw1', 'kw2', 'kw3', 'kw4'}, nan(1, 4)); end
 
 g = 0; %#ok<NASGU>
 %% Main loop
@@ -320,6 +324,7 @@ while nfes < max_nfes
     n_rec = n_rec + 1;
     conv_nfes(n_rec) = min(nfes, max_nfes); % clipped copy (see above)
     conv_fit(n_rec) = bsf_fit_var;
+    if tr.on; tr = gsk_trace_add(tr, min(nfes, max_nfes), popold, lu(1, :), lu(2, :), {'kw1', 'kw2', 'kw3', 'kw4'}, KW_ind); end
 end
 
 %% Result assembly (docs/reference/matlab_interface.md)
@@ -356,6 +361,7 @@ result.convergence = struct('nfes', conv_nfes(1:n_rec), 'best_fitness', conv_fit
 result.runtime_seconds = toc(start_time);
 result.params = params;
 result.notes = '';
+if tr.on; result.trace = gsk_trace_finish(tr); end   % only with options.log_trace
 end
 
 function [R1, R2, R3] = fdb_junior_r1r2r3(indBest, fdb_case, fdbIndex, RfdbIndex)

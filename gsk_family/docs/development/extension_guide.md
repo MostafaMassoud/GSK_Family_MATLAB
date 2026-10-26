@@ -43,6 +43,13 @@ is a starting point that honors the structs in
 8. Stop at `problem.max_nfes` (and at `problem.target_error` only if the
    reference algorithm does).
 9. Return the `result` struct with exactly the documented fields.
+   Optionally, support the opt-in dynamics trace like the seven:
+   `tr = gsk_trace_start(options, max_rows)` after the first convergence
+   record, `if tr.on; tr = gsk_trace_add(tr, nfes, pop, lb, ub, names,
+   values); end` after initialization and after each generation (the same
+   `names` every time), and `if tr.on; result.trace = gsk_trace_finish(tr);
+   end` at the end. It must stay record-only (no random numbers, no change
+   to the search). A copy made with `new_gsk_variant` already has it.
 10. For MATLAB runs nothing needs registering: the runner adds every folder
     under `src/optimizers/` to the path and maps a hyphenated slug to its
     function stem (`my-gsk` -> `my_gsk_optimize`). A new optimizer runs under

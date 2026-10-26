@@ -130,6 +130,10 @@ T = r.table;  % dim, func, best/median/mean_gen/_ref, best_ok, median_ok, mean_o
 
 ## Change optimizer code without changing results
 
+Every optimizer has opt-in trace lines (`if tr.on; ... gsk_trace_add ...`,
+`options.log_trace`). Keep them record-only, and include tracing-on runs in
+the bit-identity check (`test_dynamics_trace.m` compares on and off).
+
 1. **DT-GSK:** use the owner's oracle if available (memory: gsk-local-tools;
    25 fixed cases with stored baselines, `oracle_run` then `oracle_compare`).
 2. **Otherwise**, before editing save baselines for fixed cases, then rerun
@@ -153,7 +157,7 @@ T = r.table;  % dim, func, best/median/mean_gen/_ref, best_ok, median_ok, mean_o
 ```powershell
 cmake --build build -j; ctest --test-dir build            # 13/13
 powershell -File scripts\build_mex_bridge.ps1             # after C++ suite or MEX changes
-matlab -batch "cd('src/tests'); run_matlab_smoke_tests"   # "All 15 test(s) passed."
+matlab -batch "cd('src/tests'); run_matlab_smoke_tests"   # "All 16 test(s) passed."
 powershell -File scripts\build_docs.ps1 -Clean            # 49 pages + the two root guides
 ```
 

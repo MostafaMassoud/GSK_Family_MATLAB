@@ -237,6 +237,16 @@ on a removed local reference folder are intentionally absent.
 
 ## GSK-Family MATLAB Optimizers (implemented under src/)
 
+**Opt-in dynamics trace (added after the ports).** Every optimizer has a few
+lines, guarded by `options.log_trace` (default off), that record per
+generation the evaluations, population size, population diversity and its
+adaptive parameters (`src/common/gsk_trace_*.m`; eGSK also sets a local
+`ip_fired` flag that is only read by the trace). They draw no random numbers
+and change no value of the search. Before and after adding them, 42 fixed
+cases (all seven optimizers and a GSK copy, CEC2017 D10 to D100, the sphere,
+ATMALS-GSK on CEC2011) gave bit-identical results, both with tracing off and
+with tracing on; `test_dynamics_trace.m` keeps checking it.
+
 Interface contract: `docs/reference/matlab_interface.md` (problem struct, options,
 result struct, row-wise NPxD populations, deterministic seeding through
 `src/common/gsk_set_rng.m` at entry; DT-GSK instead derives its own Threefry
@@ -442,7 +452,7 @@ All phases complete and verified on 2026-06-13:
 - MATLAB smoke suite (`run_matlab_smoke_tests`) green: common helpers, all
   six optimizers, the runner, and the bridge cross-check. DT-GSK
   (`test_dt_gsk_smoke.m`) and the runner resume and fair-start tests were
-  added later, then the alias test (`test_algorithm_aliases.m`) and the comparison-tools test (`test_comparison_tools.m`); the suite now has 15 tests.
+  added later, then the alias test (`test_algorithm_aliases.m`) the comparison-tools test (`test_comparison_tools.m`) and the dynamics-trace test (`test_dynamics_trace.m`); the suite now has 16 tests.
 - Language-contract checks (no source files in other languages, no
   `cec2013.cpp`, no `.m`/`.R`/`.c` under `cec_suite_cpp`, no top-level
   include/tests/matlab) return nothing.

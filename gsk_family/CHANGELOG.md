@@ -6,6 +6,16 @@ Keep a Changelog; this project uses semantic versioning.
 ## [Unreleased]
 
 ### Added
+- Group C of the Q1 analyses: an opt-in per-generation dynamics trace in all
+  seven optimizers and `my-gsk` (`options.log_trace`; shared helpers
+  `src/common/gsk_trace_*.m`: evaluations, population size, dimension-wise
+  diversity and each optimizer's adaptive parameters). Record-only: 42 fixed
+  cases are bit-identical before and after, with tracing off and on.
+  `run_experiment(..., 'log_trace', true)` writes `trace/Dynamics_*.csv`
+  (launchers: commented `log_trace` CONFIG line, read only when set);
+  `scripts/plot_dynamics.m` draws diversity, exploration/exploitation,
+  population-size and parameter figures; `run_compare_algorithms.m` gains
+  `dynamics`. New test `test_dynamics_trace.m` (16 MATLAB tests).
 - Group B of the Q1 analyses: `runtime_<suite>.csv/.tex` in
   `compare_algorithms` and a runtime chart in `plot_statistics`;
   `scripts/plot_performance.m` (success rates, ERT and ECDF data profiles;

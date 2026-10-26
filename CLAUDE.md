@@ -70,7 +70,7 @@ print a comparison table; run `gsk_validate --verify` for the verdict.
 cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release   # once
 cmake --build build -j; ctest --test-dir build                        # expect 13/13 C++ tests
 powershell -File scripts\build_mex_bridge.ps1                         # MEX bridge (close MATLAB first)
-matlab -batch "cd('src/tests'); run_matlab_smoke_tests"               # expect "All 15 test(s) passed."
+matlab -batch "cd('src/tests'); run_matlab_smoke_tests"               # expect "All 16 test(s) passed."
 powershell -File scripts\build_docs.ps1 -Clean                        # 49 pages + the two root guides
 ```
 
@@ -86,7 +86,17 @@ session scratchpad, never in the repository.
   (below). Merged local branches that can be deleted with the owner's OK:
   `docs/share-ready-runbook`, `docs/claude-handoff`, `feat/compare-algorithms`,
   `feat/variant-guide`, `feat/my-gsk`, `feat/algorithm-aliases`.
-- **Q1 analyses, group B (2026-10-26, uncommitted when written):** runtime
+- **Q1 analyses, group C (2026-10-26, uncommitted when written; owner
+  approved the optimizer edits):** opt-in `options.log_trace` in all seven
+  optimizers and `my-gsk` (record-only lines; helpers
+  `src/common/gsk_trace_*.m`), runner `'log_trace'`/`'trace_rows'` writing
+  `trace/Dynamics_*.csv`, launchers' commented `log_trace` line, and
+  `scripts/plot_dynamics.m`. Proof: 42 fixed cases bit-identical before and
+  after (trace off and on); `test_dynamics_trace.m` (16 MATLAB tests). Any
+  later edit of an optimizer must keep the trace lines record-only. The
+  owner's DT-GSK oracle (25 cases) was not rerun after this edit; the
+  42-case baseline and the DT-GSK smoke golden values were.
+- **Q1 analyses, group B (committed `3c2ce91`):** runtime
   table/chart, `plot_performance.m` (success rate, ERT, ECDF),
   `make_study_aliases.m` + `plot_sensitivity.m` + `plot_ablation.m`, and the
   runner's opt-in `trace_points` (`gen_logs/BestTrace_*.csv`; launchers read
@@ -131,7 +141,7 @@ session scratchpad, never in the repository.
   hyphenated slug maps to its stem; `np_init`/`min_pop_size` reach it). Tested
   on all five suites and all seven optimizers plus a copy of GSK (which
   reproduces GSK exactly); the p-values equal the Statistics Toolbox's.
-- All 15 MATLAB and 13 C++ tests pass. The docs build gives 49 pages with no
+- All 16 MATLAB and 13 C++ tests pass. The docs build gives 49 pages with no
   broken links. After the comment rewrite and helper renames, DT-GSK was
   re-checked with the owner's local oracle: bit-identical on 23 of 25 fixed
   cases. Cases 18 and 22 (the full-budget D50 and D100 cells) were not rerun.

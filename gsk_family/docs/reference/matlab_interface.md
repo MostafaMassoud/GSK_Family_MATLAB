@@ -123,6 +123,21 @@ Every optimizer returns a struct with exactly these fields:
 | `runtime_seconds` | double | wall time of the optimization loop |
 | `params` | struct | the variant parameters actually used. DT-GSK: `profile` (`'pub'`), `np_init_mult` (5), `np_init` (initial NP used), `n_min` (final NLPSR size used: tier value or `min_pop_size`), the base `KF`/`KR`/`Kexp` (reported only; ACE picks the per-individual values), `restarts_done` (partial BSE restarts), `max_nfes` |
 | `notes` | char | optional free text (e.g. eGSK non-reference `use_fmincon=false` diagnostics; DT-GSK always `'self-init (fair-start exception)'`), `''` otherwise |
+| `trace` | struct | **only when `options.log_trace` is true**: the opt-in dynamics trace, `.names` (column names: `nfes`, `np`, `diversity`, then the optimizer's own parameters) and `.rows` (one row per generation). Without `log_trace` the field is absent. |
+
+**Opt-in dynamics trace.** `options.log_trace = true` (default off) makes
+every optimizer record, after initialization and after each generation,
+its evaluations, population size and population diversity (dimension-wise,
+Hussain et al. 2019, scaled to the bounds; `src/common/gsk_trace_add.m`),
+plus its adaptive parameters: AGSK and FDB-AGSK `kw1`..`kw4` (the KW_ind
+probabilities); APGSK the same plus `kf_mean`, `kr_mean`, `d_junior`;
+ATMALS-GSK the selected `kf`, `kr`, `k`, `p`, `pls`; eGSK `kf1_mean`,
+`kf2_mean`, `ip_refine`; DT-GSK (after each generation only) `kf_mean`,
+`kr_mean`, `acceptance`, `restarts`, `polish_done`, `deep_restart`. GSK
+records no parameters. Recording draws no random numbers and changes no
+value, so a traced run is identical to an untraced one; this is checked on
+all seven optimizers (`test_dynamics_trace.m`). `log_trace` is under the
+runner's control: an `algorithms.ini` alias cannot set it.
 
 ## Entry points
 
@@ -154,6 +169,9 @@ behavior stays inside the variant folder - do not over-factor.
 - `gsk_bound_repair.m`: midpoint repair (reference rule).
 - `gsk_reduction_survivors.m`: indices kept by linear population reduction
   (remove worst by current fitness).
+- `gsk_trace_start.m`, `gsk_trace_add.m`, `gsk_trace_finish.m`: the opt-in
+  dynamics trace (`options.log_trace`); used by all seven optimizers, DT-GSK
+  included. They only record values.
 
 DT-GSK uses none of these helpers: its donors, bound repair, population
 reduction, and RNG streams are local to `src/optimizers/dt-gsk/`

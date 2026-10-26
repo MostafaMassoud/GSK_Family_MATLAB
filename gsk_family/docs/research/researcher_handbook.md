@@ -570,6 +570,10 @@ Before reporting results:
     the ERT/ECDF data profiles (`plot_performance`; run with `trace_points`
     for smooth curves), and sensitivity or ablation studies
     (`make_study_aliases`, `plot_sensitivity`, `plot_ablation`).
+14. For claims about how an algorithm searches, run with `log_trace` and add
+    the diversity, exploration/exploitation and parameter figures
+    (`plot_dynamics`); state the diversity measure (Hussain et al. 2019,
+    scaled to the bounds) and that the plotted run is the median run.
 
 ## 19. Literature and provenance
 

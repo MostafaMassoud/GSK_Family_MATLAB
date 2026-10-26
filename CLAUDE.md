@@ -80,7 +80,14 @@ session scratchpad, never in the repository.
 
 ## Current state (2026-10-26)
 
-- `main` = `e7e78ce` (aliases; not pushed when written; the owner pushes).
+- `main` = `84b3742` (group C + authorship, fast-forwarded before the owner's
+  merge gates were set; not pushed). `feat/q1-group-c` adds `the gate commit`
+  (DT-GSK DOI 10.3390/a19090769; licence-neutral copyright notices that claim
+  no ownership of the algorithms; licensing unchanged). Gates 2026-10-26: 16
+  MATLAB tests pass, 42/42 cases identical trace off and on, owner's DT-GSK
+  oracle 25/25 IDENTICAL (cases 18 and 22 included), docs 49 pages no broken
+  links. Budget: 38/40 within `max_nfes`; the 2 eGSK overshoots (4032/4000,
+  6001/6000) are the documented fmincon quirk and predate group C.
   Since `ca66fa0` it added `np_init`/`min_pop_size` for all seven optimizers,
   the compare-algorithms tools, the variant guide, `my-gsk` and aliases
   (below). Merged local branches that can be deleted with the owner's OK:

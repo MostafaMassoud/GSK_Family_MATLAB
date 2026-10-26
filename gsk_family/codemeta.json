@@ -72,7 +72,7 @@
     "Jawad, M. A.; Roshdy, H. S. M.; Mohamed, A. W. Enhanced Gaining-Sharing Knowledge-based algorithm. Results in Control and Optimization 19, 100542 (2025). https://doi.org/10.1016/j.rico.2025.100542",
     "Bakir, H.; Duman, S.; Guvenc, U.; Kahraman, H. T. Improved adaptive gaining-sharing knowledge algorithm with FDB-based guiding mechanism for optimization of optimal reactive power flow problem. Electrical Engineering 105, 3121-3160 (2023). https://doi.org/10.1007/s00202-023-01803-9",
     "Kahraman, H. T.; Aras, S.; Gedikli, E. Fitness-distance balance (FDB): a new selection method for meta-heuristic search algorithms. Knowledge-Based Systems 190, 105169 (2020). https://doi.org/10.1016/j.knosys.2019.105169",
-    "Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm. Algorithms 19(9), 769 (2026).",
+    "Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm. Algorithms 19(9), 769 (2026). DOI: 10.3390/a19090769.",
     "Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. DT-GSK: Dimension-Tiered Gaining-Sharing Knowledge Optimization, reference implementation (MIT license), version 2.46 (2026). https://github.com/MostafaMassoud/DT-GSK"
   ]
 }

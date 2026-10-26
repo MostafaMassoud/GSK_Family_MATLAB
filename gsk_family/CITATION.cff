@@ -161,6 +161,7 @@ references:
     issue: "9"
     start: "769"
     year: 2026
+    doi: "10.3390/a19090769"
   - type: software
     title: "DT-GSK: Dimension-Tiered Gaining-Sharing Knowledge Optimization"
     authors:

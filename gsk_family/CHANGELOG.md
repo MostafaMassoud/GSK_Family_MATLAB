@@ -6,6 +6,11 @@ Keep a Changelog; this project uses semantic versioning.
 ## [Unreleased]
 
 ### Added
+- Author, ORCID and affiliation in `CITATION.cff`, `codemeta.json`, `LICENSES.md`,
+  the READMEs, the root guides and the docs footer, with a copyright notice for
+  the framework's own work only (each algorithm and benchmark suite stays with
+  its original authors; licensing unchanged). DT-GSK cited as *Algorithms*
+  19(9), 769 (2026), DOI 10.3390/a19090769.
 - Group C of the Q1 analyses: an opt-in per-generation dynamics trace in all
   seven optimizers and `my-gsk` (`options.log_trace`; shared helpers
   `src/common/gsk_trace_*.m`: evaluations, population size, dimension-wise

@@ -417,8 +417,12 @@ of Graduate Studies for Statistical Research, Cairo University, Giza 12613,
 Egypt (ORCID [0009-0003-8415-2158](https://orcid.org/0009-0003-8415-2158),
 <moustafa.masoud@gmail.com>).
 
-Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud. Keep this notice and the
-author attribution in copies and derivative works.
+Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud. The notice covers this
+framework's own code, tools and documentation. Each algorithm it runs (GSK,
+AGSK, APGSK, ATMALS-GSK, eGSK, FDB-AGSK, DT-GSK) and each benchmark suite
+remains the work of its original authors; licensing and provenance are in
+[gsk_family/LICENSES.md](gsk_family/LICENSES.md). Please keep this notice
+and the author attribution.
 
 > [!IMPORTANT]
 > A paper that uses this framework should cite it

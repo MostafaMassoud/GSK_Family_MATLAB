@@ -40,7 +40,7 @@ The full run guide (options, outputs, comparison) is in
 > Reference: Masoud, Roshdy & Mohamed, "DT-GSK: Dimension-Tiered Adaptive
 > Configuration Selection and Deterministic Refinement for Gaining-Sharing
 > Knowledge-Based Optimization Algorithm", *Algorithms* (MDPI), 19(9),
-> 769, 2026; reference implementation DT-GSK v2.46 (MIT license),
+> 769, 2026, DOI: [10.3390/a19090769](https://doi.org/10.3390/a19090769).; reference implementation DT-GSK v2.46 (MIT license),
 > <https://github.com/MostafaMassoud/DT-GSK>.
 
 ## Intuition

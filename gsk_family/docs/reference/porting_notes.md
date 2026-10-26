@@ -332,7 +332,7 @@ substreams from `options.seed`).
     Mohamed, "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and
     Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization
     Algorithm", *Algorithms* (MDPI), 19(9), 769,
-    2026. MIT is compatible with the project's GPL-3.0-or-later; the
+    2026, DOI 10.3390/a19090769. MIT is compatible with the project's GPL-3.0-or-later; the
     MATLAB port is part of this project (`LICENSES.md`). DT-GSK is
     Dimension-Tiered GSK; the interaction-structure memory (SGSM) is one of its
     components, not its name.

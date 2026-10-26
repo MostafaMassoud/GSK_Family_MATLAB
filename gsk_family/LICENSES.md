@@ -16,14 +16,16 @@ Statistical Research, Cairo University, Giza 12613, Egypt
 
 **Email:** <moustafa.masoud@gmail.com>
 
-**Copyright:** Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud. The design and
-implementation of this framework (the C++ benchmark ports and tools, the
-MATLAB runner, the optimizer ports, the analysis and figure tools, the tests,
-the launchers and the documentation) are the author's work. Redistributions
-and derivative works must keep this copyright notice and the author
-attribution, and work that uses the framework should cite it (see
-`CITATION.cff`) together with the original algorithm papers
-below.
+**Copyright:** Copyright (C) 2026 Mostafa Elsayed Ahmed Masoud, for this
+framework's own work: the C++ benchmark ports and tools, the MATLAB runner,
+the analysis and figure tools, the tests, the launchers, the documentation,
+and the porting and organization of the optimizers. It claims no ownership of
+the algorithms themselves or of the benchmark suites: each remains the work of
+its original authors, listed below and in the provenance table, whose
+copyright notices and licences are kept. This notice does not change the
+project's licensing (section below). Please keep the notice and the author
+attribution, and cite the framework (`CITATION.cff`) together with the
+original algorithm papers below.
 
 The project-original MATLAB runners, C++ tooling, build scripts, documentation,
 tests, packaging metadata, and integration glue are maintained as this project's
@@ -40,7 +42,7 @@ with their original papers when used in research.
 | eGSK | Jawad, M. A.; Roshdy, H. S. M.; Mohamed, A. W. "Enhanced Gaining-Sharing Knowledge-based algorithm." *Results in Control and Optimization*, 19, 100542, 2025. DOI: [10.1016/j.rico.2025.100542](https://doi.org/10.1016/j.rico.2025.100542). |
 | FDB-AGSK | Bakir, H.; Duman, S.; Guvenc, U.; Kahraman, H. T. "Improved adaptive gaining-sharing knowledge algorithm with FDB-based guiding mechanism for optimization of optimal reactive power flow problem." *Electrical Engineering*, 105, 3121-3160, 2023. DOI: [10.1007/s00202-023-01803-9](https://doi.org/10.1007/s00202-023-01803-9). |
 | FDB selection method | Kahraman, H. T.; Aras, S.; Gedikli, E. "Fitness-distance balance (FDB): a new selection method for meta-heuristic search algorithms." *Knowledge-Based Systems*, 190, 105169, 2020. DOI: [10.1016/j.knosys.2019.105169](https://doi.org/10.1016/j.knosys.2019.105169). |
-| DT-GSK | Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm." *Algorithms* (MDPI), 19(9), 769, 2026. Reference implementation: DT-GSK v2.46 (MIT license), <https://github.com/MostafaMassoud/DT-GSK>. |
+| DT-GSK | Masoud, M. E. A.; Roshdy, H. S. M.; Mohamed, A. W. "DT-GSK: Dimension-Tiered Adaptive Configuration Selection and Deterministic Refinement for Gaining-Sharing Knowledge-Based Optimization Algorithm." *Algorithms* (MDPI), 19(9), 769, 2026. DOI: [10.3390/a19090769](https://doi.org/10.3390/a19090769). Reference implementation: DT-GSK v2.46 (MIT license), <https://github.com/MostafaMassoud/DT-GSK>. |
 
 ## Imported data and tables
 
